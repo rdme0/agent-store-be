@@ -3,12 +3,16 @@ package com.agentstore.execution.service
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.model.vo.ExecutionStepStatus
 import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import java.util.UUID
 
 @Service
-class ExecutionStepService(private val repository: ExecutionStepRepository) {
+class ExecutionStepService(
+    private val repository: ExecutionStepRepository,
+    private val objectMapper: ObjectMapper,
+) {
     @Transactional
     fun markPaymentRequired(stepId: UUID) {
         val step = repository.findByIdForUpdate(stepId) ?: error("execution_step_not_found")
@@ -54,4 +58,10 @@ class ExecutionStepService(private val repository: ExecutionStepRepository) {
     fun agentVersionId(stepId: UUID): UUID? = repository.findById(stepId).map { it.agentVersionId }.orElse(null)
 
     fun isPaymentSettled(stepId: UUID): Boolean = repository.findById(stepId).map { it.status == ExecutionStepStatus.PAYMENT_SETTLED || it.status == ExecutionStepStatus.RUNNING || it.status == ExecutionStepStatus.COMPLETED }.orElse(false)
+
+    @Transactional
+    fun findOrCreateDependency(executionId: UUID, parentStepId: UUID, agentVersionId: UUID, callPath: List<String>, idempotencyKey: String): com.agentstore.execution.model.entity.ExecutionStep {
+        repository.findByParentStepIdAndIdempotencyKey(parentStepId, idempotencyKey)?.let { return it }
+        return repository.save(com.agentstore.execution.model.entity.ExecutionStep(UUID.randomUUID(), executionId, parentStepId, agentVersionId, objectMapper.valueToTree(callPath), idempotencyKey))
+    }
 }

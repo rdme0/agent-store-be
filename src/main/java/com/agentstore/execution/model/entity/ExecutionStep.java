@@ -72,6 +72,11 @@ public class ExecutionStep extends BaseEntity {
         this.status = ExecutionStepStatus.CREATED;
     }
 
+    public ExecutionStep(UUID id, UUID executionId, UUID parentStepId, UUID agentVersionId, JsonNode callPath, String idempotencyKey) {
+        this(id, executionId, parentStepId, agentVersionId, callPath);
+        this.idempotencyKey = idempotencyKey;
+    }
+
     public void complete(JsonNode output, BigInteger costAtomic) {
         this.output = output;
         this.costAtomic = costAtomic;

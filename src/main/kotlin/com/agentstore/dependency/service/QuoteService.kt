@@ -26,6 +26,8 @@ class QuoteService(
     private val costResolver: CostResolver,
     private val objectMapper: ObjectMapper,
 ) {
+    fun snapshot(id: UUID) = quoteRepository.findById(id).orElseThrow { ApiException("QUOTE_NOT_FOUND", "Execution quote was not found", 404) }.snapshot
+
     @Transactional
     fun create(slug: String, request: QuoteRequest): QuoteResponse {
         val constraint = request.versionConstraint ?: "*"

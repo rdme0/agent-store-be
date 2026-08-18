@@ -36,6 +36,7 @@ class ExecutionPaymentOrchestrator(
         asset: String,
         payTo: String,
         body: Any?,
+        revenueType: RevenueType = RevenueType.DIRECT,
     ): PaymentInvocationResult {
         val attemptId = preparationService.prepare(executionId, stepId, amount, network, asset, payTo)
         var settlementRecorded = false
@@ -47,7 +48,7 @@ class ExecutionPaymentOrchestrator(
             paymentService.settle(attemptId, transactionHash, result.paymentIdentifier)
             settlementRecorded = true
             val settledAttempt = paymentService.find(attemptId)
-            revenueSettlementService.record(settledAttempt, RevenueType.DIRECT)
+            revenueSettlementService.record(settledAttempt, revenueType)
             budgetGuard.settle(executionId, amount)
             stepService.markPaymentSettled(stepId)
             eventService.append(executionId, "PAYMENT_SETTLED", mapOf("stepId" to stepId, "paymentAttemptId" to attemptId, "amountAtomic" to amount.toString(), "transactionHash" to transactionHash, "paymentMode" to PaymentMode.SIMULATED.name))

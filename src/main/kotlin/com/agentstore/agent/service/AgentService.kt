@@ -26,6 +26,10 @@ class AgentService(
     private val agentVersionRepository: AgentVersionRepository,
     private val developerRepository: DeveloperRepository,
 ) {
+    fun developerIdForVersion(versionId: UUID): UUID {
+        val version = agentVersionRepository.findById(versionId).orElseThrow { ApiException("AGENT_VERSION_NOT_FOUND", "Agent version was not found", 404) }
+        return agentRepository.findById(version.agentId).orElseThrow { ApiException("AGENT_NOT_FOUND", "Agent was not found", 404) }.developerId
+    }
     @Transactional
     fun list(limit: Int, cursor: UUID?): AgentListResponse {
         requireLimit(limit)
