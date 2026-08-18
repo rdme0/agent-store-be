@@ -3,6 +3,7 @@ package com.agentstore.execution.orchestrator
 import com.agentstore.execution.event.ExecutionEventService
 import com.agentstore.execution.guard.BudgetGuard
 import com.agentstore.execution.service.ExecutionStepService
+import com.agentstore.execution.token.InvocationTokenService
 import com.agentstore.payment.client.PaymentClient
 import com.agentstore.payment.dto.internal.PaymentInvocationRequest
 import com.agentstore.payment.dto.internal.PaymentInvocationResult
@@ -24,6 +25,7 @@ class ExecutionPaymentOrchestrator(
     private val paymentClient: PaymentClient,
     private val eventService: ExecutionEventService,
     private val revenueSettlementService: RevenueSettlementService,
+    private val invocationTokenService: InvocationTokenService,
 ) {
     fun invoke(
         executionId: UUID,
@@ -38,7 +40,9 @@ class ExecutionPaymentOrchestrator(
         val attemptId = preparationService.prepare(executionId, stepId, amount, network, asset, payTo)
         var settlementRecorded = false
         return try {
-            val result = paymentClient.invoke(PaymentInvocationRequest(attemptId.toString(), attemptId.toString(), endpoint, amount.toString(), network, asset, payTo, body))
+            val agentVersionId = stepService.agentVersionId(stepId) ?: error("agent_version_not_found")
+            val token = invocationTokenService.issue(executionId, stepId, agentVersionId, listOf(stepId.toString()))
+            val result = paymentClient.invoke(PaymentInvocationRequest(attemptId.toString(), attemptId.toString(), token, endpoint, amount.toString(), network, asset, payTo, body))
             val transactionHash = result.transactionHash ?: "simulated:$attemptId"
             paymentService.settle(attemptId, transactionHash, result.paymentIdentifier)
             settlementRecorded = true

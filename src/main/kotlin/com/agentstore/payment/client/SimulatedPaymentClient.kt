@@ -13,6 +13,8 @@ class SimulatedPaymentClient(private val restClient: RestClient) : PaymentClient
         val output = restClient.post()
             .uri(request.endpoint)
             .contentType(MediaType.APPLICATION_JSON)
+            .header("X-AgentStore-Invocation-Token", request.invocationToken)
+            .header("Idempotency-Key", request.idempotencyKey)
             .body(request.body ?: emptyMap<String, Any>())
             .retrieve()
             .body(JsonNode::class.java)

@@ -28,12 +28,6 @@ class ExecutionController(private val service: ExecutionService) {
     @GetMapping("/{id}/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun events(@PathVariable id: UUID, @RequestHeader("Last-Event-ID", required = false) lastEventId: String?): SseEmitter {
         val after = lastEventId?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val emitter = SseEmitter(0L)
-        runCatching {
-            service.events(id, after).forEach { event ->
-                emitter.send(SseEmitter.event().id(event.sequence.toString()).name(event.type).data(event.payload))
-            }
-        }.onFailure { emitter.completeWithError(it) }
-        return emitter
+        return service.subscribe(id, after)
     }
 }

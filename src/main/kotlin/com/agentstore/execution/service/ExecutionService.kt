@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import org.springframework.stereotype.Service
 import java.math.BigInteger
 import java.time.Instant
@@ -60,6 +61,11 @@ class ExecutionService(
     fun events(id: UUID, afterSequence: Int) : List<com.agentstore.execution.dto.response.ExecutionEventResponse> {
         if (!executionRepository.existsById(id)) throw ApiException("EXECUTION_NOT_FOUND", "Execution was not found", 404, mapOf("id" to id))
         return eventService.replay(id, afterSequence)
+    }
+
+    fun subscribe(id: UUID, afterSequence: Int): SseEmitter {
+        if (!executionRepository.existsById(id)) throw ApiException("EXECUTION_NOT_FOUND", "Execution was not found", 404, mapOf("id" to id))
+        return eventService.subscribe(id, afterSequence)
     }
 
     private fun toResponse(execution: Execution, steps: List<ExecutionStep>) = ExecutionResponse(execution.id, execution.quoteId, execution.status.name, execution.maxBudgetAtomic.toString(), execution.reservedCostAtomic.toString(), execution.actualCostAtomic.toString(), execution.question, execution.input, execution.failureCode, steps.map { step -> ExecutionStepResponse.from(step, paymentAttemptRepository.findAllByExecutionStepIdOrderByCreatedAtAsc(step.id)) }, execution.createdAt, execution.updatedAt)
