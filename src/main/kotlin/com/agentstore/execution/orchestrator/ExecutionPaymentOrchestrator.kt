@@ -42,7 +42,7 @@ class ExecutionPaymentOrchestrator(
         var settlementRecorded = false
         return try {
             val agentVersionId = stepService.agentVersionId(stepId) ?: error("agent_version_not_found")
-            val token = invocationTokenService.issue(executionId, stepId, agentVersionId, listOf(stepId.toString()))
+            val token = invocationTokenService.issue(executionId, stepId, agentVersionId, stepService.callPath(stepId))
             val result = paymentClient.invoke(PaymentInvocationRequest(attemptId.toString(), attemptId.toString(), token, endpoint, amount.toString(), network, asset, payTo, body))
             val transactionHash = result.transactionHash ?: "simulated:$attemptId"
             paymentService.settle(attemptId, transactionHash, result.paymentIdentifier)

@@ -57,6 +57,8 @@ class ExecutionStepService(
 
     fun agentVersionId(stepId: UUID): UUID? = repository.findById(stepId).map { it.agentVersionId }.orElse(null)
 
+    fun callPath(stepId: UUID): List<String> = repository.findById(stepId).map { step -> step.callPath.map { it.asText() } }.orElse(emptyList())
+
     fun isPaymentSettled(stepId: UUID): Boolean = repository.findById(stepId).map { it.status == ExecutionStepStatus.PAYMENT_SETTLED || it.status == ExecutionStepStatus.RUNNING || it.status == ExecutionStepStatus.COMPLETED }.orElse(false)
 
     @Transactional
