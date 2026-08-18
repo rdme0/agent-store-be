@@ -1,8 +1,8 @@
 package com.agentstore.dependency.controller
 
-import com.agentstore.dependency.dto.CreateDependencyRequest
-import com.agentstore.dependency.dto.DependencyResponse
-import com.agentstore.dependency.dto.UpdateDependencyRequest
+import com.agentstore.dependency.dto.request.CreateDependencyRequest
+import com.agentstore.dependency.dto.request.UpdateDependencyRequest
+import com.agentstore.dependency.dto.response.DependencyResponse
 import com.agentstore.dependency.service.DependencyService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus

@@ -1,16 +1,15 @@
 package com.agentstore.dependency.model.vo
 
-import com.agentstore.agent.model.entity.AgentVersion
-import com.agentstore.dependency.dto.DependencySnapshot
-import com.agentstore.dependency.dto.QuoteSnapshot
-import com.agentstore.dependency.dto.ResolvedVersionSnapshot
+import com.agentstore.dependency.dto.internal.DependencySnapshot
+import com.agentstore.dependency.dto.internal.QuoteSnapshot
+import com.agentstore.dependency.dto.internal.ResolvedVersionSnapshot
 
-data class ResolvedNode(val version: AgentVersion, val dependencies: List<ResolvedEdge>) {
+data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<ResolvedEdge>) {
     fun snapshot(): QuoteSnapshot = QuoteSnapshot(
         version = ResolvedVersionSnapshot(
             id = version.id,
-            agentId = version.agent.id,
-            agentSlug = version.agent.slug,
+            agentId = version.agentId,
+            agentSlug = version.agentSlug,
             semver = version.semver,
             endpoint = version.endpoint,
             priceAtomic = version.priceAtomic.toString(),
@@ -21,8 +20,8 @@ data class ResolvedNode(val version: AgentVersion, val dependencies: List<Resolv
         dependencies = dependencies.map { edge ->
             DependencySnapshot(
                 dependencyId = edge.dependency.id,
-                targetAgentId = edge.dependency.targetAgent.id,
-                targetAgentSlug = edge.dependency.targetAgent.slug,
+                targetAgentId = edge.dependency.targetAgentId,
+                targetAgentSlug = edge.targetAgentSlug,
                 versionConstraint = edge.dependency.versionConstraint,
                 required = edge.dependency.isRequired,
                 maxPriceAtomic = edge.dependency.maxPriceAtomic.toString(),

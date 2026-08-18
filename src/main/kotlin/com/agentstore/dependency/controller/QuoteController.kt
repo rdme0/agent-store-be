@@ -1,7 +1,7 @@
 package com.agentstore.dependency.controller
 
-import com.agentstore.dependency.dto.QuoteRequest
-import com.agentstore.dependency.dto.QuoteResponse
+import com.agentstore.dependency.dto.request.QuoteRequest
+import com.agentstore.dependency.dto.response.QuoteResponse
 import com.agentstore.dependency.service.QuoteService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus

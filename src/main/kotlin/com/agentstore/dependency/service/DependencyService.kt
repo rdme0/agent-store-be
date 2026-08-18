@@ -4,9 +4,9 @@ import com.agentstore.agent.model.vo.AgentVersionStatus
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
 import com.agentstore.common.web.ApiException
-import com.agentstore.dependency.dto.CreateDependencyRequest
-import com.agentstore.dependency.dto.DependencyResponse
-import com.agentstore.dependency.dto.UpdateDependencyRequest
+import com.agentstore.dependency.dto.request.CreateDependencyRequest
+import com.agentstore.dependency.dto.request.UpdateDependencyRequest
+import com.agentstore.dependency.dto.response.DependencyResponse
 import com.agentstore.dependency.model.entity.AgentDependency
 import com.agentstore.dependency.repository.AgentDependencyRepository
 import com.agentstore.dependency.resolver.CycleValidator
@@ -28,19 +28,22 @@ class DependencyService(
     @Transactional
     fun list(sourceVersionId: UUID): List<DependencyResponse> {
         requireVersion(sourceVersionId)
-        return dependencyRepository.findAllBySourceVersionId(sourceVersionId).map(DependencyResponse::from)
+        return dependencyRepository.findAllBySourceVersionId(sourceVersionId).map { dependency ->
+            val target = agentRepository.findById(dependency.targetAgentId).orElseThrow { ApiException("AGENT_NOT_FOUND", "Target Agent was not found", 404) }
+            DependencyResponse.from(dependency, target.slug)
+        }
     }
 
     @Transactional
     fun create(sourceVersionId: UUID, request: CreateDependencyRequest): DependencyResponse {
         val source = requireDraft(sourceVersionId)
         val target = agentRepository.findById(request.targetAgentId).orElseThrow { ApiException("AGENT_NOT_FOUND", "Target Agent was not found", 404) }
-        cycleValidator.validate(source.agent.id, target.id, source.agent.slug, target.slug)
+        cycleValidator.validate(source.agentId, target.id, sourceSlug(source.agentId), target.slug)
         resolver.validateConstraint(request.versionConstraint)
         validateLimits(request.maxPriceAtomic, request.maxCalls)
-        val dependency = AgentDependency(UUID.randomUUID(), source, target, request.versionConstraint, request.required, BigInteger(request.maxPriceAtomic), request.maxCalls)
+        val dependency = AgentDependency(UUID.randomUUID(), source.id, target.id, request.versionConstraint, request.required, BigInteger(request.maxPriceAtomic), request.maxCalls)
         return try {
-            DependencyResponse.from(dependencyRepository.saveAndFlush(dependency))
+            DependencyResponse.from(dependencyRepository.saveAndFlush(dependency), target.slug)
         } catch (exception: DataIntegrityViolationException) {
             throw ApiException("DEPENDENCY_ALREADY_EXISTS", "Dependency already exists", 409)
         }
@@ -57,9 +60,10 @@ class DependencyService(
         val maxPrice = request.maxPriceAtomic?.let { BigInteger(it) } ?: dependency.maxPriceAtomic
         val maxCalls = request.maxCalls ?: dependency.maxCalls
         validateLimits(maxPrice.toString(), maxCalls)
-        cycleValidator.validate(source.agent.id, dependency.targetAgent.id, source.agent.slug, dependency.targetAgent.slug)
+        val target = agentRepository.findById(dependency.targetAgentId).orElseThrow { ApiException("AGENT_NOT_FOUND", "Target Agent was not found", 404) }
+        cycleValidator.validate(source.agentId, target.id, sourceSlug(source.agentId), target.slug)
         dependency.update(constraint, request.required ?: dependency.isRequired, maxPrice, maxCalls)
-        return DependencyResponse.from(dependency)
+        return DependencyResponse.from(dependency, target.slug)
     }
 
     @Transactional
@@ -81,4 +85,6 @@ class DependencyService(
         if (maxPriceAtomic.toBigIntegerOrNull() == null || BigInteger(maxPriceAtomic) < BigInteger.ZERO) throw ApiException("INVALID_PRICE", "maxPriceAtomic must be non-negative", 400)
         if (maxCalls !in 1..5) throw ApiException("INVALID_MAX_CALLS", "maxCalls must be between 1 and 5", 400)
     }
+
+    private fun sourceSlug(agentId: UUID): String = agentRepository.findById(agentId).orElseThrow { ApiException("AGENT_NOT_FOUND", "Agent was not found", 404) }.slug
 }

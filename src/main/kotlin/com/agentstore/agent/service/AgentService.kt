@@ -1,11 +1,11 @@
 package com.agentstore.agent.service
 
-import com.agentstore.agent.dto.AgentListResponse
-import com.agentstore.agent.dto.AgentResponse
-import com.agentstore.agent.dto.AgentVersionResponse
-import com.agentstore.agent.dto.CreateAgentRequest
-import com.agentstore.agent.dto.CreateAgentVersionRequest
-import com.agentstore.agent.dto.UpdateAgentRequest
+import com.agentstore.agent.dto.request.CreateAgentRequest
+import com.agentstore.agent.dto.request.CreateAgentVersionRequest
+import com.agentstore.agent.dto.request.UpdateAgentRequest
+import com.agentstore.agent.dto.response.AgentListResponse
+import com.agentstore.agent.dto.response.AgentResponse
+import com.agentstore.agent.dto.response.AgentVersionResponse
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentVersionStatus
@@ -30,17 +30,20 @@ class AgentService(
     fun list(limit: Int, cursor: UUID?): AgentListResponse {
         requireLimit(limit)
         val active = agentRepository.findAllByOrderByCreatedAtDesc()
-            .filter { agent -> agent.versions.any { it.status == AgentVersionStatus.ACTIVE } }
-            .filter { cursor == null || it.id.toString() < cursor.toString() }
+            .map { agent -> agent to agentVersionRepository.findAllByAgentIdAndStatus(agent.id, AgentVersionStatus.ACTIVE) }
+            .filter { (_, versions) -> versions.isNotEmpty() }
+            .filter { cursor == null || it.first.id.toString() < cursor.toString() }
         val page = active.take(limit + 1)
         return AgentListResponse(
-            items = page.take(limit).map(AgentResponse::from),
-            nextCursor = page.getOrNull(limit)?.id,
+            items = page.take(limit).map { (agent, versions) -> AgentResponse.from(agent, developerName(agent.developerId), versions) },
+            nextCursor = page.getOrNull(limit)?.first?.id,
         )
     }
 
     @Transactional
-    fun getBySlug(slug: String): AgentResponse = agentRepository.findBySlug(slug)?.let(AgentResponse::from)
+    fun getBySlug(slug: String): AgentResponse = agentRepository.findBySlug(slug)?.let { agent ->
+        AgentResponse.from(agent, developerName(agent.developerId), agentVersionRepository.findAllByAgentId(agent.id))
+    }
         ?: throw ApiException("AGENT_NOT_FOUND", "Agent was not found", 404, mapOf("slug" to slug))
 
     @Transactional
@@ -49,11 +52,11 @@ class AgentService(
         val developer = developerRepository.findById(request.developerId).orElseThrow {
             ApiException("DEVELOPER_NOT_FOUND", "Developer was not found", 404, mapOf("id" to request.developerId))
         }
-        val agent = Agent(UUID.randomUUID(), developer, request.slug, request.name, request.description)
-        val version = AgentVersion(UUID.randomUUID(), agent, request.semver, request.endpoint, BigInteger(request.priceAtomic), request.network, request.asset, request.payTo)
-        agent.versions.add(version)
+        val agent = Agent(UUID.randomUUID(), developer.id, request.slug, request.name, request.description)
         return try {
-            AgentResponse.from(agentRepository.save(agent))
+            val saved = agentRepository.save(agent)
+            agentVersionRepository.save(AgentVersion(UUID.randomUUID(), saved.id, request.semver, request.endpoint, BigInteger(request.priceAtomic), request.network, request.asset, request.payTo))
+            AgentResponse.from(saved, developer.displayName, agentVersionRepository.findAllByAgentId(saved.id))
         } catch (exception: DataIntegrityViolationException) {
             throw ApiException("AGENT_ALREADY_EXISTS", "Agent slug or version already exists", 409)
         }
@@ -64,7 +67,7 @@ class AgentService(
         if (request.isEmpty()) throw ApiException("VALIDATION_ERROR", "At least one field is required", 422)
         val agent = agentRepository.findById(id).orElseThrow { ApiException("AGENT_NOT_FOUND", "Agent was not found", 404) }
         agent.updateMetadata(request.name ?: agent.name, request.description ?: agent.description)
-        return AgentResponse.from(agent)
+        return AgentResponse.from(agent, developerName(agent.developerId), agentVersionRepository.findAllByAgentId(agent.id))
     }
 
     @Transactional
@@ -74,7 +77,7 @@ class AgentService(
         if (agentVersionRepository.findByAgentIdAndSemver(agentId, request.semver) != null) {
             throw ApiException("AGENT_VERSION_ALREADY_EXISTS", "Agent version already exists", 409)
         }
-        val version = agentVersionRepository.save(AgentVersion(UUID.randomUUID(), agent, request.semver, request.endpoint, BigInteger(request.priceAtomic), request.network, request.asset, request.payTo))
+        val version = agentVersionRepository.save(AgentVersion(UUID.randomUUID(), agent.id, request.semver, request.endpoint, BigInteger(request.priceAtomic), request.network, request.asset, request.payTo))
         return AgentVersionResponse.from(version)
     }
 
@@ -99,8 +102,9 @@ class AgentService(
     @Transactional
     fun delete(id: UUID) {
         val agent = agentRepository.findById(id).orElseThrow { ApiException("AGENT_NOT_FOUND", "Agent was not found", 404) }
-        if (agent.versions.isNotEmpty()) {
-            throw ApiException("AGENT_HAS_VERSIONS", "An Agent with versions cannot be deleted; disable its ACTIVE versions instead", 409, mapOf("versionCount" to agent.versions.size))
+        val versionCount = agentVersionRepository.findAllByAgentId(agent.id).size
+        if (versionCount > 0) {
+            throw ApiException("AGENT_HAS_VERSIONS", "An Agent with versions cannot be deleted; disable its ACTIVE versions instead", 409, mapOf("versionCount" to versionCount))
         }
         agentRepository.delete(agent)
     }
@@ -116,6 +120,10 @@ class AgentService(
     private fun requireLimit(limit: Int) {
         if (limit !in 1..50) throw ApiException("VALIDATION_ERROR", "limit must be between 1 and 50", 422)
     }
+
+    private fun developerName(id: UUID): String = developerRepository.findById(id).orElseThrow {
+        ApiException("DEVELOPER_NOT_FOUND", "Developer was not found", 404, mapOf("id" to id))
+    }.displayName
 
     companion object {
         private val SEMVER = Regex("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$")

@@ -14,6 +14,7 @@
 - Preserve the public AgentStore API and PostgreSQL data. Do not run Spring and TypeScript API writes against the same database.
 - Read the relevant skill before changing files in its scope. Record pre-existing dirty paths first.
 - Follow `eco-knock-be-central` style: Kotlin services/controllers/DTOs/repository interfaces, Java JPA entities/VOs/enums, constructor injection, thin controllers, transactional services, and role packages.
+- The package tree is a hard contract: each domain uses `controller`, `dto` (with `request`/`response`/`internal` where applicable), `model/entity`, `model/vo`, `repository`, and `service`; role-specific `resolver`, `runner`, `executor`, `client`, `event`, or `config` packages are separate from `service`. `service` contains use cases only. Foreign keys are scalar UUIDs; avoid JPA `@ManyToOne` and resolve related data through repositories/services.
 
 ## Risk classification and preflight
 

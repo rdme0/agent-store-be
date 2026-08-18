@@ -1,6 +1,6 @@
 package com.agentstore.execution.model.entity;
 
-import com.agentstore.dependency.model.entity.ExecutionQuote;
+import com.agentstore.common.model.entity.BaseEntity;
 import com.agentstore.execution.model.vo.ExecutionStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.CascadeType;
@@ -8,37 +8,27 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigInteger;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 @Entity
 @Table(name = "executions")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Execution {
+public class Execution extends BaseEntity {
     @Id
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "quote_id", nullable = false)
-    private ExecutionQuote quote;
+    @Column(name = "quote_id", nullable = false)
+    private UUID quoteId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "ExecutionStatus")
@@ -67,17 +57,19 @@ public class Execution {
     @Column(columnDefinition = "jsonb")
     private JsonNode input;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+    public Execution(UUID id, UUID quoteId, BigInteger maxBudgetAtomic, String question, JsonNode input) {
+        this.id = id;
+        this.quoteId = quoteId;
+        this.maxBudgetAtomic = maxBudgetAtomic;
+        this.question = question;
+        this.input = input;
+        this.status = ExecutionStatus.PENDING;
+    }
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
+    public void start() { this.status = ExecutionStatus.RUNNING; }
 
-    @OneToMany(mappedBy = "execution", cascade = CascadeType.ALL)
-    private List<ExecutionStep> steps = new ArrayList<>();
-
-    @OneToMany(mappedBy = "execution", cascade = CascadeType.ALL)
-    private List<ExecutionEvent> events = new ArrayList<>();
+    public void fail(String failureCode) {
+        this.failureCode = failureCode;
+        this.status = ExecutionStatus.FAILED;
+    }
 }

@@ -1,6 +1,6 @@
 package com.agentstore.revenue.controller
 
-import com.agentstore.revenue.dto.DeveloperRevenueResponse
+import com.agentstore.revenue.dto.response.DeveloperRevenueResponse
 import com.agentstore.revenue.service.RevenueService
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min

@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentStore BE Kotlin/Spring Style Verifier"
+  short_description: "Review AgentStore Spring diffs against the reference package structure."
+  default_prompt: "Use $agent-store-be-style-verifier to independently review this Kotlin/Spring diff without editing files."

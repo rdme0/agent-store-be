@@ -1,11 +1,11 @@
 package com.agentstore.agent.controller
 
-import com.agentstore.agent.dto.AgentListResponse
-import com.agentstore.agent.dto.AgentResponse
-import com.agentstore.agent.dto.AgentVersionResponse
-import com.agentstore.agent.dto.CreateAgentRequest
-import com.agentstore.agent.dto.CreateAgentVersionRequest
-import com.agentstore.agent.dto.UpdateAgentRequest
+import com.agentstore.agent.dto.request.CreateAgentRequest
+import com.agentstore.agent.dto.request.CreateAgentVersionRequest
+import com.agentstore.agent.dto.request.UpdateAgentRequest
+import com.agentstore.agent.dto.response.AgentListResponse
+import com.agentstore.agent.dto.response.AgentResponse
+import com.agentstore.agent.dto.response.AgentVersionResponse
 import com.agentstore.agent.service.AgentService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max

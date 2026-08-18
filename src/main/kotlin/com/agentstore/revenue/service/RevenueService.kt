@@ -2,8 +2,8 @@ package com.agentstore.revenue.service
 
 import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.common.web.ApiException
-import com.agentstore.revenue.dto.DeveloperRevenueResponse
-import com.agentstore.revenue.dto.RevenueEntryResponse
+import com.agentstore.revenue.dto.response.DeveloperRevenueResponse
+import com.agentstore.revenue.dto.response.RevenueEntryResponse
 import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.revenue.repository.RevenueEntryRepository
 import jakarta.transaction.Transactional

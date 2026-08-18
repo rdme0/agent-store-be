@@ -1,4 +1,4 @@
-package com.agentstore.revenue.dto
+package com.agentstore.revenue.dto.response
 
 import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.revenue.model.entity.RevenueEntry
@@ -20,8 +20,8 @@ data class RevenueEntryResponse(
     companion object {
         fun from(entry: RevenueEntry) = RevenueEntryResponse(
             id = entry.id,
-            executionStepId = entry.executionStep.id,
-            paymentAttemptId = entry.paymentAttempt.id,
+            executionStepId = entry.executionStepId,
+            paymentAttemptId = entry.paymentAttemptId,
             type = entry.type,
             amountAtomic = entry.amountAtomic.toString(),
             paymentMode = if (entry.paymentMode == PaymentMode.X402) "x402" else "simulated",
