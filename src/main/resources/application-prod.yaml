@@ -1,0 +1,9 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  flyway:
+    enabled: true
+  datasource:
+    hikari:
+      maximum-pool-size: 20

@@ -1,0 +1,54 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.kotlin.plugin.spring'
+    id 'org.jetbrains.kotlin.plugin.jpa'
+    id 'org.jetbrains.kotlin.plugin.lombok'
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+}
+
+group = 'com.agentstore'
+version = '0.1.0-SNAPSHOT'
+description = 'AgentStore Kotlin/Spring backend'
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(25) }
+}
+
+kotlin {
+    jvmToolchain(25)
+    compilerOptions { jvmTarget = JvmTarget.JVM_25 }
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-scalar:3.0.3'
+    implementation 'org.postgresql:postgresql'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+    implementation 'org.jetbrains.kotlin:kotlin-reflect'
+    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    implementation 'me.paulschwarz:springboot4-dotenv:5.1.0'
+    implementation 'org.semver4j:semver4j:6.0.0'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') { useJUnitPlatform() }
+
+tasks.withType(JavaCompile).configureEach { options.release = 25 }
+
+springBoot { mainClass = 'com.agentstore.AgentStoreApplicationKt' }

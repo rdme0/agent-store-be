@@ -1,0 +1,5621 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AgentStore API",
+    "description": "AgentStore backend HTTP API",
+    "version": "0.1.0"
+  },
+  "components": {
+    "schemas": {
+      "QuoteSnapshot": {
+        "type": "object",
+        "required": [
+          "version",
+          "dependencies"
+        ],
+        "properties": {
+          "version": {
+            "type": "object",
+            "required": [
+              "id",
+              "agentId",
+              "agentSlug",
+              "semver",
+              "endpoint",
+              "priceAtomic",
+              "network",
+              "asset",
+              "payTo"
+            ],
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "agentId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "agentSlug": {
+                "type": "string"
+              },
+              "semver": {
+                "type": "string"
+              },
+              "endpoint": {
+                "format": "uri",
+                "type": "string"
+              },
+              "priceAtomic": {
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              },
+              "network": {
+                "type": "string"
+              },
+              "asset": {
+                "type": "string"
+              },
+              "payTo": {
+                "type": "string"
+              }
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "dependencyId",
+                "targetAgentId",
+                "targetAgentSlug",
+                "versionConstraint",
+                "required",
+                "maxPriceAtomic",
+                "maxCalls"
+              ],
+              "properties": {
+                "dependencyId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "targetAgentId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "targetAgentSlug": {
+                  "type": "string"
+                },
+                "versionConstraint": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "maxPriceAtomic": {
+                  "pattern": "^[0-9]+$",
+                  "type": "string"
+                },
+                "maxCalls": {
+                  "minimum": 1,
+                  "maximum": 5,
+                  "type": "integer"
+                },
+                "resolved": {
+                  "$ref": "#/components/schemas/QuoteSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Check API health",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "service",
+                    "version",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents": {
+      "get": {
+        "summary": "List active Agents",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "developerId",
+                          "developerName",
+                          "slug",
+                          "name",
+                          "description",
+                          "versions",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "developerId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "developerName": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "versions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "agentId",
+                                "semver",
+                                "status",
+                                "endpoint",
+                                "priceAtomic",
+                                "network",
+                                "asset",
+                                "payTo",
+                                "createdAt",
+                                "updatedAt"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "agentId": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "semver": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "DRAFT"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "ACTIVE"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "DISABLED"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "endpoint": {
+                                  "format": "uri",
+                                  "type": "string"
+                                },
+                                "priceAtomic": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                },
+                                "network": {
+                                  "type": "string"
+                                },
+                                "asset": {
+                                  "type": "string"
+                                },
+                                "payTo": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Register an Agent with its first DRAFT version",
+        "tags": [
+          "agents"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "developerId",
+                  "slug",
+                  "name",
+                  "description",
+                  "semver",
+                  "endpoint",
+                  "priceAtomic",
+                  "network",
+                  "asset",
+                  "payTo"
+                ],
+                "properties": {
+                  "developerId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "slug": {
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "description": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "semver": {
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "type": "string",
+                    "example": "1.0.0"
+                  },
+                  "endpoint": {
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "priceAtomic": {
+                    "pattern": "^[0-9]+$",
+                    "type": "string",
+                    "example": "10000"
+                  },
+                  "network": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "eip155:84532"
+                  },
+                  "asset": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "USDC"
+                  },
+                  "payTo": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "0x0000000000000000000000000000000000000001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "developerId",
+                    "developerName",
+                    "slug",
+                    "name",
+                    "description",
+                    "versions",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "developerId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "developerName": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "agentId",
+                          "semver",
+                          "status",
+                          "endpoint",
+                          "priceAtomic",
+                          "network",
+                          "asset",
+                          "payTo",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "semver": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DRAFT"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ACTIVE"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DISABLED"
+                                ]
+                              }
+                            ]
+                          },
+                          "endpoint": {
+                            "format": "uri",
+                            "type": "string"
+                          },
+                          "priceAtomic": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          },
+                          "network": {
+                            "type": "string"
+                          },
+                          "asset": {
+                            "type": "string"
+                          },
+                          "payTo": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{slug}": {
+      "get": {
+        "summary": "Get an Agent by slug",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "maxLength": 80,
+              "type": "string"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "developerId",
+                    "developerName",
+                    "slug",
+                    "name",
+                    "description",
+                    "versions",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "developerId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "developerName": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "agentId",
+                          "semver",
+                          "status",
+                          "endpoint",
+                          "priceAtomic",
+                          "network",
+                          "asset",
+                          "payTo",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "semver": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DRAFT"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ACTIVE"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DISABLED"
+                                ]
+                              }
+                            ]
+                          },
+                          "endpoint": {
+                            "format": "uri",
+                            "type": "string"
+                          },
+                          "priceAtomic": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          },
+                          "network": {
+                            "type": "string"
+                          },
+                          "asset": {
+                            "type": "string"
+                          },
+                          "payTo": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}": {
+      "patch": {
+        "summary": "Update Agent metadata",
+        "tags": [
+          "agents"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "minProperties": 1,
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "description": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "developerId",
+                    "developerName",
+                    "slug",
+                    "name",
+                    "description",
+                    "versions",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "developerId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "developerName": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "agentId",
+                          "semver",
+                          "status",
+                          "endpoint",
+                          "priceAtomic",
+                          "network",
+                          "asset",
+                          "payTo",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "semver": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DRAFT"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ACTIVE"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DISABLED"
+                                ]
+                              }
+                            ]
+                          },
+                          "endpoint": {
+                            "format": "uri",
+                            "type": "string"
+                          },
+                          "priceAtomic": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          },
+                          "network": {
+                            "type": "string"
+                          },
+                          "asset": {
+                            "type": "string"
+                          },
+                          "payTo": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a versionless Agent",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/versions": {
+      "post": {
+        "summary": "Create a DRAFT Agent version",
+        "tags": [
+          "agents"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "semver",
+                  "endpoint",
+                  "priceAtomic",
+                  "network",
+                  "asset",
+                  "payTo"
+                ],
+                "properties": {
+                  "semver": {
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "type": "string",
+                    "example": "1.0.0"
+                  },
+                  "endpoint": {
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "priceAtomic": {
+                    "pattern": "^[0-9]+$",
+                    "type": "string",
+                    "example": "10000"
+                  },
+                  "network": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "eip155:84532"
+                  },
+                  "asset": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "USDC"
+                  },
+                  "payTo": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "0x0000000000000000000000000000000000000001"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "agentId",
+                    "semver",
+                    "status",
+                    "endpoint",
+                    "priceAtomic",
+                    "network",
+                    "asset",
+                    "payTo",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "semver": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ACTIVE"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "DISABLED"
+                          ]
+                        }
+                      ]
+                    },
+                    "endpoint": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "priceAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "network": {
+                      "type": "string"
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "payTo": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-versions/{id}/publish": {
+      "post": {
+        "summary": "Publish a DRAFT Agent version",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "agentId",
+                    "semver",
+                    "status",
+                    "endpoint",
+                    "priceAtomic",
+                    "network",
+                    "asset",
+                    "payTo",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "semver": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ACTIVE"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "DISABLED"
+                          ]
+                        }
+                      ]
+                    },
+                    "endpoint": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "priceAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "network": {
+                      "type": "string"
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "payTo": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-versions/{id}/disable": {
+      "post": {
+        "summary": "Disable an ACTIVE Agent version",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "agentId",
+                    "semver",
+                    "status",
+                    "endpoint",
+                    "priceAtomic",
+                    "network",
+                    "asset",
+                    "payTo",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "semver": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ACTIVE"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "DISABLED"
+                          ]
+                        }
+                      ]
+                    },
+                    "endpoint": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "priceAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "network": {
+                      "type": "string"
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "payTo": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-versions/{id}/dependencies": {
+      "get": {
+        "summary": "List dependencies for an Agent version",
+        "tags": [
+          "dependencies"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "sourceVersionId",
+                      "targetAgentId",
+                      "targetAgentSlug",
+                      "versionConstraint",
+                      "required",
+                      "maxPriceAtomic",
+                      "maxCalls",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "sourceVersionId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "targetAgentId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "targetAgentSlug": {
+                        "type": "string"
+                      },
+                      "versionConstraint": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "maxPriceAtomic": {
+                        "pattern": "^[0-9]+$",
+                        "type": "string"
+                      },
+                      "maxCalls": {
+                        "minimum": 1,
+                        "maximum": 5,
+                        "type": "integer"
+                      },
+                      "createdAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "updatedAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a dependency to a DRAFT Agent version",
+        "tags": [
+          "dependencies"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "targetAgentId",
+                  "versionConstraint",
+                  "maxPriceAtomic"
+                ],
+                "properties": {
+                  "targetAgentId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "versionConstraint": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "^1.0.0"
+                  },
+                  "required": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "maxPriceAtomic": {
+                    "pattern": "^[0-9]+$",
+                    "type": "string",
+                    "example": "10000"
+                  },
+                  "maxCalls": {
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 1,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "sourceVersionId",
+                    "targetAgentId",
+                    "targetAgentSlug",
+                    "versionConstraint",
+                    "required",
+                    "maxPriceAtomic",
+                    "maxCalls",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "sourceVersionId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "targetAgentId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "targetAgentSlug": {
+                      "type": "string"
+                    },
+                    "versionConstraint": {
+                      "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "maxPriceAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "maxCalls": {
+                      "minimum": 1,
+                      "maximum": 5,
+                      "type": "integer"
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-versions/{id}/dependencies/{dependencyId}": {
+      "patch": {
+        "summary": "Update a dependency on a DRAFT Agent version",
+        "tags": [
+          "dependencies"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "minProperties": 1,
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                  "versionConstraint": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "maxPriceAtomic": {
+                    "pattern": "^[0-9]+$",
+                    "type": "string"
+                  },
+                  "maxCalls": {
+                    "minimum": 1,
+                    "maximum": 5,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "dependencyId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "sourceVersionId",
+                    "targetAgentId",
+                    "targetAgentSlug",
+                    "versionConstraint",
+                    "required",
+                    "maxPriceAtomic",
+                    "maxCalls",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "sourceVersionId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "targetAgentId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "targetAgentSlug": {
+                      "type": "string"
+                    },
+                    "versionConstraint": {
+                      "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "maxPriceAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "maxCalls": {
+                      "minimum": 1,
+                      "maximum": 5,
+                      "type": "integer"
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a dependency from a DRAFT Agent version",
+        "tags": [
+          "dependencies"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "dependencyId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{slug}/quotes": {
+      "post": {
+        "summary": "Create a five-minute execution quote",
+        "tags": [
+          "quotes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                  "versionConstraint": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string",
+                    "example": "^1.0.0"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "maxLength": 80,
+              "type": "string"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "rootVersionId",
+                    "expiresAt",
+                    "maxCostAtomic",
+                    "snapshot",
+                    "warnings"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "rootVersionId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "maxCostAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "snapshot": {
+                      "type": "object",
+                      "required": [
+                        "version",
+                        "dependencies"
+                      ],
+                      "properties": {
+                        "version": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "agentId",
+                            "agentSlug",
+                            "semver",
+                            "endpoint",
+                            "priceAtomic",
+                            "network",
+                            "asset",
+                            "payTo"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "agentId": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "agentSlug": {
+                              "type": "string"
+                            },
+                            "semver": {
+                              "type": "string"
+                            },
+                            "endpoint": {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            "priceAtomic": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            },
+                            "network": {
+                              "type": "string"
+                            },
+                            "asset": {
+                              "type": "string"
+                            },
+                            "payTo": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "dependencies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "dependencyId",
+                              "targetAgentId",
+                              "targetAgentSlug",
+                              "versionConstraint",
+                              "required",
+                              "maxPriceAtomic",
+                              "maxCalls"
+                            ],
+                            "properties": {
+                              "dependencyId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "targetAgentId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "targetAgentSlug": {
+                                "type": "string"
+                              },
+                              "versionConstraint": {
+                                "type": "string"
+                              },
+                              "required": {
+                                "type": "boolean"
+                              },
+                              "maxPriceAtomic": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              },
+                              "maxCalls": {
+                                "minimum": 1,
+                                "maximum": 5,
+                                "type": "integer"
+                              },
+                              "resolved": {
+                                "$ref": "#/components/schemas/QuoteSnapshot"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "code",
+                          "dependencyId",
+                          "targetAgentId",
+                          "targetAgentSlug",
+                          "versionConstraint"
+                        ],
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "OPTIONAL_DEPENDENCY_NOT_RESOLVED"
+                            ]
+                          },
+                          "dependencyId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "targetAgentId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "targetAgentSlug": {
+                            "type": "string"
+                          },
+                          "versionConstraint": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/executions": {
+      "post": {
+        "summary": "Approve a quote and start an execution",
+        "tags": [
+          "executions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "quoteId",
+                  "maxBudgetAtomic"
+                ],
+                "properties": {
+                  "quoteId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "maxBudgetAtomic": {
+                    "pattern": "^[0-9]+$",
+                    "type": "string"
+                  },
+                  "question": {
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  "input": {}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "quoteId",
+                    "status",
+                    "maxBudgetAtomic",
+                    "reservedCostAtomic",
+                    "actualCostAtomic",
+                    "steps",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "quoteId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "PENDING"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "RUNNING"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "COMPLETED"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "FAILED"
+                          ]
+                        }
+                      ]
+                    },
+                    "maxBudgetAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "reservedCostAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "actualCostAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "question": {
+                      "type": "string"
+                    },
+                    "input": {},
+                    "failureCode": {
+                      "type": "string"
+                    },
+                    "steps": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "agentVersionId",
+                          "status",
+                          "costAtomic",
+                          "payments",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "parentStepId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "agentVersionId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "CREATED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "PAYMENT_REQUIRED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "PAYMENT_SETTLED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "RUNNING"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "COMPLETED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "FAILED"
+                                ]
+                              }
+                            ]
+                          },
+                          "costAtomic": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          },
+                          "output": {},
+                          "failureCode": {
+                            "type": "string"
+                          },
+                          "payments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "status",
+                                "amountAtomic",
+                                "mode"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "REQUIRED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "AUTHORIZED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "SETTLED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "FAILED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "RECONCILIATION_REQUIRED"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "amountAtomic": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                },
+                                "mode": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "simulated"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "x402"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "transactionHash": {
+                                  "type": "string"
+                                },
+                                "paymentIdentifier": {
+                                  "type": "string"
+                                },
+                                "failureCode": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/executions/{id}": {
+      "get": {
+        "summary": "Get execution status",
+        "tags": [
+          "executions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "quoteId",
+                    "status",
+                    "maxBudgetAtomic",
+                    "reservedCostAtomic",
+                    "actualCostAtomic",
+                    "steps",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "quoteId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "PENDING"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "RUNNING"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "COMPLETED"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "FAILED"
+                          ]
+                        }
+                      ]
+                    },
+                    "maxBudgetAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "reservedCostAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "actualCostAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "question": {
+                      "type": "string"
+                    },
+                    "input": {},
+                    "failureCode": {
+                      "type": "string"
+                    },
+                    "steps": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "agentVersionId",
+                          "status",
+                          "costAtomic",
+                          "payments",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "parentStepId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "agentVersionId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "CREATED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "PAYMENT_REQUIRED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "PAYMENT_SETTLED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "RUNNING"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "COMPLETED"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "FAILED"
+                                ]
+                              }
+                            ]
+                          },
+                          "costAtomic": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          },
+                          "output": {},
+                          "failureCode": {
+                            "type": "string"
+                          },
+                          "payments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "status",
+                                "amountAtomic",
+                                "mode"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "REQUIRED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "AUTHORIZED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "SETTLED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "FAILED"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "RECONCILIATION_REQUIRED"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "amountAtomic": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                },
+                                "mode": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "simulated"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "x402"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "transactionHash": {
+                                  "type": "string"
+                                },
+                                "paymentIdentifier": {
+                                  "type": "string"
+                                },
+                                "failureCode": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/executions/{id}/events": {
+      "get": {
+        "summary": "Stream execution events",
+        "tags": [
+          "executions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            },
+            "in": "header",
+            "name": "last-event-id",
+            "required": false,
+            "description": "Replay events after this nonnegative event sequence."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-sent events stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/developers/{id}/revenue": {
+      "get": {
+        "summary": "Get developer revenue",
+        "tags": [
+          "revenue"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "developerId",
+                    "totalRevenueAtomic",
+                    "directRevenueAtomic",
+                    "dependencyRevenueAtomic",
+                    "directCount",
+                    "dependencyCount",
+                    "entries"
+                  ],
+                  "properties": {
+                    "developerId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "totalRevenueAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "directRevenueAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "dependencyRevenueAtomic": {
+                      "pattern": "^[0-9]+$",
+                      "type": "string"
+                    },
+                    "directCount": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "dependencyCount": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "executionStepId",
+                          "paymentAttemptId",
+                          "type",
+                          "amountAtomic",
+                          "paymentMode",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "executionStepId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "paymentAttemptId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "type": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DIRECT"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DEPENDENCY"
+                                ]
+                              }
+                            ]
+                          },
+                          "amountAtomic": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          },
+                          "paymentMode": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "simulated"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "x402"
+                                ]
+                              }
+                            ]
+                          },
+                          "transactionHash": {
+                            "type": "string"
+                          },
+                          "paymentIdentifier": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "traceId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      }
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "Get the generated OpenAPI document",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "system",
+      "description": "Service and API metadata"
+    }
+  ]
+}

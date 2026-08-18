@@ -1,0 +1,7 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    hikari:
+      maximum-pool-size: 10
