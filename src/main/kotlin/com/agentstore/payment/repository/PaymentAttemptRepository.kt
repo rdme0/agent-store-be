@@ -7,4 +7,5 @@ import java.util.UUID
 
 interface PaymentAttemptRepository : JpaRepository<PaymentAttempt, UUID> {
     fun findAllByStatusIn(statuses: Collection<PaymentAttemptStatus>): List<PaymentAttempt>
+    fun findAllByExecutionStepIdOrderByCreatedAtAsc(executionStepId: UUID): List<PaymentAttempt>
 }
