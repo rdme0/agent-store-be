@@ -9,6 +9,8 @@ import com.agentstore.dependency.dto.DependencyResponse
 import com.agentstore.dependency.dto.UpdateDependencyRequest
 import com.agentstore.dependency.model.entity.AgentDependency
 import com.agentstore.dependency.repository.AgentDependencyRepository
+import com.agentstore.dependency.resolver.CycleValidator
+import com.agentstore.dependency.resolver.DependencyResolver
 import jakarta.transaction.Transactional
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service

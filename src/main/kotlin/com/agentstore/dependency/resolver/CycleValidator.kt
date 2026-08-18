@@ -1,4 +1,4 @@
-package com.agentstore.dependency.service
+package com.agentstore.dependency.resolver
 
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import com.agentstore.agent.repository.AgentVersionRepository

@@ -1,4 +1,4 @@
-package com.agentstore.dependency.service
+package com.agentstore.dependency.model.vo
 
 import java.math.BigInteger
 
