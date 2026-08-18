@@ -4,4 +4,6 @@ import com.agentstore.payment.model.entity.PaymentSettlementJournal
 import org.springframework.data.jpa.repository.JpaRepository
 import java.util.UUID
 
-interface PaymentSettlementJournalRepository : JpaRepository<PaymentSettlementJournal, UUID>
+interface PaymentSettlementJournalRepository : JpaRepository<PaymentSettlementJournal, UUID> {
+    fun findByPaymentAttemptId(paymentAttemptId: UUID): PaymentSettlementJournal?
+}

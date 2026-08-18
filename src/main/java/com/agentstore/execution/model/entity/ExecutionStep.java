@@ -78,6 +78,12 @@ public class ExecutionStep extends BaseEntity {
         this.status = ExecutionStepStatus.COMPLETED;
     }
 
+    public void paymentRequired() { this.status = ExecutionStepStatus.PAYMENT_REQUIRED; }
+
+    public void paymentSettled() { this.status = ExecutionStepStatus.PAYMENT_SETTLED; }
+
+    public void running() { this.status = ExecutionStepStatus.RUNNING; }
+
     public void fail(String failureCode) {
         this.failureCode = failureCode;
         this.status = ExecutionStepStatus.FAILED;

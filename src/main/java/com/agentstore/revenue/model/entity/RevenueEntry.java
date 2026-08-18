@@ -60,4 +60,16 @@ public class RevenueEntry extends BaseEntity {
     @Column(name = "payment_identifier", unique = true)
     private String paymentIdentifier;
 
+    public RevenueEntry(UUID id, UUID developerId, UUID executionStepId, UUID paymentAttemptId, RevenueType type, BigInteger amountAtomic, PaymentMode paymentMode, String transactionHash, String paymentIdentifier) {
+        this.id = id;
+        this.developerId = developerId;
+        this.executionStepId = executionStepId;
+        this.paymentAttemptId = paymentAttemptId;
+        this.type = type;
+        this.amountAtomic = amountAtomic;
+        this.paymentMode = paymentMode;
+        this.transactionHash = transactionHash;
+        this.paymentIdentifier = paymentIdentifier;
+    }
+
 }

@@ -6,4 +6,5 @@ import java.util.UUID
 
 interface RevenueEntryRepository : JpaRepository<RevenueEntry, UUID> {
     fun findAllByDeveloperIdOrderByCreatedAtDesc(developerId: UUID): List<RevenueEntry>
+    fun findByPaymentAttemptId(paymentAttemptId: UUID): RevenueEntry?
 }

@@ -1,15 +1,14 @@
 package com.agentstore.execution.runner
 
 import com.agentstore.dependency.repository.ExecutionQuoteRepository
-import com.agentstore.execution.event.ExecutionEventService
-import com.agentstore.execution.model.vo.ExecutionStatus
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
-import com.fasterxml.jackson.databind.JsonNode
+import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
+import com.agentstore.execution.service.ExecutionRunService
+import com.agentstore.execution.service.ExecutionLifecycleService
+import com.agentstore.payment.exception.PaymentExecutionException
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
-import com.agentstore.payment.client.PaymentClient
-import com.agentstore.payment.dto.internal.PaymentInvocationRequest
 import java.math.BigInteger
 import java.util.UUID
 
@@ -18,34 +17,43 @@ class ExecutionRunner(
     private val executionRepository: ExecutionRepository,
     private val executionStepRepository: ExecutionStepRepository,
     private val quoteRepository: ExecutionQuoteRepository,
-    private val eventService: ExecutionEventService,
-    private val paymentClient: PaymentClient,
+    private val paymentOrchestrator: ExecutionPaymentOrchestrator,
+    private val executionRunService: ExecutionRunService,
+    private val executionLifecycleService: ExecutionLifecycleService,
 ) {
     @Async
     fun start(executionId: UUID) {
-        val execution = executionRepository.findById(executionId).orElse(null) ?: return
-        if (execution.status != ExecutionStatus.PENDING) return
-        val step = executionStepRepository.findAllByExecutionIdOrderByCreatedAtAsc(executionId).firstOrNull() ?: return
-        val quote = quoteRepository.findById(execution.quoteId).orElse(null) ?: return
+        val initialExecution = executionRepository.findById(executionId).orElse(null) ?: return
+        val step = executionStepRepository.findAllByExecutionIdOrderByCreatedAtAsc(executionId).firstOrNull()
+        if (step == null) {
+            executionRunService.claim(executionId)
+            executionRunService.fail(executionId, "EXECUTION_STEP_NOT_FOUND")
+            return
+        }
+        if (!executionRunService.claim(executionId, step.id)) return
+        val quote = quoteRepository.findById(initialExecution.quoteId).orElse(null)
+        if (quote == null) {
+            executionLifecycleService.fail(executionId, step.id, "EXECUTION_QUOTE_NOT_FOUND")
+            return
+        }
         val version = quote.snapshot.path("version")
         val endpoint = version.path("endpoint").asText()
         val cost = version.path("priceAtomic").asText("0").toBigIntegerOrNull() ?: BigInteger.ZERO
-        execution.start()
-        executionRepository.save(execution)
-        eventService.append(executionId, "EXECUTION_RUNNING", mapOf("stepId" to step.id))
         try {
-            val output = paymentClient.invoke(PaymentInvocationRequest(endpoint, cost.toString(), mapOf("input" to execution.input, "question" to execution.question))).output
-            step.complete(output, cost)
-            execution.complete(cost)
-            executionStepRepository.save(step)
-            executionRepository.save(execution)
-            eventService.append(executionId, "EXECUTION_COMPLETED", mapOf("stepId" to step.id, "actualCostAtomic" to cost.toString(), "output" to output))
+            val output = paymentOrchestrator.invoke(
+                executionId = executionId,
+                stepId = step.id,
+                endpoint = endpoint,
+                amount = cost,
+                network = version.path("network").asText(),
+                asset = version.path("asset").asText(),
+                payTo = version.path("payTo").asText(),
+                body = mapOf("input" to initialExecution.input, "question" to initialExecution.question),
+            ).output
+            executionLifecycleService.complete(executionId, step.id, output, cost)
         } catch (exception: Exception) {
-            step.fail("AGENT_INVOCATION_FAILED")
-            execution.fail("AGENT_INVOCATION_FAILED")
-            executionStepRepository.save(step)
-            executionRepository.save(execution)
-            eventService.append(executionId, "EXECUTION_FAILED", mapOf("stepId" to step.id, "failureCode" to "AGENT_INVOCATION_FAILED"))
+            val failureCode = (exception as? PaymentExecutionException)?.failureCode ?: "AGENT_INVOCATION_FAILED"
+            executionLifecycleService.fail(executionId, step.id, failureCode)
         }
     }
 }

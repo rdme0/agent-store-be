@@ -25,4 +25,10 @@ public class PaymentSettlementJournal extends BaseEntity {
     @Column(name = "transaction_hash", nullable = false)
     private String transactionHash;
 
+    public PaymentSettlementJournal(UUID id, UUID paymentAttemptId, String transactionHash) {
+        this.id = id;
+        this.paymentAttemptId = paymentAttemptId;
+        this.transactionHash = transactionHash;
+    }
+
 }

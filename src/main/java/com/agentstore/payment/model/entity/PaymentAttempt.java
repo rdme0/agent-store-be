@@ -61,4 +61,33 @@ public class PaymentAttempt extends BaseEntity {
     @Column(name = "payment_identifier")
     private String paymentIdentifier;
 
+    public PaymentAttempt(UUID id, UUID executionStepId, BigInteger amountAtomic, String network, String asset, String payTo, PaymentMode paymentMode) {
+        this.id = id;
+        this.executionStepId = executionStepId;
+        this.amountAtomic = amountAtomic;
+        this.network = network;
+        this.asset = asset;
+        this.payTo = payTo;
+        this.paymentMode = paymentMode;
+        this.status = PaymentAttemptStatus.REQUIRED;
+    }
+
+    public void settled(String transactionHash, String paymentIdentifier) {
+        this.status = PaymentAttemptStatus.SETTLED;
+        this.transactionHash = transactionHash;
+        this.paymentIdentifier = paymentIdentifier;
+    }
+
+    public void failed(String failureCode) {
+        if (status == PaymentAttemptStatus.SETTLED || status == PaymentAttemptStatus.RECONCILIATION_REQUIRED) return;
+        this.status = PaymentAttemptStatus.FAILED;
+        this.failureCode = failureCode;
+    }
+
+    public void reconciliationRequired(String failureCode) {
+        if (status == PaymentAttemptStatus.SETTLED) return;
+        this.status = PaymentAttemptStatus.RECONCILIATION_REQUIRED;
+        this.failureCode = failureCode;
+    }
+
 }

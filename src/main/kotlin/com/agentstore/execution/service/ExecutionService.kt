@@ -14,6 +14,8 @@ import com.agentstore.execution.runner.ExecutionRunner
 import com.agentstore.payment.repository.PaymentAttemptRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.stereotype.Service
 import java.math.BigInteger
 import java.time.Instant
@@ -39,7 +41,12 @@ class ExecutionService(
         val rootVersionId = quote.snapshot.path("version").path("id").asText().takeIf { it.isNotBlank() }?.let(UUID::fromString) ?: quote.rootVersionId
         val rootStep = executionStepRepository.save(ExecutionStep(UUID.randomUUID(), execution.id, null, rootVersionId, objectMapper.valueToTree(listOf(quote.snapshot.path("version").path("agentSlug").asText()))))
         eventService.append(execution.id, "EXECUTION_CREATED", mapOf("quoteId" to quote.id, "maxBudgetAtomic" to budget.toString()))
-        runner.start(execution.id)
+        val executionId = execution.id
+        TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+            override fun afterCommit() {
+                runner.start(executionId)
+            }
+        })
         return toResponse(execution, listOf(rootStep))
     }
 
