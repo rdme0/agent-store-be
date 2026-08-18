@@ -6,4 +6,5 @@ import java.util.UUID
 
 interface AgentDependencyRepository : JpaRepository<AgentDependency, UUID> {
     fun findAllBySourceVersionId(sourceVersionId: UUID): List<AgentDependency>
+    fun findByIdAndSourceVersionId(id: UUID, sourceVersionId: UUID): AgentDependency?
 }

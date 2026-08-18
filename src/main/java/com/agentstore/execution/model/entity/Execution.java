@@ -45,13 +45,16 @@ public class Execution {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private ExecutionStatus status = ExecutionStatus.PENDING;
 
-    @Column(name = "max_budget_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "max_budget_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger maxBudgetAtomic;
 
-    @Column(name = "reserved_cost_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "reserved_cost_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger reservedCostAtomic = BigInteger.ZERO;
 
-    @Column(name = "actual_cost_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "actual_cost_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger actualCostAtomic = BigInteger.ZERO;
 
     @Column(name = "failure_code")

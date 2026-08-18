@@ -56,7 +56,8 @@ public class RevenueEntry {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private RevenueType type;
 
-    @Column(name = "amount_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "amount_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger amountAtomic;
 
     @Enumerated(EnumType.STRING)

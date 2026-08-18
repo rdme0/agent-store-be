@@ -19,6 +19,8 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+  jackson:
+    default-property-inclusion: non_null
 
 server:
   address: ${HOST:0.0.0.0}

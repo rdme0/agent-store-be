@@ -35,7 +35,8 @@ public class ExecutionQuote {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
-    @Column(name = "max_cost_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "max_cost_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger maxCostAtomic;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -45,4 +46,12 @@ public class ExecutionQuote {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    public ExecutionQuote(UUID id, AgentVersion rootVersion, Instant expiresAt, BigInteger maxCostAtomic, JsonNode snapshot) {
+        this.id = id;
+        this.rootVersion = rootVersion;
+        this.expiresAt = expiresAt;
+        this.maxCostAtomic = maxCostAtomic;
+        this.snapshot = snapshot;
+    }
 }

@@ -36,4 +36,9 @@ public class User {
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     private Developer developer;
+
+    public User(UUID id, String externalId) {
+        this.id = id;
+        this.externalId = externalId;
+    }
 }

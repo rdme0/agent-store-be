@@ -14,7 +14,9 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigInteger;
 import java.time.Instant;
@@ -42,7 +44,8 @@ public class AgentDependency {
     @Column(nullable = false)
     private boolean required = true;
 
-    @Column(name = "max_price_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "max_price_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger maxPriceAtomic;
 
     @Column(name = "max_calls", nullable = false)
@@ -55,4 +58,21 @@ public class AgentDependency {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    public AgentDependency(UUID id, AgentVersion sourceVersion, Agent targetAgent, String versionConstraint, boolean required, BigInteger maxPriceAtomic, int maxCalls) {
+        this.id = id;
+        this.sourceVersion = sourceVersion;
+        this.targetAgent = targetAgent;
+        this.versionConstraint = versionConstraint;
+        this.required = required;
+        this.maxPriceAtomic = maxPriceAtomic;
+        this.maxCalls = maxCalls;
+    }
+
+    public void update(String versionConstraint, boolean required, BigInteger maxPriceAtomic, int maxCalls) {
+        this.versionConstraint = versionConstraint;
+        this.required = required;
+        this.maxPriceAtomic = maxPriceAtomic;
+        this.maxCalls = maxCalls;
+    }
 }

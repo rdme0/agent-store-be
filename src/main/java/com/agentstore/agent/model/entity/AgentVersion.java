@@ -51,7 +51,8 @@ public class AgentVersion {
     @Column(nullable = false)
     private String endpoint;
 
-    @Column(name = "price_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "price_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger priceAtomic;
 
     @Column(nullable = false)
@@ -73,4 +74,30 @@ public class AgentVersion {
 
     @OneToMany(mappedBy = "sourceVersion", cascade = CascadeType.ALL)
     private List<AgentDependency> dependencies = new ArrayList<>();
+
+    public AgentVersion(UUID id, Agent agent, String semver, String endpoint, BigInteger priceAtomic, String network, String asset, String payTo) {
+        this.id = id;
+        this.agent = agent;
+        this.semver = semver;
+        this.endpoint = endpoint;
+        this.priceAtomic = priceAtomic;
+        this.network = network;
+        this.asset = asset;
+        this.payTo = payTo;
+        this.status = AgentVersionStatus.DRAFT;
+    }
+
+    public void publish() {
+        if (status != AgentVersionStatus.DRAFT) {
+            throw new IllegalStateException("Only DRAFT versions can be published");
+        }
+        status = AgentVersionStatus.ACTIVE;
+    }
+
+    public void disable() {
+        if (status != AgentVersionStatus.ACTIVE) {
+            throw new IllegalStateException("Only ACTIVE versions can be disabled");
+        }
+        status = AgentVersionStatus.DISABLED;
+    }
 }

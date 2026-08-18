@@ -45,4 +45,10 @@ public class Developer {
 
     @OneToMany(mappedBy = "developer", cascade = CascadeType.ALL)
     private List<Agent> agents = new ArrayList<>();
+
+    public Developer(UUID id, User user, String displayName) {
+        this.id = id;
+        this.user = user;
+        this.displayName = displayName;
+    }
 }

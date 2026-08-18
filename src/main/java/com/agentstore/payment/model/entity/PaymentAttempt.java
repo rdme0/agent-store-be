@@ -43,7 +43,8 @@ public class PaymentAttempt {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private PaymentAttemptStatus status = PaymentAttemptStatus.REQUIRED;
 
-    @Column(name = "amount_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "amount_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger amountAtomic;
 
     @Column(nullable = false)

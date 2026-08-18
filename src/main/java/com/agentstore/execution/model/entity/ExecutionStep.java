@@ -68,7 +68,8 @@ public class ExecutionStep {
     @Column(name = "request_fingerprint")
     private String requestFingerprint;
 
-    @Column(name = "cost_atomic", nullable = false, precision = 39, scale = 0)
+    @JdbcTypeCode(SqlTypes.BIGINT)
+    @Column(name = "cost_atomic", nullable = false, columnDefinition = "BIGINT")
     private BigInteger costAtomic = BigInteger.ZERO;
 
     @JdbcTypeCode(SqlTypes.JSON)

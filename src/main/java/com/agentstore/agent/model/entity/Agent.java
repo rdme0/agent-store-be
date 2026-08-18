@@ -55,4 +55,17 @@ public class Agent {
 
     @OneToMany(mappedBy = "targetAgent")
     private List<AgentDependency> targetDependencies = new ArrayList<>();
+
+    public Agent(UUID id, Developer developer, String slug, String name, String description) {
+        this.id = id;
+        this.developer = developer;
+        this.slug = slug;
+        this.name = name;
+        this.description = description;
+    }
+
+    public void updateMetadata(String name, String description) {
+        this.name = name;
+        this.description = description;
+    }
 }
