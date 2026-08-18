@@ -72,4 +72,9 @@ public class Execution extends BaseEntity {
         this.failureCode = failureCode;
         this.status = ExecutionStatus.FAILED;
     }
+
+    public void complete(BigInteger actualCostAtomic) {
+        this.actualCostAtomic = actualCostAtomic;
+        this.status = ExecutionStatus.COMPLETED;
+    }
 }

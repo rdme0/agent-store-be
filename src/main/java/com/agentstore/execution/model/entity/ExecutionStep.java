@@ -71,4 +71,15 @@ public class ExecutionStep extends BaseEntity {
         this.callPath = callPath;
         this.status = ExecutionStepStatus.CREATED;
     }
+
+    public void complete(JsonNode output, BigInteger costAtomic) {
+        this.output = output;
+        this.costAtomic = costAtomic;
+        this.status = ExecutionStepStatus.COMPLETED;
+    }
+
+    public void fail(String failureCode) {
+        this.failureCode = failureCode;
+        this.status = ExecutionStepStatus.FAILED;
+    }
 }

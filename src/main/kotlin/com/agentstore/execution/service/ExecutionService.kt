@@ -10,6 +10,7 @@ import com.agentstore.execution.model.entity.Execution
 import com.agentstore.execution.model.entity.ExecutionStep
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
+import com.agentstore.execution.runner.ExecutionRunner
 import com.agentstore.payment.repository.PaymentAttemptRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
@@ -26,6 +27,7 @@ class ExecutionService(
     private val quoteRepository: ExecutionQuoteRepository,
     private val eventService: ExecutionEventService,
     private val objectMapper: ObjectMapper,
+    private val runner: ExecutionRunner,
 ) {
     @Transactional
     fun create(request: CreateExecutionRequest): ExecutionResponse {
@@ -37,6 +39,7 @@ class ExecutionService(
         val rootVersionId = quote.snapshot.path("version").path("id").asText().takeIf { it.isNotBlank() }?.let(UUID::fromString) ?: quote.rootVersionId
         val rootStep = executionStepRepository.save(ExecutionStep(UUID.randomUUID(), execution.id, null, rootVersionId, objectMapper.valueToTree(listOf(quote.snapshot.path("version").path("agentSlug").asText()))))
         eventService.append(execution.id, "EXECUTION_CREATED", mapOf("quoteId" to quote.id, "maxBudgetAtomic" to budget.toString()))
+        runner.start(execution.id)
         return toResponse(execution, listOf(rootStep))
     }
 
