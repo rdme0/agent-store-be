@@ -1,7 +1,8 @@
 package com.agentstore.agent.resolver
 
 import com.agentstore.agent.model.vo.ValidatedAgentEndpoint
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import org.springframework.core.env.Environment
 import org.springframework.stereotype.Component
 import java.net.Inet4Address
@@ -137,12 +138,12 @@ class AgentEndpointPolicy(
         return true
     }
 
-    private fun invalid(message: String): ApiException {
-        return ApiException("INVALID_ENDPOINT", message, 400)
+    private fun invalid(message: String): DomainClientException {
+        return DomainClientException(ErrorCode.INVALID_ENDPOINT)
     }
 
-    private fun unsafe(message: String): ApiException {
-        return ApiException("UNSAFE_AGENT_ENDPOINT", message, 400)
+    private fun unsafe(message: String): DomainClientException {
+        return DomainClientException(ErrorCode.UNSAFE_AGENT_ENDPOINT)
     }
 
     private companion object {

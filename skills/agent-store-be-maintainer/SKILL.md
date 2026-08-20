@@ -25,7 +25,8 @@ copy the reference repository's air-quality CQRS structure into unrelated domain
 
 ## Dependency direction
 
-Controllers bind HTTP, validate, document, call one use-case service, and return the contract response. They do not
+Controllers bind HTTP, validate, document, call one use-case service, and return the `CommonResponse<T>` envelope for
+every public JSON result. They do not
 access repositories, perform state transitions, parse policy, or silently correct invalid input.
 
 An ordinary service directly uses repositories owned by its own domain. Cross-domain reads/actions go through the owning
@@ -36,11 +37,13 @@ under `service` merely because Spring manages the bean.
 
 ## JPA and schema
 
-JPA relationships are allowed when PostgreSQL FK, nullability, uniqueness, and actual cardinality justify them. Use
+Prefer scalar UUID foreign keys and service boundaries over JPA navigation. Avoid `@ManyToOne`; introduce one only when
+the schema/cardinality and a concrete use case make it unavoidable, with a documented justification. JPA relationships
+are allowed when PostgreSQL FK, nullability, uniqueness, and actual cardinality justify them. Use
 `FetchType.LAZY`, explicit `@JoinColumn`, and `optional`/`nullable` agreement. Use `@OneToOne` only for a unique
 one-to-one constraint, and only add bidirectional/collection navigation when the use case needs it. Do not serialize
 entities directly. A scalar UUID is correct for an integration reference, quote snapshot, runtime call path, or
-cross-process boundary; do not mechanically convert every FK to a relation or mechanically ban `@ManyToOne`.
+cross-process boundary.
 
 Flyway owns schema changes; never edit an applied migration and use the next version. Hibernate remains
 `ddl-auto=validate`. Preserve table/column/index/FK/check names. Map PostgreSQL BIGINT atomic values to `BigInteger` and

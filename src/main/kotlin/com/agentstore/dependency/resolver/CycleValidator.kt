@@ -1,7 +1,7 @@
 package com.agentstore.dependency.resolver
 
 import com.agentstore.agent.service.AgentService
-import com.agentstore.common.exception.ApiException
+import com.agentstore.dependency.exception.DependencyCycleDetectedException
 import com.agentstore.dependency.repository.AgentDependencyRepository
 import org.springframework.stereotype.Component
 import java.util.*
@@ -49,7 +49,7 @@ class CycleValidator(
         return found
     }
 
-    private fun cycle(path: List<String>): ApiException {
-        return ApiException("DEPENDENCY_CYCLE_DETECTED", "Dependency cycle detected", 409, mapOf("cycle" to path))
+    private fun cycle(path: List<String>): DependencyCycleDetectedException {
+        return DependencyCycleDetectedException(path.joinToString(" -> "))
     }
 }

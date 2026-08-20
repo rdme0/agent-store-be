@@ -6,6 +6,7 @@ import com.agentstore.agent.dto.request.UpdateAgentRequest
 import com.agentstore.agent.dto.response.AgentListResponse
 import com.agentstore.agent.dto.response.AgentResponse
 import com.agentstore.agent.dto.response.AgentVersionResponse
+import com.agentstore.agent.exception.AgentNotFoundException
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.entity.Developer
@@ -14,7 +15,8 @@ import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
 import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointPolicy
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import jakarta.transaction.Transactional
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -31,7 +33,7 @@ class AgentService(
     /** Agent-owned read boundary used by dependency, quote and revenue use cases. */
     fun requireAgent(id: UUID): Agent {
         return agentRepository.findById(id).orElseThrow {
-            ApiException("AGENT_NOT_FOUND", "Agent was not found", 404, mapOf("id" to id))
+            AgentNotFoundException()
         }
     }
 
@@ -45,7 +47,7 @@ class AgentService(
 
     fun requireVersion(id: UUID): AgentVersion {
         return agentVersionRepository.findById(id).orElseThrow {
-            ApiException("AGENT_VERSION_NOT_FOUND", "Agent version was not found", 404, mapOf("id" to id))
+            DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
         }
     }
 
@@ -69,7 +71,7 @@ class AgentService(
 
     fun requireDeveloper(id: UUID): Developer {
         return developerRepository.findById(id).orElseThrow {
-            ApiException("DEVELOPER_NOT_FOUND", "Developer was not found", 404, mapOf("id" to id))
+            DomainClientException(ErrorCode.AGENT_DEVELOPER_NOT_FOUND)
         }
     }
 
@@ -108,7 +110,7 @@ class AgentService(
     fun getBySlug(slug: String): AgentResponse {
         return agentRepository.findBySlug(slug)?.let { agent ->
             AgentResponse.from(agent, developerName(agent.developerId), versions(agent.id))
-        } ?: throw ApiException("AGENT_NOT_FOUND", "Agent was not found", 404, mapOf("slug" to slug))
+        } ?: throw AgentNotFoundException()
     }
 
     @Transactional
@@ -139,14 +141,14 @@ class AgentService(
             )
             AgentResponse.from(saved, developer.displayName, versions(saved.id))
         } catch (exception: DataIntegrityViolationException) {
-            throw ApiException("AGENT_ALREADY_EXISTS", "Agent slug or version already exists", 409)
+            throw DomainClientException(ErrorCode.AGENT_ALREADY_EXISTS)
         }
     }
 
     @Transactional
     fun update(id: UUID, request: UpdateAgentRequest): AgentResponse {
         if (request.isEmpty()) {
-            throw ApiException("VALIDATION_ERROR", "At least one field is required", 422)
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
         val agent = requireAgent(id)
         agent.updateMetadata(request.name ?: agent.name, request.description ?: agent.description)
@@ -165,7 +167,7 @@ class AgentService(
         )
         val agent = requireAgent(agentId)
         if (versionBySemver(agentId, request.semver) != null) {
-            throw ApiException("AGENT_VERSION_ALREADY_EXISTS", "Agent version already exists", 409)
+            throw DomainClientException(ErrorCode.AGENT_VERSION_ALREADY_EXISTS)
         }
         val version = agentVersionRepository.save(
             AgentVersion(
@@ -185,14 +187,9 @@ class AgentService(
     @Transactional
     fun publish(versionId: UUID): AgentVersionResponse {
         val version = agentVersionRepository.findWithAgentById(versionId)
-            ?: throw ApiException("AGENT_VERSION_NOT_FOUND", "Agent version was not found", 404)
+            ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
         if (version.status != AgentVersionStatus.DRAFT) {
-            throw ApiException(
-                "INVALID_VERSION_TRANSITION",
-                "Only DRAFT versions can be published",
-                409,
-                mapOf("status" to version.status)
-            )
+            throw DomainClientException(ErrorCode.INVALID_VERSION_TRANSITION)
         }
         endpointPolicy.validate(version.endpoint)
         version.publish()
@@ -202,14 +199,9 @@ class AgentService(
     @Transactional
     fun disable(versionId: UUID): AgentVersionResponse {
         val version = agentVersionRepository.findWithAgentById(versionId)
-            ?: throw ApiException("AGENT_VERSION_NOT_FOUND", "Agent version was not found", 404)
+            ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
         if (version.status != AgentVersionStatus.ACTIVE) {
-            throw ApiException(
-                "INVALID_VERSION_TRANSITION",
-                "Only ACTIVE versions can be disabled",
-                409,
-                mapOf("status" to version.status)
-            )
+            throw DomainClientException(ErrorCode.INVALID_VERSION_TRANSITION)
         }
         version.disable()
         return AgentVersionResponse.from(version)
@@ -220,12 +212,7 @@ class AgentService(
         val agent = requireAgent(id)
         val versionCount = versions(agent.id).size
         if (versionCount > 0) {
-            throw ApiException(
-                "AGENT_HAS_VERSIONS",
-                "An Agent with versions cannot be deleted; disable its ACTIVE versions instead",
-                409,
-                mapOf("versionCount" to versionCount)
-            )
+            throw DomainClientException(ErrorCode.AGENT_HAS_VERSIONS)
         }
         agentRepository.delete(agent)
     }
@@ -239,20 +226,20 @@ class AgentService(
         payTo: String
     ) {
         if (!SEMVER.matches(semver)) {
-            throw ApiException("INVALID_SEMVER", "semver must be a valid semantic version", 400)
+            throw DomainClientException(ErrorCode.INVALID_SEMVER)
         }
         endpointPolicy.validate(endpoint)
         if (priceAtomic.toBigIntegerOrNull() == null || BigInteger(priceAtomic) < BigInteger.ZERO) {
-            throw ApiException("INVALID_PRICE", "priceAtomic must be a non-negative atomic integer", 400)
+            throw DomainClientException(ErrorCode.AGENT_INVALID_PRICE)
         }
         if (network.isBlank() || asset.isBlank() || payTo.isBlank()) {
-            throw ApiException("INVALID_PAYMENT_TERMS", "network, asset and payTo are required", 400)
+            throw DomainClientException(ErrorCode.INVALID_PAYMENT_TERMS)
         }
     }
 
     private fun requireLimit(limit: Int) {
         if (limit !in 1..50) {
-            throw ApiException("VALIDATION_ERROR", "limit must be between 1 and 50", 422)
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
     }
 

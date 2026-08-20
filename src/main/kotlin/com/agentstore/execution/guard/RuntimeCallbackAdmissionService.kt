@@ -1,6 +1,8 @@
 package com.agentstore.execution.guard
 
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
+import com.agentstore.execution.exception.ExecutionNotFoundException
 import com.agentstore.execution.model.entity.ExecutionStep
 import com.agentstore.execution.model.vo.ExecutionStatus
 import com.agentstore.execution.model.vo.ExecutionStepStatus
@@ -30,19 +32,19 @@ class RuntimeCallbackAdmissionService(
         idempotencyKey: String
     ): ExecutionStep {
         val execution = executionRepository.findByIdForUpdate(executionId)
-            ?: throw ApiException("EXECUTION_NOT_FOUND", "Execution was not found", 404)
+            ?: throw ExecutionNotFoundException()
         if (execution.status != ExecutionStatus.RUNNING) {
-            throw ApiException("EXECUTION_NOT_ACTIVE", "Execution is no longer accepting runtime callbacks", 409)
+            throw DomainClientException(ErrorCode.EXECUTION_NOT_ACTIVE)
         }
         val parent = stepRepository.findByIdForUpdate(parentStepId)
-            ?: throw ApiException("RUNTIME_STEP_NOT_FOUND", "Parent execution step was not found", 404)
+            ?: throw DomainClientException(ErrorCode.RUNTIME_STEP_NOT_FOUND)
         if (parent.executionId != executionId || parent.status !in setOf(
                 ExecutionStepStatus.PAYMENT_REQUIRED,
                 ExecutionStepStatus.PAYMENT_SETTLED,
                 ExecutionStepStatus.RUNNING
             )
         ) {
-            throw ApiException("PARENT_STEP_NOT_ACTIVE", "Parent step is no longer accepting callbacks", 409)
+            throw DomainClientException(ErrorCode.PARENT_STEP_NOT_ACTIVE)
         }
         stepRepository.findByParentStepIdAndIdempotencyKey(parentStepId, idempotencyKey)?.let { return it }
         return stepRepository.save(

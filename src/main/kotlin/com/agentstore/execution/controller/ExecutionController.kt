@@ -1,6 +1,7 @@
 package com.agentstore.execution.controller
 
 import com.agentstore.common.web.AgentStoreErrorResponses
+import com.agentstore.common.dto.response.CommonResponse
 import com.agentstore.execution.dto.request.CreateExecutionRequest
 import com.agentstore.execution.dto.response.ExecutionResponse
 import com.agentstore.execution.service.ExecutionService
@@ -21,22 +22,16 @@ import java.util.*
 class ExecutionController(private val service: ExecutionService) {
     @PostMapping
     @Operation(operationId = "postApiExecutions", summary = "Create execution")
-    @ApiResponse(
-        responseCode = "202",
-        content = [Content(mediaType = "application/json", schema = Schema(implementation = ExecutionResponse::class))]
-    )
-    fun create(@Valid @RequestBody request: CreateExecutionRequest): ResponseEntity<ExecutionResponse> {
-        return ResponseEntity.accepted().body(service.create(request))
+    @ApiResponse(responseCode = "202", useReturnTypeSchema = true)
+    fun create(@Valid @RequestBody request: CreateExecutionRequest): ResponseEntity<CommonResponse<ExecutionResponse>> {
+        return ResponseEntity.accepted().body(CommonResponse.success(service.create(request)))
     }
 
     @GetMapping("/{id}")
     @Operation(operationId = "getApiExecutionsById", summary = "Get execution")
-    @ApiResponse(
-        responseCode = "200",
-        content = [Content(mediaType = "application/json", schema = Schema(implementation = ExecutionResponse::class))]
-    )
-    fun get(@PathVariable id: UUID): ExecutionResponse {
-        return service.get(id)
+    @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
+    fun get(@PathVariable id: UUID): CommonResponse<ExecutionResponse> {
+        return CommonResponse.success(service.get(id))
     }
 
     @GetMapping("/{id}/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])

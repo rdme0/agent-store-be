@@ -3,7 +3,8 @@ package com.agentstore.dependency.service
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import com.agentstore.agent.service.AgentService
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.dto.request.CreateDependencyRequest
 import com.agentstore.dependency.dto.request.UpdateDependencyRequest
 import com.agentstore.dependency.dto.response.DependencyResponse
@@ -52,7 +53,7 @@ class DependencyService(
         return try {
             DependencyResponse.from(dependencyRepository.saveAndFlush(dependency), target.slug)
         } catch (exception: DataIntegrityViolationException) {
-            throw ApiException("DEPENDENCY_ALREADY_EXISTS", "Dependency already exists", 409)
+            throw DomainClientException(ErrorCode.DEPENDENCY_ALREADY_EXISTS)
         }
     }
 
@@ -60,10 +61,10 @@ class DependencyService(
     fun update(sourceVersionId: UUID, dependencyId: UUID, request: UpdateDependencyRequest): DependencyResponse {
         val source = requireDraft(sourceVersionId)
         if (request.isEmpty()) {
-            throw ApiException("VALIDATION_ERROR", "At least one field is required", 422)
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
         val dependency = dependencyRepository.findByIdAndSourceVersionId(dependencyId, sourceVersionId)
-            ?: throw ApiException("DEPENDENCY_NOT_FOUND", "The dependency was not found", 404)
+            ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
         val constraint = request.versionConstraint ?: dependency.versionConstraint
         resolver.validateConstraint(constraint)
         val maxPrice = request.maxPriceAtomic?.let { BigInteger(it) } ?: dependency.maxPriceAtomic
@@ -79,7 +80,7 @@ class DependencyService(
     fun remove(sourceVersionId: UUID, dependencyId: UUID) {
         requireDraft(sourceVersionId)
         val dependency = dependencyRepository.findByIdAndSourceVersionId(dependencyId, sourceVersionId)
-            ?: throw ApiException("DEPENDENCY_NOT_FOUND", "The dependency was not found", 404)
+            ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
         dependencyRepository.delete(dependency)
     }
 
@@ -90,22 +91,17 @@ class DependencyService(
     private fun requireDraft(id: UUID): AgentVersion {
         val version = requireVersion(id)
         if (version.status != AgentVersionStatus.DRAFT) {
-            throw ApiException(
-                "ACTIVE_VERSION_IMMUTABLE",
-                "Dependencies can only be changed on DRAFT versions",
-                409,
-                mapOf("status" to version.status)
-            )
+            throw DomainClientException(ErrorCode.ACTIVE_VERSION_IMMUTABLE)
         }
         return version
     }
 
     private fun validateLimits(maxPriceAtomic: String, maxCalls: Int) {
         if (maxPriceAtomic.toBigIntegerOrNull() == null || BigInteger(maxPriceAtomic) < BigInteger.ZERO) {
-            throw ApiException("INVALID_PRICE", "maxPriceAtomic must be non-negative", 400)
+            throw DomainClientException(ErrorCode.DEPENDENCY_INVALID_PRICE)
         }
         if (maxCalls !in 1..5) {
-            throw ApiException("INVALID_MAX_CALLS", "maxCalls must be between 1 and 5", 400)
+            throw DomainClientException(ErrorCode.INVALID_MAX_CALLS)
         }
     }
 

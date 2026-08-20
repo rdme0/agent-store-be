@@ -1,6 +1,7 @@
 package com.agentstore.execution.guard
 
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import org.springframework.stereotype.Component
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -11,11 +12,7 @@ class ExecutionMutationReadiness {
 
     fun requireReady() {
         if (!ready.get()) {
-            throw ApiException(
-                "EXECUTION_RECOVERY_IN_PROGRESS",
-                "Execution mutations are unavailable while payment recovery is running",
-                503
-            )
+            throw DomainClientException(ErrorCode.EXECUTION_RECOVERY_IN_PROGRESS)
         }
     }
 

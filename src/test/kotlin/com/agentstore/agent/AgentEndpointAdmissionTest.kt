@@ -10,7 +10,7 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.model.entity.AgentDependency
 import com.agentstore.dependency.model.vo.ResolvedEdge
@@ -241,7 +241,7 @@ class AgentEndpointAdmissionTest {
     }
 
     private fun assertUnsafe(action: () -> Unit) {
-        assertEquals("UNSAFE_AGENT_ENDPOINT", assertThrows(ApiException::class.java, action).code)
+        assertEquals("AGENT_400_005", assertThrows(DomainClientException::class.java, action).errorCode.code)
     }
 
     private companion object {

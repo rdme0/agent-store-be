@@ -3,6 +3,7 @@ package com.agentstore.execution.controller
 import com.agentstore.execution.dto.request.RuntimeDependencyInvocationRequest
 import com.agentstore.execution.dto.response.RuntimeDependencyInvocationResponse
 import com.agentstore.execution.service.RuntimeCallbackService
+import com.agentstore.common.dto.response.CommonResponse
 import io.swagger.v3.oas.annotations.Hidden
 import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.*
@@ -18,5 +19,7 @@ class RuntimeCallbackController(private val service: RuntimeCallbackService) {
         @RequestHeader("Authorization", required = false) authorization: String?,
         @RequestHeader("Idempotency-Key", required = false) idempotencyKey: String?,
         @Valid @RequestBody request: RuntimeDependencyInvocationRequest,
-    ): RuntimeDependencyInvocationResponse = service.invoke(id, request, authorization, idempotencyKey)
+    ): CommonResponse<RuntimeDependencyInvocationResponse> {
+        return CommonResponse.success(service.invoke(id, request, authorization, idempotencyKey))
+    }
 }

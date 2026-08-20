@@ -1,6 +1,8 @@
 package com.agentstore.execution.service
 
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
+import com.agentstore.execution.exception.ExecutionNotFoundException
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.dto.request.RuntimeDependencyInvocationRequest
 import com.agentstore.execution.dto.response.RuntimeDependencyInvocationResponse
@@ -42,28 +44,24 @@ class RuntimeCallbackService(
     ): RuntimeDependencyInvocationResponse {
         mutationReadiness.requireReady()
         val token = authorization?.removePrefix("Bearer ")?.takeIf { it != authorization && it.isNotBlank() }
-            ?: throw ApiException("INVALID_INVOCATION_TOKEN", "Bearer invocation token is required", 401)
+            ?: throw DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
         val claims = tokenService.verify(token)
         if (claims.executionId != executionId) {
-            throw ApiException("INVALID_INVOCATION_TOKEN", "Invocation token claims do not match execution", 401)
+            throw DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
         }
-        val key = idempotencyKey?.takeIf { it.isNotBlank() } ?: throw ApiException(
-            "IDEMPOTENCY_KEY_REQUIRED",
-            "Idempotency-Key is required",
-            400
-        )
+        val key = idempotencyKey?.takeIf { it.isNotBlank() } ?: throw DomainClientException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED)
         val execution = executionRepository.findById(executionId)
-            .orElseThrow { ApiException("EXECUTION_NOT_FOUND", "Execution was not found", 404) }
+            .orElseThrow { ExecutionNotFoundException() }
         val parent = stepRepository.findById(claims.stepId)
-            .orElseThrow { ApiException("RUNTIME_STEP_NOT_FOUND", "Parent execution step was not found", 404) }
+            .orElseThrow { DomainClientException(ErrorCode.RUNTIME_STEP_NOT_FOUND) }
         if (parent.executionId != executionId || claims.agentVersionId != parent.agentVersionId || claims.callPath != parent.callPath.map { it.asText() }) {
-            throw ApiException("INVALID_INVOCATION_TOKEN", "Invocation token claims do not match parent step", 401)
+            throw DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
         }
         if (execution.status != ExecutionStatus.RUNNING) {
-            throw ApiException("EXECUTION_NOT_ACTIVE", "Execution is no longer accepting runtime callbacks", 409)
+            throw DomainClientException(ErrorCode.EXECUTION_NOT_ACTIVE)
         }
         if (parent.status != ExecutionStepStatus.PAYMENT_REQUIRED && parent.status != ExecutionStepStatus.PAYMENT_SETTLED && parent.status != ExecutionStepStatus.RUNNING) {
-            throw ApiException("PARENT_STEP_NOT_ACTIVE", "Parent step is no longer accepting callbacks", 409)
+            throw DomainClientException(ErrorCode.PARENT_STEP_NOT_ACTIVE)
         }
         val existing = stepRepository.findByParentStepIdAndIdempotencyKey(parent.id, key)
         if (existing != null) {
@@ -74,39 +72,29 @@ class RuntimeCallbackService(
                     existing.costAtomic.toString()
                 )
             }
-            throw ApiException(
-                "IDEMPOTENCY_IN_PROGRESS",
-                "The dependency invocation is already in progress",
-                409,
-                mapOf("stepId" to existing.id)
-            )
+            throw DomainClientException(ErrorCode.IDEMPOTENCY_IN_PROGRESS)
         }
         val snapshot = quoteService.snapshot(execution.quoteId)
         val targetVersionId =
-            request.agentVersionId ?: throw ApiException("VALIDATION_ERROR", "agentVersionId is required", 422)
-        val requestedPath = request.callPath ?: throw ApiException("VALIDATION_ERROR", "callPath is required", 422)
+            request.agentVersionId ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        val requestedPath = request.callPath ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         val dependency = findDirectDependency(
             snapshot,
             parent.agentVersionId,
             parent.callPath.map { it.asText() },
             targetVersionId.toString()
         )
-            ?: throw ApiException("UNDECLARED_DEPENDENCY", "Agent version is not a declared direct dependency", 403)
+            ?: throw DomainClientException(ErrorCode.UNDECLARED_DEPENDENCY)
         val target = dependency.path("resolved").path("version")
         val expectedPath = parent.callPath.map { it.asText() } + target.path("agentSlug").asText()
         if (requestedPath != expectedPath || requestedPath.size > 5) {
-            throw ApiException(
-                "INVALID_CALL_PATH",
-                "Invocation callPath is not connected to the persisted parent step",
-                403,
-                mapOf("expectedPath" to expectedPath)
-            )
+            throw DomainClientException(ErrorCode.INVALID_CALL_PATH)
         }
         val child = admissionService.admit(executionId, parent.id, targetVersionId, requestedPath, key)
         return try {
             val cost = target.path("priceAtomic").asText("0").toBigIntegerOrNull() ?: BigInteger.ZERO
             val maxPrice = dependency.path("maxPriceAtomic").asText().toBigIntegerOrNull()
-                ?: throw ApiException("INVALID_DEPENDENCY_LIMIT", "Dependency maxPriceAtomic is invalid", 422)
+                ?: throw DomainClientException(ErrorCode.INVALID_DEPENDENCY_LIMIT)
             val output = paymentOrchestrator.invoke(
                 executionId,
                 child.id,
@@ -131,7 +119,7 @@ class RuntimeCallbackService(
             throw exception
         } catch (exception: Exception) {
             stepService.fail(child.id, "DEPENDENCY_INVOCATION_FAILED")
-            throw ApiException("DEPENDENCY_INVOCATION_FAILED", "Dependency invocation failed", 502)
+            throw DomainClientException(ErrorCode.DEPENDENCY_INVOCATION_FAILED)
         }
     }
 

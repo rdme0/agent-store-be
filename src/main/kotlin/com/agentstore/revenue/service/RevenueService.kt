@@ -1,7 +1,8 @@
 package com.agentstore.revenue.service
 
 import com.agentstore.agent.service.AgentService
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.revenue.dto.response.DeveloperRevenueResponse
 import com.agentstore.revenue.dto.response.RevenueEntryResponse
 import com.agentstore.revenue.model.vo.RevenueType
@@ -19,10 +20,10 @@ class RevenueService(
     @Transactional
     fun get(developerId: UUID, cursor: UUID?, limit: Int): DeveloperRevenueResponse {
         if (limit !in 1..100) {
-            throw ApiException("VALIDATION_ERROR", "limit must be between 1 and 100", 422)
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
         if (!agentService.developerExists(developerId)) {
-            throw ApiException("DEVELOPER_NOT_FOUND", "Developer was not found", 404)
+            throw DomainClientException(ErrorCode.DEVELOPER_NOT_FOUND)
         }
         val all = revenueRepository.findAllByDeveloperIdOrderByCreatedAtDesc(developerId)
         val start = if (cursor == null) {
@@ -30,7 +31,7 @@ class RevenueService(
         } else {
             val index = all.indexOfFirst { it.id == cursor }
             if (index < 0) {
-                throw ApiException("INVALID_CURSOR", "Revenue cursor was not found", 400)
+                throw DomainClientException(ErrorCode.INVALID_CURSOR)
             }
             index + 1
         }

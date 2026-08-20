@@ -1,6 +1,6 @@
 package com.agentstore.payment
 
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.execution.guard.ExecutionMutationReadiness
 import com.agentstore.execution.orchestrator.ExecutionPaymentRecoveryOrchestrator
 import com.agentstore.execution.service.ExecutionRecoveryService
@@ -20,6 +20,6 @@ class PaymentRecoveryStartupServiceTest {
 
         assertThatThrownBy { PaymentRecoveryStartupService(recovery, executionRecovery, readiness).reconcile() }
             .isInstanceOf(IllegalStateException::class.java)
-        assertThatThrownBy { readiness.requireReady() }.isInstanceOf(ApiException::class.java)
+        assertThatThrownBy { readiness.requireReady() }.isInstanceOf(DomainClientException::class.java)
     }
 }

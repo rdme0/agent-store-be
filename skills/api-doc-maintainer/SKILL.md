@@ -9,10 +9,12 @@ description: Keep AgentStore Spring MVC, Springdoc/Scalar, error, and SSE OpenAP
 - Document only implemented public HTTP/SSE operations. Runtime callback routes remain `@Hidden` and absent from the
   public artifact.
 - Preserve existing paths, methods, status codes, operation IDs where already established, JSON field
-  names/types/nullability, atomic-string amounts, error codes, and pagination semantics.
+  names/types/nullability, atomic-string amounts, error codes, and pagination semantics. Public JSON responses use
+  `CommonResponse<T>` with `isSuccess`, `message`, `errorCode`, and `result`; `traceId` is never a JSON field.
 - JSON endpoints consume/produce `application/json`; execution streams produce `text/event-stream`, document
   `Last-Event-ID` replay semantics, and retain the raw SSE CORS behavior.
 - Add validation, auth, payment, domain, and server-error responses only when the implementation actually returns them.
-  Keep the error shape `{ error: { code, message, details? }, traceId }` unchanged.
+  Error responses are also `CommonResponse<Void>` with `isSuccess=false`; trace correlation is exposed through the
+  `X-Trace-Id` response header and MDC only.
 - Regenerate `/openapi.json` from Springdoc, normalize and compare it semantically with the preserved TypeScript golden
   artifact, then regenerate FE types only after the Spring contract is verified.

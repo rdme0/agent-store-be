@@ -4,7 +4,7 @@
 
 - `skills/agent-store-be-maintainer/SKILL.md`: production implementation rules.
 - `skills/agent-store-be-style-verifier/SKILL.md`: fresh read-only structural and invariant review.
-- `skills/api-doc-maintainer/SKILL.md`: Springdoc `/openapi.json` and REST/SSE contract.
+- `skills/api-doc-maintainer/SKILL.md`: Springdoc `/openapi.json` and REST/SSE contract, including the CommonResponse envelope.
 - `skills/readme-maintainer/SKILL.md`: setup/profile/bridge documentation.
 - `skills/git-commit-korean/SKILL.md`: Korean commit conventions when a commit is explicitly requested.
 
@@ -12,8 +12,10 @@ Read the relevant skill before changing its scope. `AGENTS.md` is only the entry
 
 ## Repository contract
 
-This repository is the Kotlin/Spring AgentStore runtime. Preserve the existing REST/SSE paths, status codes, JSON/error
-fields, PostgreSQL schema/data, Flyway history, ACTIVE-version immutability, dependency limits,
+This repository is the Kotlin/Spring AgentStore runtime. Preserve the existing REST/SSE paths and status codes, while
+using the intentional `CommonResponse<T>` JSON envelope (`isSuccess`, `message`, `errorCode`, `result`) for every
+public JSON response. Trace correlation is an `X-Trace-Id` response header and MDC value, never a JSON field. Preserve
+PostgreSQL schema/data, Flyway history, ACTIVE-version immutability, dependency limits,
 execution/payment/recovery state machines, callback authentication, SSE replay, and the Node-only x402 signing boundary.
 Spring and the former TypeScript API must never write the same database concurrently. Preserve pre-existing dirty paths
 and never edit the read-only `eco-knock-be-central` reference.

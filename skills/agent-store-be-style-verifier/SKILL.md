@@ -32,9 +32,10 @@ Review in two passes:
 - Kotlin/Java roles follow the maintainer boundary and every JPA entity extends `BaseEntity`.
 - Ordinary services do not inject another domain's Repository. Cross-domain operations must cross a public service or
   explicit orchestrator boundary. Controllers never inject repositories.
-- JPA relationships are reviewed against real FK/cardinality/nullability/unique constraints, LAZY fetch, and
-  serialization risk. `@ManyToOne` itself is not a finding; report only an unnecessary eager/bidirectional relation,
-  schema/cardinality mismatch, entity serialization, or a relation used to bypass service boundaries.
+- Public JSON controllers must return the `CommonResponse<T>` envelope; failure bodies must use `isSuccess=false`,
+  `message`, `errorCode`, and `result=null`, with trace correlation only in `X-Trace-Id`.
+- Prefer scalar UUID FKs and service boundaries. `@ManyToOne` is discouraged and is a finding unless the diff includes
+  a concrete schema/cardinality/use-case justification, LAZY mapping, and no entity serialization or boundary bypass.
 - One primary production class per file is the default; closely related DTO groups are the exception. Moved classes must
   not remain duplicated at the old path.
 

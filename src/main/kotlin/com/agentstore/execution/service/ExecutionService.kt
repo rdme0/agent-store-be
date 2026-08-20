@@ -1,11 +1,13 @@
 package com.agentstore.execution.service
 
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.dto.request.CreateExecutionRequest
 import com.agentstore.execution.dto.response.ExecutionResponse
 import com.agentstore.execution.dto.response.ExecutionStepResponse
 import com.agentstore.execution.event.ExecutionEventService
+import com.agentstore.execution.exception.ExecutionNotFoundException
 import com.agentstore.execution.guard.ExecutionMutationReadiness
 import com.agentstore.execution.model.entity.Execution
 import com.agentstore.execution.model.entity.ExecutionStep
@@ -38,20 +40,11 @@ class ExecutionService(
         mutationReadiness.requireReady()
         val quote = quoteService.requireQuote(request.quoteId)
         if (!quote.expiresAt.isAfter(Instant.now())) {
-            throw ApiException("QUOTE_EXPIRED", "Execution quote has expired", 409, mapOf("quoteId" to request.quoteId))
+            throw DomainClientException(ErrorCode.QUOTE_EXPIRED)
         }
-        val budget = request.maxBudgetAtomic.toBigIntegerOrNull() ?: throw ApiException(
-            "INVALID_PRICE",
-            "maxBudgetAtomic must be an atomic integer",
-            400
-        )
+        val budget = request.maxBudgetAtomic.toBigIntegerOrNull() ?: throw DomainClientException(ErrorCode.INVALID_BUDGET)
         if (budget != quote.maxCostAtomic) {
-            throw ApiException(
-                "BUDGET_MISMATCH",
-                "maxBudgetAtomic must equal the quote maximum cost",
-                422,
-                mapOf("expected" to quote.maxCostAtomic.toString())
-            )
+            throw DomainClientException(ErrorCode.BUDGET_MISMATCH)
         }
         val input = request.input?.let { objectMapper.valueToTree<com.fasterxml.jackson.databind.JsonNode>(it) }
         val execution =
@@ -85,21 +78,21 @@ class ExecutionService(
     @Transactional
     fun get(id: UUID): ExecutionResponse {
         val execution = executionRepository.findById(id)
-            .orElseThrow { ApiException("EXECUTION_NOT_FOUND", "Execution was not found", 404, mapOf("id" to id)) }
+            .orElseThrow { ExecutionNotFoundException() }
         return toResponse(execution, executionStepRepository.findAllByExecutionIdOrderByCreatedAtAsc(id))
     }
 
     @Transactional
     fun events(id: UUID, afterSequence: Int): List<com.agentstore.execution.dto.response.ExecutionEventResponse> {
         if (!executionRepository.existsById(id)) {
-            throw ApiException("EXECUTION_NOT_FOUND", "Execution was not found", 404, mapOf("id" to id))
+            throw ExecutionNotFoundException()
         }
         return eventService.replay(id, afterSequence)
     }
 
     fun subscribe(id: UUID, lastEventId: String?): SseEmitter {
         if (!executionRepository.existsById(id)) {
-            throw ApiException("EXECUTION_NOT_FOUND", "Execution was not found", 404, mapOf("id" to id))
+            throw ExecutionNotFoundException()
         }
         return eventService.subscribe(id, lastEventId?.toIntOrNull()?.coerceAtLeast(0) ?: 0)
     }

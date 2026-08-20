@@ -1,7 +1,8 @@
 package com.agentstore.execution.token
 
 import com.agentstore.common.config.AgentStoreProperties
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
@@ -45,7 +46,7 @@ class InvocationTokenService(
         }.getOrElse { throw invalidToken() }
         val expiresAt = payload.path("expiresAt").asLong(0)
         if (expiresAt <= Instant.now().epochSecond) {
-            throw ApiException("INVOCATION_TOKEN_EXPIRED", "Invocation token has expired", 401)
+            throw DomainClientException(ErrorCode.INVOCATION_TOKEN_EXPIRED)
         }
         return try {
             InvocationTokenClaims(
@@ -71,8 +72,8 @@ class InvocationTokenService(
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value)
     }
 
-    private fun invalidToken(): ApiException {
-        return ApiException("INVALID_INVOCATION_TOKEN", "Invocation token is invalid", 401)
+    private fun invalidToken(): DomainClientException {
+        return DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
     }
 
     private companion object {

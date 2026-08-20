@@ -1,8 +1,10 @@
 package com.agentstore.dependency.service
 
 import com.agentstore.agent.resolver.AgentEndpointPolicy
+import com.agentstore.agent.exception.AgentNotFoundException
 import com.agentstore.agent.service.AgentService
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.dto.response.QuoteResponse
 import com.agentstore.dependency.model.entity.ExecutionQuote
@@ -27,7 +29,7 @@ class QuoteService(
 ) {
     fun requireQuote(id: UUID): ExecutionQuote {
         return quoteRepository.findById(id).orElseThrow {
-            ApiException("QUOTE_NOT_FOUND", "Execution quote was not found", 404, mapOf("quoteId" to id))
+            DomainClientException(ErrorCode.QUOTE_NOT_FOUND)
         }
     }
 
@@ -43,28 +45,13 @@ class QuoteService(
     fun create(slug: String, request: QuoteRequest): QuoteResponse {
         val constraint = request.versionConstraint ?: "*"
         resolver.validateConstraint(constraint)
-        val agent = agentService.findBySlug(slug) ?: throw ApiException(
-            "AGENT_NOT_FOUND",
-            "Agent was not found",
-            404,
-            mapOf("slug" to slug)
-        )
+        val agent = agentService.findBySlug(slug) ?: throw AgentNotFoundException()
         val candidates = agentService.activeVersions(agent.id)
         if (candidates.isEmpty()) {
-            throw ApiException(
-                "AGENT_VERSION_NOT_FOUND",
-                "No ACTIVE Agent version satisfies the requested constraint",
-                409,
-                mapOf("slug" to slug)
-            )
+            throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
         }
         val root = candidates.filter { matches(it.semver, constraint) }.maxByOrNull { versionKey(it.semver) }
-            ?: throw ApiException(
-                "AGENT_VERSION_NOT_FOUND",
-                "No ACTIVE Agent version satisfies the requested constraint",
-                409,
-                mapOf("slug" to slug, "versionConstraint" to constraint)
-            )
+            ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
         val graph = resolver.resolve(root.id)
         validateEndpoints(graph.root)
         val cost = costResolver.resolve(graph.root)

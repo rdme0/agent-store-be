@@ -1,6 +1,6 @@
 package com.agentstore.agent.resolver
 
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.springframework.mock.env.MockEnvironment
@@ -61,10 +61,10 @@ class AgentEndpointPolicyTest {
     }
 
     private fun assertUnsafe(action: () -> Unit) {
-        assertEquals("UNSAFE_AGENT_ENDPOINT", assertThrows(ApiException::class.java, action).code)
+        assertEquals("AGENT_400_005", assertThrows(DomainClientException::class.java, action).errorCode.code)
     }
 
     private fun assertInvalid(action: () -> Unit) {
-        assertEquals("INVALID_ENDPOINT", assertThrows(ApiException::class.java, action).code)
+        assertEquals("AGENT_400_002", assertThrows(DomainClientException::class.java, action).errorCode.code)
     }
 }

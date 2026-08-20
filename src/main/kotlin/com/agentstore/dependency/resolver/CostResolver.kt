@@ -1,6 +1,7 @@
 package com.agentstore.dependency.resolver
 
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.model.vo.CostCalculation
 import com.agentstore.dependency.model.vo.ResolvedNode
 import org.springframework.stereotype.Component
@@ -23,17 +24,12 @@ class CostResolver {
                 steps += edge.dependency.maxCalls * calculation.steps
                 maxDepth = maxOf(maxDepth, calculation.maxDepth)
                 if (steps > 32) {
-                    throw ApiException(
-                        "EXECUTION_STEPS_EXCEEDED",
-                        "Dependency graph exceeds the maximum execution steps",
-                        422,
-                        mapOf("maxSteps" to 32, "steps" to steps)
-                    )
+                    throw DomainClientException(ErrorCode.EXECUTION_STEPS_EXCEEDED)
                 }
             }
         }
         if (cost > BigInteger.TEN.pow(60)) {
-            throw ApiException("COST_OVERFLOW", "Maximum execution cost is too large", 422)
+            throw DomainClientException(ErrorCode.COST_OVERFLOW)
         }
         return CostCalculation(cost, steps, maxDepth)
     }

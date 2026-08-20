@@ -3,7 +3,9 @@ package com.agentstore.dependency.resolver
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import com.agentstore.agent.service.AgentService
-import com.agentstore.common.exception.ApiException
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
+import com.agentstore.dependency.exception.DependencyCycleDetectedException
 import com.agentstore.dependency.dto.response.QuoteWarning
 import com.agentstore.dependency.model.vo.ResolvedEdge
 import com.agentstore.dependency.model.vo.ResolvedGraph
@@ -25,12 +27,7 @@ class DependencyResolver(
     ): ResolvedGraph {
         val root = agentService.requireVersion(rootVersionId).also {
             if (it.status != AgentVersionStatus.ACTIVE) {
-                throw ApiException(
-                    "AGENT_VERSION_NOT_FOUND",
-                    "Agent version was not found",
-                    404,
-                    mapOf("id" to rootVersionId)
-                )
+                throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
             }
         }
         val warnings = mutableListOf<QuoteWarning>()
@@ -45,12 +42,7 @@ class DependencyResolver(
                 constraint
             )
         ) {
-            throw ApiException(
-                "INVALID_VERSION_CONSTRAINT",
-                "versionConstraint is not a valid semver range",
-                400,
-                mapOf("versionConstraint" to constraint)
-            )
+            throw DomainClientException(ErrorCode.INVALID_VERSION_CONSTRAINT)
         }
     }
 
@@ -64,12 +56,7 @@ class DependencyResolver(
     ): ResolvedNode {
         val agent = agentService.requireAgent(version.agentId)
         if (depth > 4) {
-            throw ApiException(
-                "DEPENDENCY_DEPTH_EXCEEDED",
-                "Dependency graph exceeds the maximum depth",
-                422,
-                mapOf("maxDepth" to 5, "agent" to agent.slug)
-            )
+            throw DomainClientException(ErrorCode.DEPENDENCY_DEPTH_EXCEEDED)
         }
         val currentPath = path + agent.slug
         val edges = dependencyRepository.findAllBySourceVersionId(version.id).map { dependency ->
@@ -80,12 +67,7 @@ class DependencyResolver(
                 .maxByOrNull { versionKey(it.semver) }
             if (selected == null) {
                 if (dependency.isRequired && !allowUnresolvedRequired) {
-                    throw ApiException(
-                        "DEPENDENCY_NOT_RESOLVED",
-                        "A required dependency could not be resolved",
-                        409,
-                        mapOf("dependencyId" to dependency.id)
-                    )
+                    throw DomainClientException(ErrorCode.DEPENDENCY_NOT_RESOLVED)
                 }
                 warnings += QuoteWarning(
                     "OPTIONAL_DEPENDENCY_NOT_RESOLVED",
@@ -98,24 +80,10 @@ class DependencyResolver(
             }
             if (target.slug in currentPath) {
                 val cycle = currentPath.dropWhile { it != target.slug } + target.slug
-                throw ApiException(
-                    "DEPENDENCY_CYCLE_DETECTED",
-                    "Dependency cycle detected",
-                    409,
-                    mapOf("cycle" to cycle)
-                )
+                throw DependencyCycleDetectedException(cycle.joinToString(" -> "))
             }
             if (!allowPriceExceeded && selected.priceAtomic > dependency.maxPriceAtomic) {
-                throw ApiException(
-                    "DEPENDENCY_PRICE_EXCEEDED",
-                    "Resolved dependency price exceeds maxPriceAtomic",
-                    422,
-                    mapOf(
-                        "dependencyId" to dependency.id,
-                        "priceAtomic" to selected.priceAtomic.toString(),
-                        "maxPriceAtomic" to dependency.maxPriceAtomic.toString()
-                    )
-                )
+                throw DomainClientException(ErrorCode.DEPENDENCY_PRICE_EXCEEDED)
             }
             ResolvedEdge(
                 dependency,
