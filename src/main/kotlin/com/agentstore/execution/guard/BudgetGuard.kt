@@ -4,7 +4,7 @@ import com.agentstore.execution.repository.ExecutionRepository
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Component
 import java.math.BigInteger
-import java.util.UUID
+import java.util.*
 
 @Component
 class BudgetGuard(private val executionRepository: ExecutionRepository) {
@@ -24,7 +24,9 @@ class BudgetGuard(private val executionRepository: ExecutionRepository) {
 
     @Transactional
     fun release(executionId: UUID, amount: BigInteger) {
-        if (amount.signum() == 0) return
+        if (amount.signum() == 0) {
+            return
+        }
         val execution = executionRepository.findByIdForUpdate(executionId) ?: return
         execution.release(amount)
         executionRepository.save(execution)
@@ -38,7 +40,8 @@ class BudgetGuard(private val executionRepository: ExecutionRepository) {
             executionRepository.save(execution)
             return
         }
-        if (execution.actualCostAtomic.compareTo(amount) >= 0) return
+        // Projection is idempotent per PaymentAttempt (`projected_at`), never by the
+        // execution aggregate. A missing reservation is therefore unsafe to infer as paid.
         throw IllegalStateException("reconciliation_reservation_missing")
     }
 }

@@ -6,11 +6,15 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
-import java.util.UUID
+import java.util.*
 
 class InvocationTokenServiceTest {
     private val service = InvocationTokenService(
-        AgentStoreProperties("*", "test-secret", "", ""),
+        AgentStoreProperties(
+            corsOrigin = "*",
+            runtimeTokenSecret = "test-secret",
+            databaseUrl = "jdbc:postgresql://localhost:15432/agent_store",
+        ),
         jacksonObjectMapper(),
     )
 

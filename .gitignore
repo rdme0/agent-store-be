@@ -4,5 +4,10 @@ build/
 *.iml
 .env
 node/node_modules/
+node/**/node_modules/
+node/**/dist/
+node/**/test/*.js
+node/**/test/*.d.ts
+node/**/*.tsbuildinfo
 node/.env
 out/

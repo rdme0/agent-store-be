@@ -5,4 +5,5 @@ description: Create small Korean commits for AgentStore migration phases after i
 
 # Korean Commit Maintainer
 
-Inspect the diff and history first. Keep commits small and phase-scoped, use a Korean subject with the repository's conventional type prefix, and never include pre-existing unrelated dirty paths.
+Inspect the diff and history first. Keep commits small and phase-scoped, use a Korean subject with the repository's
+conventional type prefix, and never include pre-existing unrelated dirty paths.

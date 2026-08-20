@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "composite": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "packages/agent-protocol"
+    },
+    {
+      "path": "apps/x402-bridge"
+    },
+    {
+      "path": "apps/demo-agents"
+    }
+  ]
+}

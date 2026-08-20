@@ -1,17 +1,23 @@
 package com.agentstore.common.migration
 
 import org.flywaydb.core.Flyway
-import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.jdbc.core.JdbcTemplate
+import javax.sql.DataSource
 
 @Configuration
 @ConditionalOnProperty(name = ["spring.flyway.enabled"], havingValue = "true")
 class FlywayCompatibilityConfiguration {
     @Bean
     fun flywayMigrationStrategy(
+        dataSource: DataSource,
+        validator: SchemaCompatibilityValidator,
+    ): FlywayMigrationStrategy = flywayMigrationStrategy(JdbcTemplate(dataSource), validator)
+
+    internal fun flywayMigrationStrategy(
         jdbcTemplate: JdbcTemplate,
         validator: SchemaCompatibilityValidator,
     ): FlywayMigrationStrategy = FlywayMigrationStrategy { flyway: Flyway ->

@@ -4,18 +4,16 @@ import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
-data class JdbcDatabaseProperties(
-    val jdbcUrl: String,
-    val username: String,
-    val password: String,
-)
-
 object DatabaseUrlParser {
     fun parse(value: String): JdbcDatabaseProperties {
         require(value.isNotBlank()) { "Database URL must not be blank" }
         if (value.startsWith("jdbc:postgresql://")) {
             val uri = URI(value.removePrefix("jdbc:"))
-            return JdbcDatabaseProperties(value, decode(uri.userInfo?.substringBefore(':').orEmpty()), decode(uri.userInfo?.substringAfter(':', "").orEmpty()))
+            return JdbcDatabaseProperties(
+                value,
+                decode(uri.userInfo?.substringBefore(':').orEmpty()),
+                decode(uri.userInfo?.substringAfter(':', "").orEmpty())
+            )
         }
         require(value.startsWith("postgresql://") || value.startsWith("postgres://")) {
             "Database URL must be a PostgreSQL URL"
@@ -32,12 +30,18 @@ object DatabaseUrlParser {
         val jdbcUrl = buildString {
             append("jdbc:postgresql://")
             append(uri.host ?: error("Database URL must include a host"))
-            if (uri.port != -1) append(':').append(uri.port)
+            if (uri.port != -1) {
+                append(':').append(uri.port)
+            }
             append('/').append(database)
-            if (jdbcQuery.isNotBlank()) append('?').append(jdbcQuery)
+            if (jdbcQuery.isNotBlank()) {
+                append('?').append(jdbcQuery)
+            }
         }
         return JdbcDatabaseProperties(jdbcUrl, username, password)
     }
 
-    private fun decode(value: String): String = URLDecoder.decode(value, StandardCharsets.UTF_8)
+    private fun decode(value: String): String {
+        return URLDecoder.decode(value, StandardCharsets.UTF_8)
+    }
 }

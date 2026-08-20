@@ -7,52 +7,114 @@ import com.agentstore.agent.dto.response.AgentListResponse
 import com.agentstore.agent.dto.response.AgentResponse
 import com.agentstore.agent.dto.response.AgentVersionResponse
 import com.agentstore.agent.service.AgentService
+import com.agentstore.common.web.AgentStoreErrorResponses
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import org.springframework.http.HttpStatus
-import org.springframework.web.bind.annotation.DeleteMapping
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PatchMapping
-import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
-import org.springframework.web.bind.annotation.ResponseStatus
-import org.springframework.web.bind.annotation.RestController
-import java.util.UUID
+import org.springframework.web.bind.annotation.*
+import java.util.*
 
 @RestController
 @RequestMapping("/api")
+@AgentStoreErrorResponses
 class AgentController(private val service: AgentService) {
     @GetMapping("/agents")
+    @Operation(operationId = "getApiAgents", summary = "List agents")
+    @ApiResponse(
+        responseCode = "200",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = AgentListResponse::class))]
+    )
     fun list(
         @RequestParam(required = false, defaultValue = "20") @Min(1) @Max(50) limit: Int,
         @RequestParam(required = false) cursor: UUID?,
-    ): AgentListResponse = service.list(limit, cursor)
+    ): AgentListResponse {
+        return service.list(limit, cursor)
+    }
 
     @GetMapping("/agents/{slug}")
-    fun getBySlug(@PathVariable slug: String): AgentResponse = service.getBySlug(slug)
+    @Operation(operationId = "getApiAgentsBySlug", summary = "Get agent by slug")
+    @ApiResponse(
+        responseCode = "200",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = AgentResponse::class))]
+    )
+    fun getBySlug(@PathVariable slug: String): AgentResponse {
+        return service.getBySlug(slug)
+    }
 
     @PostMapping("/agents")
+    @Operation(operationId = "postApiAgents", summary = "Create agent")
     @ResponseStatus(HttpStatus.CREATED)
-    fun create(@Valid @RequestBody request: CreateAgentRequest): AgentResponse = service.create(request)
+    @ApiResponse(
+        responseCode = "201",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = AgentResponse::class))]
+    )
+    fun create(@Valid @RequestBody request: CreateAgentRequest): AgentResponse {
+        return service.create(request)
+    }
 
     @PatchMapping("/agents/{id}")
-    fun update(@PathVariable id: UUID, @Valid @RequestBody request: UpdateAgentRequest): AgentResponse = service.update(id, request)
+    @Operation(operationId = "patchApiAgentsById", summary = "Update agent")
+    @ApiResponse(
+        responseCode = "200",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = AgentResponse::class))]
+    )
+    fun update(@PathVariable id: UUID, @Valid @RequestBody request: UpdateAgentRequest): AgentResponse {
+        return service.update(id, request)
+    }
 
     @DeleteMapping("/agents/{id}")
+    @Operation(operationId = "deleteApiAgentsById", summary = "Delete agent")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun delete(@PathVariable id: UUID) = service.delete(id)
+    @ApiResponse(responseCode = "204")
+    fun delete(@PathVariable id: UUID) {
+        service.delete(id)
+    }
 
     @PostMapping("/agents/{id}/versions")
+    @Operation(operationId = "postApiAgentsByIdVersions", summary = "Create agent version")
     @ResponseStatus(HttpStatus.CREATED)
-    fun createVersion(@PathVariable id: UUID, @Valid @RequestBody request: CreateAgentVersionRequest): AgentVersionResponse = service.createVersion(id, request)
+    @ApiResponse(
+        responseCode = "201",
+        content = [Content(
+            mediaType = "application/json",
+            schema = Schema(implementation = AgentVersionResponse::class)
+        )]
+    )
+    fun createVersion(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: CreateAgentVersionRequest
+    ): AgentVersionResponse {
+        return service.createVersion(id, request)
+    }
 
     @PostMapping("/agent-versions/{id}/publish")
-    fun publish(@PathVariable id: UUID): AgentVersionResponse = service.publish(id)
+    @Operation(operationId = "postApiAgentVersionsByIdPublish", summary = "Publish agent version")
+    @ApiResponse(
+        responseCode = "200",
+        content = [Content(
+            mediaType = "application/json",
+            schema = Schema(implementation = AgentVersionResponse::class)
+        )]
+    )
+    fun publish(@PathVariable id: UUID): AgentVersionResponse {
+        return service.publish(id)
+    }
 
     @PostMapping("/agent-versions/{id}/disable")
-    fun disable(@PathVariable id: UUID): AgentVersionResponse = service.disable(id)
+    @Operation(operationId = "postApiAgentVersionsByIdDisable", summary = "Disable agent version")
+    @ApiResponse(
+        responseCode = "200",
+        content = [Content(
+            mediaType = "application/json",
+            schema = Schema(implementation = AgentVersionResponse::class)
+        )]
+    )
+    fun disable(@PathVariable id: UUID): AgentVersionResponse {
+        return service.disable(id)
+    }
 }

@@ -1,4 +1,4 @@
 interface:
   display_name: "AgentStore BE Kotlin/Spring Maintainer"
   short_description: "Maintain AgentStore Kotlin/Spring code in eco-knock-be-central structure."
-  default_prompt: "Use $agent-store-be-maintainer to maintain AgentStore Kotlin/Spring code with strict domain layering."
+  default_prompt: "Use $agent-store-be-maintainer to maintain AgentStore Kotlin/Spring code with role-based layering, service boundaries, and preserved runtime contracts."

@@ -14,6 +14,10 @@ class CorsConfig(private val properties: AgentStoreProperties) : WebMvcConfigure
             .allowedHeaders("*")
             .exposedHeaders("X-Trace-Id", "Last-Event-ID")
             .allowCredentials(origins.none { it == "*" })
-        if (origins.contains("*")) mapping.allowedOriginPatterns("*") else mapping.allowedOrigins(*origins.toTypedArray())
+        if (origins.contains("*")) {
+            mapping.allowedOriginPatterns("*")
+        } else {
+            mapping.allowedOrigins(*origins.toTypedArray())
+        }
     }
 }

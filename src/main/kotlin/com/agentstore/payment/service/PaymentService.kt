@@ -9,21 +9,51 @@ import com.agentstore.payment.repository.PaymentSettlementJournalRepository
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import java.math.BigInteger
-import java.util.UUID
+import java.util.*
 
 @Service
 class PaymentService(
     private val attemptRepository: PaymentAttemptRepository,
     private val journalRepository: PaymentSettlementJournalRepository,
 ) {
-    fun findSettledAttempts() = attemptRepository.findAllByStatusIn(listOf(PaymentAttemptStatus.SETTLED, PaymentAttemptStatus.RECONCILIATION_REQUIRED))
+    /** Only a durable settlement journal/SETTLED status proves spend; UNKNOWN attempts wait for bridge reconciliation. */
+    fun findSettledAttempts(): List<PaymentAttempt> {
+        return attemptRepository.findAllByStatusIn(listOf(PaymentAttemptStatus.SETTLED))
+    }
 
-    fun find(attemptId: UUID) = attemptRepository.findById(attemptId).orElseThrow { IllegalStateException("payment_attempt_not_found") }
-
-    fun findAllByStepId(stepId: UUID) = attemptRepository.findAllByExecutionStepIdOrderByCreatedAtAsc(stepId)
+    fun findReconciliationRequiredAttempts(): List<PaymentAttempt> {
+        return attemptRepository.findAllByStatusIn(listOf(PaymentAttemptStatus.RECONCILIATION_REQUIRED))
+    }
 
     @Transactional
-    fun require(stepId: UUID, amount: BigInteger, network: String, asset: String, payTo: String, mode: PaymentMode): UUID {
+    fun markProjected(attemptId: UUID) {
+        val attempt = attemptRepository.findByIdForUpdate(attemptId) ?: return
+        attempt.markProjected()
+        attemptRepository.save(attempt)
+    }
+
+    fun find(attemptId: UUID): PaymentAttempt {
+        return attemptRepository.findById(attemptId).orElseThrow { IllegalStateException("payment_attempt_not_found") }
+    }
+
+    @Transactional
+    fun findForUpdate(attemptId: UUID): PaymentAttempt {
+        return attemptRepository.findByIdForUpdate(attemptId) ?: error("payment_attempt_not_found")
+    }
+
+    fun findAllByStepId(stepId: UUID): List<PaymentAttempt> {
+        return attemptRepository.findAllByExecutionStepIdOrderByCreatedAtAsc(stepId)
+    }
+
+    @Transactional
+    fun require(
+        stepId: UUID,
+        amount: BigInteger,
+        network: String,
+        asset: String,
+        payTo: String,
+        mode: PaymentMode
+    ): UUID {
         val attempt = PaymentAttempt(UUID.randomUUID(), stepId, amount, network, asset, payTo, mode)
         return attemptRepository.save(attempt).id
     }
@@ -33,7 +63,9 @@ class PaymentService(
         val attempt = attemptRepository.findByIdForUpdate(attemptId) ?: error("payment_attempt_not_found")
         val journal = journalRepository.findByPaymentAttemptId(attempt.id)
         if (attempt.status == PaymentAttemptStatus.SETTLED) {
-            if (journal?.transactionHash != transactionHash || attempt.transactionHash != transactionHash) throw IllegalStateException("settlement_hash_mismatch")
+            if (journal?.transactionHash != transactionHash || attempt.transactionHash != transactionHash) {
+                throw IllegalStateException("settlement_hash_mismatch")
+            }
             return attempt.amountAtomic
         }
         if (journal == null) {
@@ -49,8 +81,24 @@ class PaymentService(
     @Transactional
     fun markReconciliationRequired(attemptId: UUID, failureCode: String) {
         val attempt = attemptRepository.findByIdForUpdate(attemptId) ?: return
-        if (attempt.status == PaymentAttemptStatus.SETTLED) return
+        if (attempt.status == PaymentAttemptStatus.SETTLED) {
+            return
+        }
         attempt.reconciliationRequired(failureCode)
+        attemptRepository.save(attempt)
+    }
+
+    @Transactional
+    fun markSettlementRecoveryRequired(attemptId: UUID, failureCode: String) {
+        val attempt = attemptRepository.findByIdForUpdate(attemptId) ?: return
+        attempt.markSettlementRecoveryRequired(failureCode)
+        attemptRepository.save(attempt)
+    }
+
+    @Transactional
+    fun clearSettlementRecoveryMarker(attemptId: UUID) {
+        val attempt = attemptRepository.findByIdForUpdate(attemptId) ?: return
+        attempt.clearSettlementRecoveryMarker()
         attemptRepository.save(attempt)
     }
 

@@ -5,14 +5,14 @@ import com.agentstore.execution.model.entity.ExecutionEvent
 import com.agentstore.execution.repository.ExecutionEventRepository
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.springframework.stereotype.Service
+import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
-@Service
+@Component
 class ExecutionEventService(
     private val repository: ExecutionEventRepository,
     private val objectMapper: ObjectMapper,
@@ -22,11 +22,21 @@ class ExecutionEventService(
         val lock = sequenceLocks.computeIfAbsent(executionId) { Any() }
         synchronized(lock) {
             val sequence = (repository.findFirstByExecutionIdOrderBySequenceDesc(executionId)?.sequence ?: 0) + 1
-            val event = repository.save(ExecutionEvent(UUID.randomUUID(), executionId, sequence, type, objectMapper.valueToTree<JsonNode>(payload)))
-            val response = ExecutionEventResponse.from(event)
+            val event = repository.save(
+                ExecutionEvent(
+                    UUID.randomUUID(),
+                    executionId,
+                    sequence,
+                    type,
+                    objectMapper.valueToTree<JsonNode>(payload)
+                )
+            )
+            val response = ExecutionEventResponse.from(event, jsonValue(event.payload))
             if (TransactionSynchronizationManager.isSynchronizationActive()) {
                 TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
-                    override fun afterCommit() { broker.publish(response) }
+                    override fun afterCommit() {
+                        broker.publish(response)
+                    }
                 })
             } else {
                 broker.publish(response)
@@ -35,9 +45,19 @@ class ExecutionEventService(
         }
     }
 
-    fun replay(executionId: UUID, afterSequence: Int): List<ExecutionEventResponse> = repository.findReplay(executionId, afterSequence).map(ExecutionEventResponse::from)
+    fun replay(executionId: UUID, afterSequence: Int): List<ExecutionEventResponse> {
+        return repository.findReplay(executionId, afterSequence).map { event ->
+            ExecutionEventResponse.from(event, jsonValue(event.payload))
+        }
+    }
 
-    fun subscribe(executionId: UUID, afterSequence: Int): SseEmitter = broker.subscribe(executionId, afterSequence) { replay(executionId, afterSequence) }
+    fun subscribe(executionId: UUID, afterSequence: Int): SseEmitter {
+        return broker.subscribe(executionId, afterSequence) { replay(executionId, afterSequence) }
+    }
+
+    private fun jsonValue(value: JsonNode): Any {
+        return objectMapper.convertValue(value, Any::class.java)
+    }
 
     private companion object {
         val sequenceLocks = ConcurrentHashMap<UUID, Any>()

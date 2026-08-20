@@ -8,7 +8,7 @@ import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.revenue.repository.RevenueEntryRepository
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
-import java.util.UUID
+import java.util.*
 
 @Service
 class RevenueSettlementService(
@@ -22,6 +22,18 @@ class RevenueSettlementService(
         val agentVersionId = executionStepService.agentVersionId(attempt.executionStepId)
             ?: error("revenue_agent_version_not_found")
         val developerId = agentService.developerIdForVersion(agentVersionId)
-        return revenueEntryRepository.save(RevenueEntry(UUID.randomUUID(), developerId, attempt.executionStepId, attempt.id, type, attempt.amountAtomic, attempt.paymentMode, attempt.transactionHash, attempt.paymentIdentifier))
+        return revenueEntryRepository.save(
+            RevenueEntry(
+                UUID.randomUUID(),
+                developerId,
+                attempt.executionStepId,
+                attempt.id,
+                type,
+                attempt.amountAtomic,
+                attempt.paymentMode,
+                attempt.transactionHash,
+                attempt.paymentIdentifier
+            )
+        )
     }
 }

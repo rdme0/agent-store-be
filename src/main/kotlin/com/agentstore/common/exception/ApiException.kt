@@ -1,11 +1,4 @@
-package com.agentstore.common.web
-
-data class ApiError(
-    val code: String,
-    val message: String,
-    val details: Any? = null,
-    val traceId: String,
-)
+package com.agentstore.common.exception
 
 class ApiException(
     val code: String,

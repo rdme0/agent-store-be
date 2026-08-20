@@ -1,9 +1,9 @@
 package com.agentstore.execution.event
 
 import com.agentstore.execution.dto.response.ExecutionEventResponse
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import org.springframework.stereotype.Component
-import java.util.UUID
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
@@ -22,7 +22,9 @@ class ExecutionEventBroker {
                 val cursor = AtomicInteger(afterSequence.coerceAtLeast(0))
                 var terminal = false
                 replay().forEach { event ->
-                    if (event.sequence <= cursor.get()) return@forEach
+                    if (event.sequence <= cursor.get()) {
+                        return@forEach
+                    }
                     emitter.send(toSseEvent(event))
                     cursor.set(event.sequence)
                     terminal = terminal || event.type in terminalTypes
@@ -48,7 +50,9 @@ class ExecutionEventBroker {
         synchronized(lock) {
             val listeners = subscriptions[event.executionId] ?: return
             listeners.forEach { subscription ->
-                if (event.sequence <= subscription.cursor.get()) return@forEach
+                if (event.sequence <= subscription.cursor.get()) {
+                    return@forEach
+                }
                 try {
                     subscription.emitter.send(toSseEvent(event))
                     subscription.cursor.set(event.sequence)
@@ -61,21 +65,27 @@ class ExecutionEventBroker {
                     subscription.emitter.completeWithError(exception)
                 }
             }
-            if (listeners.isEmpty()) subscriptions.remove(event.executionId, listeners)
+            if (listeners.isEmpty()) {
+                subscriptions.remove(event.executionId, listeners)
+            }
         }
     }
 
     private fun remove(executionId: UUID, subscription: Subscription) {
         subscriptions[executionId]?.let { listeners ->
             listeners.remove(subscription)
-            if (listeners.isEmpty()) subscriptions.remove(executionId, listeners)
+            if (listeners.isEmpty()) {
+                subscriptions.remove(executionId, listeners)
+            }
         }
     }
 
-    private fun toSseEvent(event: ExecutionEventResponse) = SseEmitter.event()
-        .id(event.sequence.toString())
-        .name(event.type)
-        .data(event.payload)
+    private fun toSseEvent(event: ExecutionEventResponse): SseEmitter.SseEventBuilder {
+        return SseEmitter.event()
+            .id(event.sequence.toString())
+            .name(event.type)
+            .data(event.payload)
+    }
 
     private data class Subscription(val emitter: SseEmitter, val cursor: AtomicInteger)
 }

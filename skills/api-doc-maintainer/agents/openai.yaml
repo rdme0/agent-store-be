@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Documentation Maintainer"
+  short_description: "Keep BE routes and OpenAPI documentation aligned."
+  default_prompt: "Use $api-doc-maintainer to update AgentStore backend route schemas and generated OpenAPI documentation."

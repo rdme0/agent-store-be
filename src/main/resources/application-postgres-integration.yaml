@@ -1,0 +1,12 @@
+spring:
+  config:
+    activate:
+      on-profile: postgres-integration
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+# This profile is test-only. DataSourceConfig rejects it unless both explicit
+# maintenance flags are set; the integration support also rejects a local TS API on 8080.

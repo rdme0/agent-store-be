@@ -1,38 +1,36 @@
 # AI.md
 
-## Skills
+## Local skills
 
-- `agent-store-be-maintainer`: Maintain AgentStore Kotlin/Spring code in the established domain-layered style.
-- `agent-store-be-style-verifier`: Independently review Spring production diffs without editing them.
-- `api-doc-maintainer`: Keep Springdoc/Scalar and the public OpenAPI contract aligned.
-- `readme-maintainer`: Keep setup, profiles, bridge, and run commands synchronized.
-- `git-commit-korean`: Create small Korean commits matching repository history.
+- `skills/agent-store-be-maintainer/SKILL.md`: production implementation rules.
+- `skills/agent-store-be-style-verifier/SKILL.md`: fresh read-only structural and invariant review.
+- `skills/api-doc-maintainer/SKILL.md`: Springdoc `/openapi.json` and REST/SSE contract.
+- `skills/readme-maintainer/SKILL.md`: setup/profile/bridge documentation.
+- `skills/git-commit-korean/SKILL.md`: Korean commit conventions when a commit is explicitly requested.
 
-## Local guidance
+Read the relevant skill before changing its scope. `AGENTS.md` is only the entry point to this file.
 
-- This repository is the Kotlin/Spring migration target. The old Fastify/Prisma repository is a read-only compatibility reference.
-- Preserve the public AgentStore API and PostgreSQL data. Do not run Spring and TypeScript API writes against the same database.
-- Read the relevant skill before changing files in its scope. Record pre-existing dirty paths first.
-- Follow `eco-knock-be-central` style: Kotlin services/controllers/DTOs/repository interfaces, Java JPA entities/VOs/enums, constructor injection, thin controllers, transactional services, and role packages.
-- The package tree is a hard contract: each domain uses `controller`, `dto` (with `request`/`response`/`internal` where applicable), `model/entity`, `model/vo`, `repository`, and `service`; role-specific `resolver`, `runner`, `executor`, `client`, `event`, or `config` packages are separate from `service`. `service` contains use cases only. Foreign keys are scalar UUIDs; avoid JPA `@ManyToOne` and resolve related data through repositories/services.
+## Repository contract
 
-## Risk classification and preflight
+This repository is the Kotlin/Spring AgentStore runtime. Preserve the existing REST/SSE paths, status codes, JSON/error
+fields, PostgreSQL schema/data, Flyway history, ACTIVE-version immutability, dependency limits,
+execution/payment/recovery state machines, callback authentication, SSE replay, and the Node-only x402 signing boundary.
+Spring and the former TypeScript API must never write the same database concurrently. Preserve pre-existing dirty paths
+and never edit the read-only `eco-knock-be-central` reference.
 
-Migration work is `HIGH_RISK` because it crosses database, transaction, concurrency, restart, SSE, payment, and OpenAPI boundaries. Before production implementation, record the changed invariants, state transitions, trust boundaries, and a complete failure matrix covering:
+## Workflow
 
-| Phase | Failure or race | Durable state | Reservation/cost action | Retry/idempotency | User-visible outcome | Test |
-|---|---|---|---|---|---|---|
+1. Record all dirty paths and classify the change as `STANDARD` or `HIGH_RISK`.
+2. For `HIGH_RISK` work (schema/Flyway, transaction/lock, execution/callback, payment/recovery, SSE, OpenAPI), write
+   invariants, trust boundaries, state transitions, a failure matrix, and row-to-test mapping before implementation.
+3. Developer uses the maintainer skill, implements only the owned slice, runs narrow checks, and submits a handoff
+   without declaring completion.
+4. A fresh verifier receives the requirement, matrix, current diff, and dirty-path boundary—not the developer's
+   conclusion—and reviews read-only.
+5. Findings are grouped by invariant family. The developer audits adjacent states and updates code, matrix, and tests
+   together; repeat with a fresh verifier until blocking findings are zero. There is no fixed cycle cap.
+6. Parallel work is allowed only when files, contracts, invariants, and runtime state are independent. Serialize shared
+   schema, OpenAPI, execution state, payment, and recovery boundaries.
 
-Include side-effect-before/after boundaries, Flyway baseline mismatch, external payment after signature, journal failure, restart reconciliation, callback/terminal races, SSE replay/live races, and duplicate requests. Mark an inapplicable row explicitly.
-
-## Mandatory workflow
-
-1. Record dirty paths, risk class, contract ownership, and failure matrix.
-2. Developer uses `$agent-store-be-maintainer`, implements only its owned slice, and runs checks.
-3. Developer submits a handoff with requirement, risk, invariants, matrix/test mapping, owned files, exact diff, contract changes, commands/results, assumptions, and no completion claim.
-4. Fresh verifier uses `$agent-store-be-style-verifier` and receives the requirement, matrix, current diff, and dirty-path boundary—not the developer's conclusion.
-5. Verifier reviews the complete diff, groups all blockers by invariant family, and may run only safe non-rewriting checks.
-6. Developer audits the whole family and adjacent states, updates code, matrix, and tests. A second blocker in one family requires lifecycle/state-machine redesign. A third is recorded as a workflow failure, but completion still requires a fresh verifier PASS.
-7. Repeat with fresh verifiers until zero blocking findings. There is no cycle cap.
-
-Parallelize only when files, contracts, invariants, and runtime state are independent. Serialize schema, migration, OpenAPI, execution state, and payment boundaries.
+`STANDARD` CRUD, wording, and isolated style changes do not require a full failure matrix, but they still follow
+developer → fresh verifier and preserve contracts.

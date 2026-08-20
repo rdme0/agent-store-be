@@ -6,11 +6,11 @@ import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.service.PaymentService
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Service
+import org.springframework.stereotype.Component
 import java.math.BigInteger
-import java.util.UUID
+import java.util.*
 
-@Service
+@Component
 class ExecutionPaymentPreparationService(
     private val budgetGuard: BudgetGuard,
     private val stepService: ExecutionStepService,
@@ -18,11 +18,23 @@ class ExecutionPaymentPreparationService(
     private val eventService: ExecutionEventService,
 ) {
     @Transactional
-    fun prepare(executionId: UUID, stepId: UUID, amount: BigInteger, network: String, asset: String, payTo: String): UUID {
+    fun prepare(
+        executionId: UUID,
+        stepId: UUID,
+        amount: BigInteger,
+        network: String,
+        asset: String,
+        payTo: String,
+        paymentMode: PaymentMode
+    ): UUID {
         budgetGuard.reserve(executionId, amount)
-        val attemptId = paymentService.require(stepId, amount, network, asset, payTo, PaymentMode.SIMULATED)
+        val attemptId = paymentService.require(stepId, amount, network, asset, payTo, paymentMode)
         stepService.markPaymentRequired(stepId)
-        eventService.append(executionId, "PAYMENT_REQUIRED", mapOf("stepId" to stepId, "paymentAttemptId" to attemptId, "amountAtomic" to amount.toString()))
+        eventService.append(
+            executionId,
+            "PAYMENT_REQUIRED",
+            mapOf("stepId" to stepId, "paymentAttemptId" to attemptId, "amountAtomic" to amount.toString())
+        )
         return attemptId
     }
 }

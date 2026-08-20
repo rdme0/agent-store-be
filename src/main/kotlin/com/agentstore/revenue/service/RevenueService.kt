@@ -1,7 +1,7 @@
 package com.agentstore.revenue.service
 
-import com.agentstore.agent.repository.DeveloperRepository
-import com.agentstore.common.web.ApiException
+import com.agentstore.agent.service.AgentService
+import com.agentstore.common.exception.ApiException
 import com.agentstore.revenue.dto.response.DeveloperRevenueResponse
 import com.agentstore.revenue.dto.response.RevenueEntryResponse
 import com.agentstore.revenue.model.vo.RevenueType
@@ -9,23 +9,37 @@ import com.agentstore.revenue.repository.RevenueEntryRepository
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import java.math.BigInteger
-import java.util.UUID
+import java.util.*
 
 @Service
 class RevenueService(
-    private val developerRepository: DeveloperRepository,
+    private val agentService: AgentService,
     private val revenueRepository: RevenueEntryRepository,
 ) {
     @Transactional
     fun get(developerId: UUID, cursor: UUID?, limit: Int): DeveloperRevenueResponse {
-        if (limit !in 1..100) throw ApiException("VALIDATION_ERROR", "limit must be between 1 and 100", 422)
-        if (!developerRepository.existsById(developerId)) throw ApiException("DEVELOPER_NOT_FOUND", "Developer was not found", 404)
+        if (limit !in 1..100) {
+            throw ApiException("VALIDATION_ERROR", "limit must be between 1 and 100", 422)
+        }
+        if (!agentService.developerExists(developerId)) {
+            throw ApiException("DEVELOPER_NOT_FOUND", "Developer was not found", 404)
+        }
         val all = revenueRepository.findAllByDeveloperIdOrderByCreatedAtDesc(developerId)
-        val start = cursor?.let { id -> all.indexOfFirst { it.id == id }.also { if (it < 0) throw ApiException("INVALID_CURSOR", "Revenue cursor was not found", 400) } + 1 } ?: 0
+        val start = if (cursor == null) {
+            0
+        } else {
+            val index = all.indexOfFirst { it.id == cursor }
+            if (index < 0) {
+                throw ApiException("INVALID_CURSOR", "Revenue cursor was not found", 400)
+            }
+            index + 1
+        }
         val page = all.drop(start).take(limit + 1)
         val direct = all.filter { it.type == RevenueType.DIRECT }
         val dependency = all.filter { it.type == RevenueType.DEPENDENCY }
-        fun sum(entries: List<com.agentstore.revenue.model.entity.RevenueEntry>) = entries.fold(BigInteger.ZERO) { total, entry -> total + entry.amountAtomic }
+        fun sum(entries: List<com.agentstore.revenue.model.entity.RevenueEntry>): BigInteger {
+            return entries.fold(BigInteger.ZERO) { total, entry -> total + entry.amountAtomic }
+        }
         return DeveloperRevenueResponse(
             developerId = developerId,
             totalRevenueAtomic = sum(all).toString(),

@@ -3,12 +3,7 @@ package com.agentstore.payment.model.entity;
 import com.agentstore.common.model.entity.BaseEntity;
 import com.agentstore.payment.model.vo.PaymentAttemptStatus;
 import com.agentstore.payment.model.vo.PaymentMode;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,6 +11,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigInteger;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -61,6 +57,9 @@ public class PaymentAttempt extends BaseEntity {
     @Column(name = "payment_identifier")
     private String paymentIdentifier;
 
+    @Column(name = "projected_at")
+    private Instant projectedAt;
+
     public PaymentAttempt(UUID id, UUID executionStepId, BigInteger amountAtomic, String network, String asset, String payTo, PaymentMode paymentMode) {
         this.id = id;
         this.executionStepId = executionStepId;
@@ -79,15 +78,43 @@ public class PaymentAttempt extends BaseEntity {
     }
 
     public void failed(String failureCode) {
-        if (status == PaymentAttemptStatus.SETTLED || status == PaymentAttemptStatus.RECONCILIATION_REQUIRED) return;
+        if (status == PaymentAttemptStatus.SETTLED || status == PaymentAttemptStatus.RECONCILIATION_REQUIRED) {
+            return;
+        }
         this.status = PaymentAttemptStatus.FAILED;
         this.failureCode = failureCode;
     }
 
     public void reconciliationRequired(String failureCode) {
-        if (status == PaymentAttemptStatus.SETTLED) return;
+        if (status == PaymentAttemptStatus.SETTLED) {
+            return;
+        }
         this.status = PaymentAttemptStatus.RECONCILIATION_REQUIRED;
         this.failureCode = failureCode;
+    }
+
+    /**
+     * Journal/hash remain authoritative; this marker records local work still required after settlement.
+     */
+    public void markSettlementRecoveryRequired(String failureCode) {
+        if (status != PaymentAttemptStatus.SETTLED) {
+            throw new IllegalStateException("settlement_recovery_requires_settled_attempt");
+        }
+        this.failureCode = failureCode;
+    }
+
+    public void clearSettlementRecoveryMarker() {
+        if (status == PaymentAttemptStatus.SETTLED) {
+            this.failureCode = null;
+        }
+    }
+
+    public void markProjected() {
+        if (status != PaymentAttemptStatus.SETTLED) {
+            throw new IllegalStateException("projection_requires_settled_attempt");
+        }
+        this.projectedAt = Instant.now();
+        this.failureCode = null;
     }
 
 }

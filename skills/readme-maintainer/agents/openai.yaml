@@ -1,0 +1,4 @@
+interface:
+  display_name: "BE README Maintainer"
+  short_description: "Keep BE setup and scope documentation accurate."
+  default_prompt: "Use $readme-maintainer to update the AgentStore backend README to match implemented behavior."

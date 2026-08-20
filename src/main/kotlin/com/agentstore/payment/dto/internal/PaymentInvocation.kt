@@ -8,9 +8,16 @@ data class PaymentInvocationRequest(
     val invocationToken: String,
     val endpoint: String,
     val amountAtomic: String,
+    val maxPriceAtomic: String,
     val network: String,
     val asset: String,
     val payTo: String,
     val body: Any?,
 )
-data class PaymentInvocationResult(val output: JsonNode, val transactionHash: String? = null, val paymentIdentifier: String? = null)
+
+data class PaymentInvocationResult(
+    val output: JsonNode,
+    val transactionHash: String? = null,
+    val paymentIdentifier: String? = null,
+    val agentStatus: Int = 200,
+)

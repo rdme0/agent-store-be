@@ -3,7 +3,7 @@ package com.agentstore.agent.dto.request
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
-import java.util.UUID
+import java.util.*
 
 data class CreateAgentRequest(
     val developerId: UUID,
@@ -22,7 +22,9 @@ data class UpdateAgentRequest(
     @field:Size(min = 1, max = 120) val name: String? = null,
     @field:Size(min = 1, max = 2000) val description: String? = null,
 ) {
-    fun isEmpty() = name == null && description == null
+    fun isEmpty(): Boolean {
+        return name == null && description == null
+    }
 }
 
 data class CreateAgentVersionRequest(

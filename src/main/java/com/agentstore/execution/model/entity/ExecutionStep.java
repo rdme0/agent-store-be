@@ -2,15 +2,8 @@ package com.agentstore.execution.model.entity;
 
 import com.agentstore.common.model.entity.BaseEntity;
 import com.agentstore.execution.model.vo.ExecutionStepStatus;
-import com.agentstore.payment.model.entity.PaymentAttempt;
 import com.fasterxml.jackson.databind.JsonNode;
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -83,11 +76,17 @@ public class ExecutionStep extends BaseEntity {
         this.status = ExecutionStepStatus.COMPLETED;
     }
 
-    public void paymentRequired() { this.status = ExecutionStepStatus.PAYMENT_REQUIRED; }
+    public void paymentRequired() {
+        this.status = ExecutionStepStatus.PAYMENT_REQUIRED;
+    }
 
-    public void paymentSettled() { this.status = ExecutionStepStatus.PAYMENT_SETTLED; }
+    public void paymentSettled() {
+        this.status = ExecutionStepStatus.PAYMENT_SETTLED;
+    }
 
-    public void running() { this.status = ExecutionStepStatus.RUNNING; }
+    public void running() {
+        this.status = ExecutionStepStatus.RUNNING;
+    }
 
     public void fail(String failureCode) {
         this.failureCode = failureCode;

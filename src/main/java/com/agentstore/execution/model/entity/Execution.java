@@ -3,13 +3,7 @@ package com.agentstore.execution.model.entity;
 import com.agentstore.common.model.entity.BaseEntity;
 import com.agentstore.execution.model.vo.ExecutionStatus;
 import com.fasterxml.jackson.databind.JsonNode;
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -66,35 +60,55 @@ public class Execution extends BaseEntity {
         this.status = ExecutionStatus.PENDING;
     }
 
-    public void start() { this.status = ExecutionStatus.RUNNING; }
+    public void start() {
+        this.status = ExecutionStatus.RUNNING;
+    }
 
     public void reserve(BigInteger amount) {
-        if (amount == null || amount.signum() < 0) throw new IllegalArgumentException("reservation_amount_must_be_non_negative");
-        if (status != ExecutionStatus.PENDING && status != ExecutionStatus.RUNNING) throw new IllegalStateException("execution_not_active");
+        if (amount == null || amount.signum() < 0) {
+            throw new IllegalArgumentException("reservation_amount_must_be_non_negative");
+        }
+        if (status != ExecutionStatus.PENDING && status != ExecutionStatus.RUNNING) {
+            throw new IllegalStateException("execution_not_active");
+        }
         BigInteger available = maxBudgetAtomic.subtract(actualCostAtomic).subtract(reservedCostAtomic);
-        if (available.compareTo(amount) < 0) throw new IllegalStateException("budget_exceeded");
+        if (available.compareTo(amount) < 0) {
+            throw new IllegalStateException("budget_exceeded");
+        }
         reservedCostAtomic = reservedCostAtomic.add(amount);
     }
 
     public void settle(BigInteger amount) {
-        if (amount == null || amount.signum() < 0) throw new IllegalArgumentException("settlement_amount_must_be_non_negative");
-        if (reservedCostAtomic.compareTo(amount) < 0) throw new IllegalStateException("reserved_cost_missing");
+        if (amount == null || amount.signum() < 0) {
+            throw new IllegalArgumentException("settlement_amount_must_be_non_negative");
+        }
+        if (reservedCostAtomic.compareTo(amount) < 0) {
+            throw new IllegalStateException("reserved_cost_missing");
+        }
         reservedCostAtomic = reservedCostAtomic.subtract(amount);
         actualCostAtomic = actualCostAtomic.add(amount);
     }
 
     public void release(BigInteger amount) {
-        if (amount == null || amount.signum() < 0) throw new IllegalArgumentException("release_amount_must_be_non_negative");
-        if (reservedCostAtomic.compareTo(amount) < 0) throw new IllegalStateException("reserved_cost_missing");
+        if (amount == null || amount.signum() < 0) {
+            throw new IllegalArgumentException("release_amount_must_be_non_negative");
+        }
+        if (reservedCostAtomic.compareTo(amount) < 0) {
+            throw new IllegalStateException("reserved_cost_missing");
+        }
         reservedCostAtomic = reservedCostAtomic.subtract(amount);
     }
 
-    public void clearReservation() { reservedCostAtomic = BigInteger.ZERO; }
+    public void clearReservation() {
+        reservedCostAtomic = BigInteger.ZERO;
+    }
 
     public void fail(String failureCode) {
         this.failureCode = failureCode;
         this.status = ExecutionStatus.FAILED;
     }
 
-    public void complete() { this.status = ExecutionStatus.COMPLETED; }
+    public void complete() {
+        this.status = ExecutionStatus.COMPLETED;
+    }
 }

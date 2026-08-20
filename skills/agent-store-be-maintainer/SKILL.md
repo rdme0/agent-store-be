@@ -5,42 +5,67 @@ description: Maintain AgentStore Kotlin/Spring backend code using eco-knock-be-c
 
 # AgentStore BE Maintainer
 
-Read `AI.md` first. Apply the HIGH_RISK matrix before migration, persistence, execution, SSE, payment, recovery, or OpenAPI work.
+Read `AI.md` first. Read the closest `eco-knock-be-central` production precedent before introducing a new pattern.
+Preserve pre-existing dirty paths and never edit the reference repository.
 
-## Style
+## Package and language boundary
 
-- Use Kotlin for controllers, services, DTOs, configuration, clients, and repository interfaces.
-- Use Java for JPA entities, entity value objects, entity enums, and low-level security infrastructure.
-- Every domain must use the reference layout: `<domain>/controller`, `<domain>/dto`, `<domain>/model/entity`, `<domain>/model/vo`, `<domain>/repository`, and `<domain>/service`. Add `<domain>/resolver`, `<domain>/runner`, `<domain>/executor`, `<domain>/client`, `<domain>/event`, or `<domain>/config` only when that role exists.
-- Request and response DTOs belong under `<domain>/dto/request` and `<domain>/dto/response` when they are HTTP-specific; internal projections belong under `<domain>/dto/internal`. Use the reference naming convention (`*DTO`, `*Request`, `*Response`).
-- `service` contains use-case services only. A resolver, calculator, validator, runner, executor, client, mapper, graph node, or result value must never be placed under `service` merely because it is called by a service.
-- Put graph/calculation result types in `model/vo` or `dto/internal`, one primary type per file. Do not create a catch-all `*Utils`, `*Helper`, `*Manager`, or `*Support` class.
-- Keep controllers thin in the reference style: request binding, OpenAPI annotations, `ResponseEntity`/common response conversion where the contract requires it, and one service call. Business branching belongs in services/resolvers.
-- Avoid JPA `@ManyToOne` associations. Store foreign keys as scalar UUID fields on entities and resolve related data through repository queries or an explicit service/resolver. Do not reintroduce entity graphs to bypass this boundary.
-- One primary class per file; DTOs may group closely related request/response types.
-- Use constructor injection. Do not use field injection, broad `Manager`/`Helper` abstractions, or direct entity serialization.
-- Controllers bind HTTP and delegate. `@Transactional` belongs on services or explicit orchestration boundaries.
-- A service may use only its own repositories. Cross-domain operations go through public services; use an orchestrator to prevent circular dependencies.
+Use only role packages that have a real responsibility: `controller`, `service`, `repository`, `dto/request`,
+`dto/response`, `dto/internal`, `model/entity`, `model/vo`, `exception`, `config`, `client`, `resolver`, `runner`,
+`executor`, `orchestrator`, `event`, and `token`.
 
-## Persistence and contract rules
+Use Kotlin for controllers, use-case services, repository interfaces, DTOs, configuration, clients, resolvers, runners,
+executors, orchestrators, event components, and application-level immutable/calculation values. Use Java for JPA
+entities, entity-persisted value objects/enums, and existing low-level security or infrastructure code. Every
+persistence entity extends `common.model.entity.BaseEntity`.
 
-- Flyway owns migrations; Hibernate uses `ddl-auto=validate`.
-- Preserve the existing Prisma physical schema and API contract.
-- Map PostgreSQL `BIGINT` atomic amounts to `BigInteger` and expose strings.
-- Map JSONB deliberately with Jackson `JsonNode` or explicit collections.
-- Use named PostgreSQL enum mapping and LAZY relations.
-- Keep error shape `{ code, message, details?, traceId }` and hide runtime callback routes from OpenAPI.
-- Springdoc `/openapi.json` is generated; never hand-edit it.
+One primary production class per file is the default. Closely related HTTP/internal DTOs may remain grouped when that
+grouping is part of the contract. Do not create generic `Manager`, `Helper`, `Utils`, or `Support` layers, and do not
+copy the reference repository's air-quality CQRS structure into unrelated domains.
 
-## High-risk invariants
+## Dependency direction
 
-- ACTIVE versions are immutable; dependency cycles, max depth, max steps, and max calls remain enforced.
-- Create durable payment intent and budget reservation before an external side effect.
-- Preserve journal, transaction hash, reservation, actual cost, and reconciliation state across every crash window.
-- Authenticate callbacks before state mutation. Terminalization must be atomic, never check-then-write.
-- SSE stores events before publishing, replays by sequence, deduplicates replay/live races, and closes after terminal events.
-- x402 private keys and signed payloads stay in the official Node bridge; Spring receives only typed results.
+Controllers bind HTTP, validate, document, call one use-case service, and return the contract response. They do not
+access repositories, perform state transitions, parse policy, or silently correct invalid input.
+
+An ordinary service directly uses repositories owned by its own domain. Cross-domain reads/actions go through the owning
+domain's public service operation. Use an explicit orchestrator when multiple domains must coordinate one transaction or
+crash boundary; it must document its lock order, transaction propagation, and recovery semantics instead of becoming a
+repository grab-bag. Keep resolver/runner/client/event/token responsibilities in their role packages; do not place them
+under `service` merely because Spring manages the bean.
+
+## JPA and schema
+
+JPA relationships are allowed when PostgreSQL FK, nullability, uniqueness, and actual cardinality justify them. Use
+`FetchType.LAZY`, explicit `@JoinColumn`, and `optional`/`nullable` agreement. Use `@OneToOne` only for a unique
+one-to-one constraint, and only add bidirectional/collection navigation when the use case needs it. Do not serialize
+entities directly. A scalar UUID is correct for an integration reference, quote snapshot, runtime call path, or
+cross-process boundary; do not mechanically convert every FK to a relation or mechanically ban `@ManyToOne`.
+
+Flyway owns schema changes; never edit an applied migration and use the next version. Hibernate remains
+`ddl-auto=validate`. Preserve table/column/index/FK/check names. Map PostgreSQL BIGINT atomic values to `BigInteger` and
+expose decimal strings; map JSONB deliberately; map PostgreSQL enums with named enum support; keep timestamps as UTC
+`Instant`.
+
+## AgentStore invariants
+
+- ACTIVE Agent versions are immutable. Dependency self/cycle, depth 5, max steps 32, and max calls 1–5 remain enforced
+  with full cycle paths.
+- Quote snapshots contain resolved versions, endpoints, payment terms, limits, and a five-minute expiry.
+- Create durable payment intent and budget reservation before external side effects. Preserve journal, transaction hash,
+  reservation, actual cost, revenue idempotency, and reconciliation state across every crash window.
+- Authenticate runtime callbacks before mutating execution state. Terminalization is one atomic transition, never
+  check-then-write. Unknown external outcomes remain reconciliation-required; never release or repay blindly.
+- Persist execution events before publishing, replay by sequence, deduplicate replay/live delivery, and close SSE after
+  terminal events. Apply the same CORS policy to raw SSE.
+- x402 private keys and signed payloads stay in the official Node bridge. Spring receives typed outcomes only; bridge
+  HMAC, timeout, response-size, endpoint/redirect, correlation, and reconcile semantics remain fail-closed.
 
 ## Verification
 
-Use deferred clients/barriers for payment and callback races, PostgreSQL row-lock tests for budget reservation, restart/reconciliation fixtures, and SSE replay tests. Run the narrowest Gradle test first, then `classes`, `test`, `bootJar`, migration validation, and OpenAPI parity. Do not declare completion; return a full handoff.
+For HIGH_RISK work, write a failure matrix covering side-effect boundaries, signature/transport loss, journal/recovery,
+duplicate requests, callback/terminal races, startup readiness, and SSE replay/live races, with one test mapping per
+row. Use deferred clients/barriers and PostgreSQL row-lock fixtures. Run the narrowest checks first, then
+`gradlew.bat classes`, `test`, `bootJar`, migration/schema validation, and OpenAPI parity. Submit a handoff with risk,
+invariants, matrix, owned/pre-existing paths, contract changes, exact commands/results, assumptions, and unrun checks;
+do not declare completion.

@@ -1,6 +1,5 @@
 package com.agentstore.execution.orchestrator
 
-import com.agentstore.execution.event.ExecutionEventService
 import com.agentstore.execution.guard.BudgetGuard
 import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.execution.token.InvocationTokenService
@@ -8,13 +7,12 @@ import com.agentstore.payment.client.PaymentClient
 import com.agentstore.payment.dto.internal.PaymentInvocationRequest
 import com.agentstore.payment.dto.internal.PaymentInvocationResult
 import com.agentstore.payment.exception.PaymentExecutionException
-import com.agentstore.payment.model.vo.PaymentMode
+import com.agentstore.payment.exception.PaymentOutcomeUnknownException
 import com.agentstore.payment.service.PaymentService
 import com.agentstore.revenue.model.vo.RevenueType
-import com.agentstore.revenue.service.RevenueSettlementService
 import org.springframework.stereotype.Component
 import java.math.BigInteger
-import java.util.UUID
+import java.util.*
 
 @Component
 class ExecutionPaymentOrchestrator(
@@ -23,8 +21,7 @@ class ExecutionPaymentOrchestrator(
     private val paymentService: PaymentService,
     private val preparationService: ExecutionPaymentPreparationService,
     private val paymentClient: PaymentClient,
-    private val eventService: ExecutionEventService,
-    private val revenueSettlementService: RevenueSettlementService,
+    private val settlementService: ExecutionPaymentSettlementService,
     private val invocationTokenService: InvocationTokenService,
 ) {
     fun invoke(
@@ -37,33 +34,81 @@ class ExecutionPaymentOrchestrator(
         payTo: String,
         body: Any?,
         revenueType: RevenueType = RevenueType.DIRECT,
+        maxPriceAtomic: BigInteger = amount,
     ): PaymentInvocationResult {
-        val attemptId = preparationService.prepare(executionId, stepId, amount, network, asset, payTo)
-        var settlementRecorded = false
+        require(amount <= maxPriceAtomic) { "payment amount exceeds maxPriceAtomic" }
+        val attemptId =
+            preparationService.prepare(executionId, stepId, amount, network, asset, payTo, paymentClient.mode)
+        var externalPaymentObserved = false
         return try {
             val agentVersionId = stepService.agentVersionId(stepId) ?: error("agent_version_not_found")
             val token = invocationTokenService.issue(executionId, stepId, agentVersionId, stepService.callPath(stepId))
-            val result = paymentClient.invoke(PaymentInvocationRequest(attemptId.toString(), attemptId.toString(), token, endpoint, amount.toString(), network, asset, payTo, body))
+            val result = paymentClient.invoke(
+                PaymentInvocationRequest(
+                    attemptId.toString(),
+                    attemptId.toString(),
+                    token,
+                    endpoint,
+                    amount.toString(),
+                    maxPriceAtomic.toString(),
+                    network,
+                    asset,
+                    payTo,
+                    body
+                )
+            )
             val transactionHash = result.transactionHash ?: "simulated:$attemptId"
-            paymentService.settle(attemptId, transactionHash, result.paymentIdentifier)
-            settlementRecorded = true
-            val settledAttempt = paymentService.find(attemptId)
-            revenueSettlementService.record(settledAttempt, revenueType)
-            budgetGuard.settle(executionId, amount)
-            stepService.markPaymentSettled(stepId)
-            eventService.append(executionId, "PAYMENT_SETTLED", mapOf("stepId" to stepId, "paymentAttemptId" to attemptId, "amountAtomic" to amount.toString(), "transactionHash" to transactionHash, "paymentMode" to PaymentMode.SIMULATED.name))
-            stepService.markRunning(stepId)
+            externalPaymentObserved = true
+            if (!settlementService.settleIfActive(
+                    executionId,
+                    stepId,
+                    attemptId,
+                    amount,
+                    transactionHash,
+                    result.paymentIdentifier,
+                    revenueType,
+                    paymentClient.mode
+                )
+            ) {
+                throw PaymentExecutionException(
+                    "PAYMENT_RECONCILIATION_REQUIRED",
+                    IllegalStateException("execution_terminalized_after_payment")
+                )
+            }
+            if (result.agentStatus !in 200..299) {
+                stepService.fail(stepId, "FAILED_AFTER_PAYMENT")
+                throw PaymentExecutionException(
+                    "FAILED_AFTER_PAYMENT",
+                    IllegalStateException("paid_agent_status_${result.agentStatus}")
+                )
+            }
             result
         } catch (exception: Exception) {
-            if (settlementRecorded) {
-                paymentService.markReconciliationRequired(attemptId, "PAYMENT_RECONCILIATION_REQUIRED")
-                stepService.fail(stepId, "PAYMENT_RECONCILIATION_REQUIRED")
+            if (exception is PaymentOutcomeUnknownException) {
+                paymentService.markReconciliationRequired(attemptId, exception.failureCode)
+                stepService.fail(stepId, exception.failureCode)
+            } else if (externalPaymentObserved) {
+                if (exception !is PaymentExecutionException || exception.failureCode != "FAILED_AFTER_PAYMENT") {
+                    paymentService.markSettlementRecoveryRequired(attemptId, "FAILED_AFTER_PAYMENT")
+                    stepService.fail(stepId, "FAILED_AFTER_PAYMENT")
+                }
             } else {
                 paymentService.fail(attemptId, "PAYMENT_FAILED")
                 budgetGuard.release(executionId, amount)
                 stepService.fail(stepId, "PAYMENT_FAILED")
             }
-            throw PaymentExecutionException(if (settlementRecorded) "PAYMENT_RECONCILIATION_REQUIRED" else "PAYMENT_FAILED", exception)
+            if (exception is PaymentExecutionException) {
+                throw exception
+            }
+            if (exception is PaymentOutcomeUnknownException) {
+                throw PaymentExecutionException(exception.failureCode, exception)
+            }
+            val failureCode = if (externalPaymentObserved) {
+                "PAYMENT_RECONCILIATION_REQUIRED"
+            } else {
+                "PAYMENT_FAILED"
+            }
+            throw PaymentExecutionException(failureCode, exception)
         }
     }
 

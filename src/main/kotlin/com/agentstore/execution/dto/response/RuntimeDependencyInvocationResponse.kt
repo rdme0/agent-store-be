@@ -1,6 +1,5 @@
 package com.agentstore.execution.dto.response
 
-import com.fasterxml.jackson.databind.JsonNode
-import java.util.UUID
+import java.util.*
 
-data class RuntimeDependencyInvocationResponse(val stepId: UUID, val output: JsonNode?, val costAtomic: String)
+data class RuntimeDependencyInvocationResponse(val stepId: UUID, val output: Any?, val costAtomic: String)

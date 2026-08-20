@@ -1,5 +1,6 @@
 package com.agentstore.payment.config
 
+import com.agentstore.execution.guard.ExecutionMutationReadiness
 import com.agentstore.execution.orchestrator.ExecutionPaymentRecoveryOrchestrator
 import com.agentstore.execution.service.ExecutionRecoveryService
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -10,10 +11,12 @@ import org.springframework.stereotype.Component
 class PaymentRecoveryStartupService(
     private val recovery: ExecutionPaymentRecoveryOrchestrator,
     private val executionRecoveryService: ExecutionRecoveryService,
+    private val readiness: ExecutionMutationReadiness,
 ) {
     @EventListener(ApplicationReadyEvent::class)
     fun reconcile() {
         recovery.reconcileSettledPayments()
         executionRecoveryService.failActiveExecutions()
+        readiness.markReady()
     }
 }

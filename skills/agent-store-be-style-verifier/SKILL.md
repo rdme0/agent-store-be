@@ -5,31 +5,42 @@ description: Independently review AgentStore Kotlin/Spring production diffs for 
 
 # AgentStore BE Style Verifier
 
-Review only developer-owned production changes. Never edit, format, install, run migrations, generate files, or start the application. Safe lint, compile, existing tests, build, and `git diff --check` are allowed when they do not rewrite tracked files. Record Git status before and after.
+Read `AI.md`, this skill, the maintainer skill, and the closest reference precedent. Review only the developer-owned
+diff; preserve unrelated dirty paths. Never edit, format, install, generate, migrate, snapshot-update, or start the
+application. Read-only `lint`, `typecheck/classes`, existing tests, `bootJar`, and `git diff --check` are allowed when
+they do not rewrite files. Compare `git status --short` before and after any command.
 
-Require the original requirement, risk class, invariants, complete HIGH_RISK matrix and row-to-test mapping, owned files, pre-existing dirty paths, exact diff, contract changes, commands/results, and assumptions. Missing high-risk matrix rows or test mappings are blocking.
+Require the original requirement, risk classification, invariants, complete HIGH_RISK failure matrix and row-to-test
+mapping, owned/pre-existing dirty paths, contract/schema changes, exact checks/results, assumptions, and unrun checks.
+Missing matrix rows or test mappings are blocking only for HIGH_RISK changes.
 
 Review in two passes:
 
-1. Matrix/state/trust-boundary completeness, including migration baseline mismatch, payment crash windows, restart/reconciliation, callback/terminal races, and SSE replay/live races.
-2. Diff mapping to the matrix, then package/language boundaries, constructor injection, transaction ownership, JPA/Flyway schema, OpenAPI, tests, and preservation of dirty paths.
+1. Check matrix, state transitions, trust boundaries, transaction/lock order, startup readiness, payment crash windows,
+   recovery, callback/terminal races, and SSE replay/live lifecycle.
+2. Map every matrix row to the actual diff/tests, then inspect package roles, Java/Kotlin boundaries, constructor
+   injection, controller thinness, cross-domain Repository access, transaction ownership, JPA/Flyway schema, OpenAPI,
+   duplicate/stale paths, and dirty-path preservation.
 
-## Reference-structure gate
+## Structural rules
 
-Use `eco-knock-be-central` as the structural reference, not as a loose inspiration. Treat these as blocking findings:
+- A domain creates only the role packages it actually uses; do not require every domain to contain every layer.
+- `service` contains use cases; resolvers, runners, clients, event components, tokens, and orchestrators stay in their
+  role packages.
+- HTTP DTOs are in `dto/request` or `dto/response`; internal transport/projection DTOs are in `dto/internal`; grouped
+  DTOs are allowed when closely related.
+- Kotlin/Java roles follow the maintainer boundary and every JPA entity extends `BaseEntity`.
+- Ordinary services do not inject another domain's Repository. Cross-domain operations must cross a public service or
+  explicit orchestrator boundary. Controllers never inject repositories.
+- JPA relationships are reviewed against real FK/cardinality/nullability/unique constraints, LAZY fetch, and
+  serialization risk. `@ManyToOne` itself is not a finding; report only an unnecessary eager/bidirectional relation,
+  schema/cardinality mismatch, entity serialization, or a relation used to bypass service boundaries.
+- One primary production class per file is the default; closely related DTO groups are the exception. Moved classes must
+  not remain duplicated at the old path.
 
-- a domain `service` package contains a resolver, validator, calculator, runner, executor, client, mapper, graph node, or result type;
-- a domain is missing the expected `controller`/`dto`/`model/entity`/`model/vo`/`repository`/`service` separation for a role it implements;
-- HTTP DTOs are not in `dto/request` or `dto/response` (internal DTOs in `dto/internal`), or naming diverges from `*DTO`, `*Request`, `*Response` without a documented contract reason;
-- Kotlin/Java responsibility is inverted: JPA entities/enums/value objects in Kotlin, or use-case services/controllers/repository interfaces in Java;
-- multiple primary production classes are grouped in one file outside the DTO exception, or moved classes remain duplicated at the old path;
-- a JPA `@ManyToOne` association is introduced where a scalar UUID FK plus repository/service resolution is sufficient;
-- controllers contain business logic instead of binding and delegating to a service.
+Report every blocking finding together, grouped by invariant family, in this form:
 
-Report all findings in this family together and include the complete package tree checked. A compile/test pass does not waive a structural failure.
+`[severity] [family] file:line — invariant/matrix row — violated maintainer rule — adjacent paths reviewed — refactor scope — automatic-refactor: yes|no`
 
-Report every finding together, grouped by invariant family:
-
-`[severity] [family] file:line — matrix row/invariant — violated rule — adjacent cases reviewed — refactor scope — automatic-refactor: yes|no`
-
-A second blocker in one family requires lifecycle/state-machine redesign. A third is a workflow failure to record, not a reason to waive the blocker. Finish with `PASS`, `REFRACTOR REQUIRED`, or `RISK REMAINS`.
+Finish with `PASS`, `REFRACTOR REQUIRED`, or `RISK REMAINS`. A second finding in one family requires a family-level
+redesign; a third is recorded as a workflow failure, not waived.
