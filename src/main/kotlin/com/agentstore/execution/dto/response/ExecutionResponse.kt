@@ -1,5 +1,6 @@
 package com.agentstore.execution.dto.response
 
+import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.execution.model.entity.ExecutionEvent
 import com.agentstore.execution.model.entity.ExecutionStep
 import com.agentstore.payment.model.entity.PaymentAttempt
@@ -24,6 +25,8 @@ data class ExecutionStepResponse(
     val agentVersionId: UUID,
     @field:Schema(allowableValues = ["CREATED", "PAYMENT_REQUIRED", "PAYMENT_SETTLED", "RUNNING", "COMPLETED", "FAILED"]) val status: String,
     @field:Schema(pattern = "^[0-9]+$") val costAtomic: String,
+    @field:Schema(allowableValues = ["TEXT", "MARKDOWN", "STRUCTURED", "JSON"])
+    val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
     @field:Schema(implementation = JsonNode::class, nullable = false) val output: Any? = null,
     @field:Schema(nullable = false) val failureCode: String? = null,
     val payments: List<PaymentAttemptResponse>,
@@ -34,7 +37,8 @@ data class ExecutionStepResponse(
         fun from(
             step: ExecutionStep,
             payments: List<PaymentAttempt>,
-            output: Any? = step.output
+            output: Any? = step.output,
+            responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
         ): ExecutionStepResponse {
             return ExecutionStepResponse(
                 step.id,
@@ -42,6 +46,7 @@ data class ExecutionStepResponse(
                 step.agentVersionId,
                 step.status.name,
                 step.costAtomic.toString(),
+                responseFormat,
                 output,
                 step.failureCode,
                 payments.map {

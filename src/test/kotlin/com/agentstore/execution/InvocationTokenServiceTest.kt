@@ -11,7 +11,7 @@ import java.util.*
 class InvocationTokenServiceTest {
     private val service = InvocationTokenService(
         AgentStoreProperties(
-            corsOrigin = "*",
+            corsOrigins = listOf("*"),
             runtimeTokenSecret = "test-secret",
             databaseUrl = "jdbc:postgresql://localhost:15432/agent_store",
         ),

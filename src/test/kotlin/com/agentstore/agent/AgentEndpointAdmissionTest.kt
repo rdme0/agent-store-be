@@ -10,6 +10,7 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
+import com.agentstore.agent.service.AgentListCursorCodec
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.model.entity.AgentDependency
@@ -79,7 +80,8 @@ class AgentEndpointAdmissionTest {
             mock(AgentRepository::class.java),
             versions,
             mock(DeveloperRepository::class.java),
-            productionPolicy()
+            productionPolicy(),
+            mock(AgentListCursorCodec::class.java),
         )
 
         assertUnsafe { service.publish(draft.id) }
@@ -202,7 +204,8 @@ class AgentEndpointAdmissionTest {
             mock(AgentRepository::class.java),
             mock(AgentVersionRepository::class.java),
             mock(DeveloperRepository::class.java),
-            productionPolicy()
+            productionPolicy(),
+            mock(AgentListCursorCodec::class.java),
         )
     }
 

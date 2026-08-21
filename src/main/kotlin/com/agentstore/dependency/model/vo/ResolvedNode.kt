@@ -17,6 +17,7 @@ data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<Res
                 network = version.network,
                 asset = version.asset,
                 payTo = version.payTo,
+                responseFormat = version.responseFormat,
             ),
             dependencies = dependencies.map { edge ->
                 DependencySnapshot(

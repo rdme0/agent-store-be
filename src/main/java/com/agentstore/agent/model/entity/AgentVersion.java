@@ -1,6 +1,7 @@
 package com.agentstore.agent.model.entity;
 
 import com.agentstore.agent.model.vo.AgentVersionStatus;
+import com.agentstore.agent.model.vo.AgentResponseFormat;
 import com.agentstore.common.model.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -47,7 +48,16 @@ public class AgentVersion extends BaseEntity {
     @Column(name = "pay_to", nullable = false)
     private String payTo;
 
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "response_format", nullable = false, columnDefinition = "AgentResponseFormat")
+    private AgentResponseFormat responseFormat = AgentResponseFormat.JSON;
+
     public AgentVersion(UUID id, UUID agentId, String semver, String endpoint, BigInteger priceAtomic, String network, String asset, String payTo) {
+        this(id, agentId, semver, endpoint, priceAtomic, network, asset, payTo, AgentResponseFormat.JSON);
+    }
+
+    public AgentVersion(UUID id, UUID agentId, String semver, String endpoint, BigInteger priceAtomic, String network, String asset, String payTo, AgentResponseFormat responseFormat) {
         this.id = id;
         this.agentId = agentId;
         this.semver = semver;
@@ -56,6 +66,7 @@ public class AgentVersion extends BaseEntity {
         this.network = network;
         this.asset = asset;
         this.payTo = payTo;
+        this.responseFormat = responseFormat == null ? AgentResponseFormat.JSON : responseFormat;
         this.status = AgentVersionStatus.DRAFT;
     }
 

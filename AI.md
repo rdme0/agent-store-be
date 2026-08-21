@@ -10,6 +10,10 @@
 
 Read the relevant skill before changing its scope. `AGENTS.md` is only the entry point to this file.
 
+## 작업 시작 인수인계
+
+모든 작업 시작 전 루트의 [`HANDOFF.md`](./HANDOFF.md)를 읽는다. 이 문서는 현재 구현 상태, DB/Flyway 상태, 저장소 경계와 다음 작업 순서를 기록한다. 문서 내용과 실제 `git status`가 다르면 `git status`와 코드를 우선하고, 인수인계서를 최신 상태로 갱신한다.
+
 ## Repository contract
 
 This repository is the Kotlin/Spring AgentStore runtime. Preserve the existing REST/SSE paths and status codes, while

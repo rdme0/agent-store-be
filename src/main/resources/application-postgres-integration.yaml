@@ -8,5 +8,10 @@ spring:
     hibernate:
       ddl-auto: validate
 
-# This profile is test-only. DataSourceConfig rejects it unless both explicit
-# maintenance flags are set; the integration support also rejects a local TS API on 8080.
+agent-store:
+  # Integration tests must never inherit the developer database URL.
+  # Override this only with an explicitly dedicated database.
+  database-url: ${INTEGRATION_DATABASE_URL:postgresql://postgres:postgres@localhost:5432/agent_store_integration?schema=public}
+
+# This profile is test-only. PostgreSQL integration test classes require both explicit
+# test gates; normal Spring startup does not require either gate or inspect port 8080.

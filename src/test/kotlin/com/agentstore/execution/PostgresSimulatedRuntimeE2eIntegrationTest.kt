@@ -95,6 +95,80 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
         )
     }
 
+    @Test
+    fun `root output format mismatch fails execution and retains settled payment evidence`() {
+        val fixture = runtimeFixture.createRootWithDependency(rootResponseFormat = "TEXT")
+        paymentClient.arm(fixture)
+
+        runner.start(fixture.root.executionId)
+        awaitTerminalEvents(fixture.root.executionId)
+
+        val execution = jdbcTemplate.queryForMap(
+            "select status, failure_code from executions where id = ?",
+            fixture.root.executionId
+        )
+        assertThat(execution["status"].toString()).isEqualTo("FAILED")
+        assertThat(execution["failure_code"]).isEqualTo("AGENT_OUTPUT_FORMAT_INVALID")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select failure_code from execution_steps where id = ?",
+                String::class.java,
+                fixture.root.rootStepId
+            )
+        ).isEqualTo("AGENT_OUTPUT_FORMAT_INVALID")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select count(*) from payment_attempts where execution_step_id in (select id from execution_steps where execution_id = ?)",
+                Int::class.java,
+                fixture.root.executionId
+            )
+        ).isEqualTo(2)
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select count(*) from revenue_entries where execution_step_id in (select id from execution_steps where execution_id = ?)",
+                Int::class.java,
+                fixture.root.executionId
+            )
+        ).isEqualTo(2)
+    }
+
+    @Test
+    fun `dependency output format mismatch fails dependency step and owning execution`() {
+        val fixture = runtimeFixture.createRootWithDependency(childResponseFormat = "TEXT")
+        paymentClient.arm(fixture)
+
+        runner.start(fixture.root.executionId)
+        awaitTerminalEvents(fixture.root.executionId)
+
+        val execution = jdbcTemplate.queryForMap(
+            "select status, failure_code from executions where id = ?",
+            fixture.root.executionId
+        )
+        assertThat(execution["status"].toString()).isEqualTo("FAILED")
+        assertThat(execution["failure_code"]).isEqualTo("AGENT_OUTPUT_FORMAT_INVALID")
+        val childStep = jdbcTemplate.queryForMap(
+            "select status, failure_code from execution_steps where execution_id = ? and agent_version_id = ?",
+            fixture.root.executionId,
+            fixture.childVersionId
+        )
+        assertThat(childStep["status"].toString()).isEqualTo("FAILED")
+        assertThat(childStep["failure_code"]).isEqualTo("AGENT_OUTPUT_FORMAT_INVALID")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select count(*) from payment_attempts where execution_step_id in (select id from execution_steps where execution_id = ?)",
+                Int::class.java,
+                fixture.root.executionId
+            )
+        ).isEqualTo(2)
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select count(*) from revenue_entries where execution_step_id in (select id from execution_steps where execution_id = ?)",
+                Int::class.java,
+                fixture.root.executionId
+            )
+        ).isEqualTo(1)
+    }
+
     private fun awaitTerminalEvents(executionId: UUID): List<com.agentstore.execution.dto.response.ExecutionEventResponse> {
         repeat(50) {
             val replay = events.replay(executionId, 0)
@@ -152,6 +226,8 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
 
         fun arm(fixture: DependencyRuntimeFixture) {
             this.fixture = fixture
+            callbackException = null
+            invocationCount.set(0)
         }
 
         fun invocations(): Int {

@@ -1,5 +1,6 @@
 package com.agentstore.dependency.model.vo
 
+import com.agentstore.agent.model.vo.AgentResponseFormat
 import java.math.BigInteger
 import java.util.*
 
@@ -13,4 +14,5 @@ data class ResolvedVersion(
     val network: String,
     val asset: String,
     val payTo: String,
+    val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
 )

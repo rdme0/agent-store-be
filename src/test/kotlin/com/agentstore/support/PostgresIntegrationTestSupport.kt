@@ -33,6 +33,9 @@ abstract class PostgresIntegrationTestSupport {
             .substringBefore('?')
         val actualDatabase = jdbcTemplate.queryForObject("select current_database()", String::class.java)
         check(actualDatabase == expectedDatabase) { "Integration test connected to '$actualDatabase', expected '$expectedDatabase'" }
+        check(actualDatabase != "agent_store") {
+            "PostgreSQL integration tests must use the dedicated agent_store_integration database"
+        }
         fixtureCleaner = PostgresFixtureCleaner(jdbcTemplate)
         runtimeFixture = PostgresRuntimeFixture(jdbcTemplate, fixtureCleaner)
     }

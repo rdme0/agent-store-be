@@ -1,5 +1,6 @@
 package com.agentstore.execution.runner
 
+import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
@@ -7,6 +8,8 @@ import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.service.ExecutionLifecycleService
 import com.agentstore.execution.service.ExecutionRunService
+import com.agentstore.execution.validation.AgentOutputFormatException
+import com.agentstore.execution.validation.AgentOutputFormatValidator
 import com.agentstore.payment.exception.PaymentExecutionException
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
@@ -79,11 +82,21 @@ class ExecutionRunner(
                 payTo = version.path("payTo").asText(),
                 body = body,
             ).output
+            AgentOutputFormatValidator.validate(responseFormat(version), output)
             executionLifecycleService.complete(executionId, step.id, output, cost)
         } catch (exception: Exception) {
             logger.error("execution runner failed executionId={} stepId={}", executionId, step.id, exception)
-            val failureCode = (exception as? PaymentExecutionException)?.failureCode ?: "AGENT_INVOCATION_FAILED"
+            val failureCode = when (exception) {
+                is PaymentExecutionException -> exception.failureCode
+                is AgentOutputFormatException -> "AGENT_OUTPUT_FORMAT_INVALID"
+                else -> "AGENT_INVOCATION_FAILED"
+            }
             executionLifecycleService.fail(executionId, step.id, failureCode)
         }
+    }
+
+    private fun responseFormat(version: com.fasterxml.jackson.databind.JsonNode): AgentResponseFormat {
+        return runCatching { AgentResponseFormat.valueOf(version.path("responseFormat").asText()) }
+            .getOrDefault(AgentResponseFormat.JSON)
     }
 }

@@ -24,7 +24,11 @@ class PostgresRuntimeFixture(
     private val jdbcTemplate: JdbcTemplate,
     private val cleaner: PostgresFixtureCleaner,
 ) {
-    fun create(maxBudget: BigInteger = BigInteger.TEN, executionStatus: String = "PENDING"): RuntimeFixture {
+    fun create(
+        maxBudget: BigInteger = BigInteger.TEN,
+        executionStatus: String = "PENDING",
+        responseFormat: String = "JSON",
+    ): RuntimeFixture {
         val userId = cleaner.createStandaloneUser()
         val developerId = UUID.randomUUID()
         val agentId = UUID.randomUUID()
@@ -49,9 +53,10 @@ class PostgresRuntimeFixture(
         )
         cleaner.trackAgent(agentId)
         jdbcTemplate.update(
-            "insert into agent_versions (id, agent_id, semver, status, endpoint, price_atomic, network, asset, pay_to, created_at, updated_at) values (?, ?, '1.0.0', 'ACTIVE'::\"AgentVersionStatus\", 'http://127.0.0.1:9', 1, 'eip155:84532', 'USDC', '0x0000000000000000000000000000000000000001', current_timestamp, current_timestamp)",
+            "insert into agent_versions (id, agent_id, semver, status, endpoint, price_atomic, network, asset, pay_to, response_format, created_at, updated_at) values (?, ?, '1.0.0', 'ACTIVE'::\"AgentVersionStatus\", 'http://127.0.0.1:9', 1, 'eip155:84532', 'USDC', '0x0000000000000000000000000000000000000001', ?::\"AgentResponseFormat\", current_timestamp, current_timestamp)",
             versionId,
-            agentId
+            agentId,
+            responseFormat,
         )
         cleaner.trackAgentVersion(versionId)
         jdbcTemplate.update(
@@ -79,8 +84,12 @@ class PostgresRuntimeFixture(
         return RuntimeFixture(developerId, versionId, quoteId, executionId, rootStepId)
     }
 
-    fun createRootWithDependency(maxBudget: BigInteger = BigInteger.TEN): DependencyRuntimeFixture {
-        val root = create(maxBudget)
+    fun createRootWithDependency(
+        maxBudget: BigInteger = BigInteger.TEN,
+        rootResponseFormat: String = "JSON",
+        childResponseFormat: String = "JSON",
+    ): DependencyRuntimeFixture {
+        val root = create(maxBudget, responseFormat = rootResponseFormat)
         val rootSlug = "root-${root.agentVersionId}"
         val childSlug = "child-${UUID.randomUUID()}"
         val childAgentId = UUID.randomUUID()
@@ -111,14 +120,15 @@ class PostgresRuntimeFixture(
         )
         cleaner.trackAgent(childAgentId)
         jdbcTemplate.update(
-            "insert into agent_versions (id, agent_id, semver, status, endpoint, price_atomic, network, asset, pay_to, created_at, updated_at) values (?, ?, '1.0.0', 'ACTIVE'::\"AgentVersionStatus\", 'http://fixture/child', 1, 'eip155:84532', 'USDC', ?, current_timestamp, current_timestamp)",
+            "insert into agent_versions (id, agent_id, semver, status, endpoint, price_atomic, network, asset, pay_to, response_format, created_at, updated_at) values (?, ?, '1.0.0', 'ACTIVE'::\"AgentVersionStatus\", 'http://fixture/child', 1, 'eip155:84532', 'USDC', ?, ?::\"AgentResponseFormat\", current_timestamp, current_timestamp)",
             childVersionId,
             childAgentId,
-            receiver
+            receiver,
+            childResponseFormat,
         )
         cleaner.trackAgentVersion(childVersionId)
         val snapshot = """
-            {"version":{"id":"${root.agentVersionId}","agentSlug":"$rootSlug","endpoint":"http://fixture/root","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver"},"dependencies":[{"maxPriceAtomic":"1","resolved":{"version":{"id":"$childVersionId","agentSlug":"$childSlug","endpoint":"http://fixture/child","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver"},"dependencies":[]}}]}
+            {"version":{"id":"${root.agentVersionId}","agentSlug":"$rootSlug","endpoint":"http://fixture/root","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver","responseFormat":"$rootResponseFormat"},"dependencies":[{"maxPriceAtomic":"1","resolved":{"version":{"id":"$childVersionId","agentSlug":"$childSlug","endpoint":"http://fixture/child","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver","responseFormat":"$childResponseFormat"},"dependencies":[]}}]}
         """.trimIndent()
         jdbcTemplate.update(
             "update execution_quotes set snapshot = ?::jsonb, max_cost_atomic = ? where id = ?",

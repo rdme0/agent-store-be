@@ -48,11 +48,9 @@ agent-store:
   service-name: ${SERVICE_NAME:agent-store-api}
   api-version: ${API_VERSION:0.1.0}
   runtime-callback-base-url: ${RUNTIME_CALLBACK_BASE_URL:http://127.0.0.1:8080}
-  cors-origin: ${CORS_ORIGIN:http://localhost:5173}
+  cors-origins: ${CORS_ORIGINS:http://localhost:*}
   runtime-token-secret: ${RUNTIME_TOKEN_SECRET:agent-store-development-runtime-secret}
   database-url: ${DATABASE_URL:postgresql://postgres:postgres@localhost:5432/agent_store?schema=public}
-  integration-tests-enabled: ${RUN_POSTGRES_INTEGRATION_TESTS:false}
-  exclusive-maintenance-enabled: ${SPRING_EXCLUSIVE_MAINTENANCE:false}
   payment-mode: ${PAYMENT_MODE:simulated}
   x402-bridge-url: ${X402_BRIDGE_URL:http://127.0.0.1:8091}
   x402-bridge-secret: ${X402_BRIDGE_SECRET:}

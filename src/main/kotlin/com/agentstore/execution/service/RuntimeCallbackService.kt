@@ -15,6 +15,9 @@ import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.token.InvocationTokenService
+import com.agentstore.execution.validation.AgentOutputFormatException
+import com.agentstore.execution.validation.AgentOutputFormatValidator
+import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.payment.exception.PaymentExecutionException
 import com.agentstore.revenue.model.vo.RevenueType
 import com.fasterxml.jackson.databind.JsonNode
@@ -30,6 +33,7 @@ class RuntimeCallbackService(
     private val stepRepository: ExecutionStepRepository,
     private val quoteService: QuoteService,
     private val stepService: ExecutionStepService,
+    private val executionLifecycleService: ExecutionLifecycleService,
     private val admissionService: RuntimeCallbackAdmissionService,
     private val paymentOrchestrator: ExecutionPaymentOrchestrator,
     private val eventService: ExecutionEventService,
@@ -107,6 +111,7 @@ class RuntimeCallbackService(
                 RevenueType.DEPENDENCY,
                 maxPrice
             ).output
+            AgentOutputFormatValidator.validate(responseFormat(target), output)
             stepService.complete(child.id, output, cost)
             eventService.append(
                 executionId,
@@ -117,10 +122,22 @@ class RuntimeCallbackService(
         } catch (exception: PaymentExecutionException) {
             stepService.fail(child.id, exception.failureCode)
             throw exception
+        } catch (exception: AgentOutputFormatException) {
+            // A format mismatch is discovered after payment invocation. Terminalize the
+            // owning execution through the lifecycle service so both the dependency step
+            // and execution retain the explicit failure code while payment evidence stays
+            // untouched for reconciliation/audit.
+            executionLifecycleService.fail(executionId, child.id, "AGENT_OUTPUT_FORMAT_INVALID")
+            throw DomainClientException(ErrorCode.DEPENDENCY_INVOCATION_FAILED)
         } catch (exception: Exception) {
             stepService.fail(child.id, "DEPENDENCY_INVOCATION_FAILED")
             throw DomainClientException(ErrorCode.DEPENDENCY_INVOCATION_FAILED)
         }
+    }
+
+    private fun responseFormat(version: JsonNode): AgentResponseFormat {
+        return runCatching { AgentResponseFormat.valueOf(version.path("responseFormat").asText()) }
+            .getOrDefault(AgentResponseFormat.JSON)
     }
 
     private fun jsonValue(value: JsonNode?): Any? {

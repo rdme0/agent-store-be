@@ -104,7 +104,8 @@ class DependencyResolver(
             version.priceAtomic,
             version.network,
             version.asset,
-            version.payTo
+            version.payTo,
+            version.responseFormat
         )
     }
 

@@ -78,6 +78,7 @@ class SchemaCompatibilityValidator(dataSource: DataSource) {
             .replace("'created'::\"executionstepstatus\"", "created")
             .replace("'required'::\"paymentattemptstatus\"", "required")
             .replace("'simulated'::\"paymentmode\"", "simulated")
+            .replace("'json'::\"agentresponseformat\"", "json")
     }
 
     private companion object {
@@ -97,6 +98,7 @@ class SchemaCompatibilityValidator(dataSource: DataSource) {
         )
         val enums = setOf(
             "AgentVersionStatus",
+            "AgentResponseFormat",
             "ExecutionStatus",
             "ExecutionStepStatus",
             "PaymentAttemptStatus",
@@ -153,6 +155,7 @@ class SchemaCompatibilityValidator(dataSource: DataSource) {
                     "network|text|NO|",
                     "asset|text|NO|",
                     "pay_to|text|NO|",
+                    "response_format|AgentResponseFormat|NO|json",
                     "created_at|timestamp|NO|current_timestamp",
                     "updated_at|timestamp|NO|"
                 )

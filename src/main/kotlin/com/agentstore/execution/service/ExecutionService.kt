@@ -1,5 +1,6 @@
 package com.agentstore.execution.service
 
+import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
@@ -16,6 +17,7 @@ import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.runner.ExecutionRunner
 import com.agentstore.payment.service.PaymentService
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.JsonNode
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionSynchronization
@@ -102,6 +104,7 @@ class ExecutionService(
     }
 
     private fun toResponse(execution: Execution, steps: List<ExecutionStep>): ExecutionResponse {
+        val responseFormats = responseFormats(quoteService.snapshot(execution.quoteId))
         return ExecutionResponse(
             execution.id,
             execution.quoteId,
@@ -116,11 +119,32 @@ class ExecutionService(
                 ExecutionStepResponse.from(
                     step,
                     paymentService.findAllByStepId(step.id),
-                    jsonValue(step.output)
+                    jsonValue(step.output),
+                    responseFormats[step.agentVersionId] ?: AgentResponseFormat.JSON,
                 )
             },
             execution.createdAt,
             execution.updatedAt,
         )
+    }
+
+    private fun responseFormats(snapshot: JsonNode): Map<UUID, AgentResponseFormat> {
+        val result = mutableMapOf<UUID, AgentResponseFormat>()
+
+        fun visit(node: JsonNode) {
+            val version = node.path("version")
+            val id = version.path("id").asText().takeIf { it.isNotBlank() }?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            if (id != null) {
+                result[id] = runCatching { AgentResponseFormat.valueOf(version.path("responseFormat").asText()) }
+                    .getOrDefault(AgentResponseFormat.JSON)
+            }
+            node.path("dependencies").forEach { dependency ->
+                val resolved = dependency.path("resolved")
+                if (resolved.isObject) visit(resolved)
+            }
+        }
+
+        visit(snapshot)
+        return result
     }
 }

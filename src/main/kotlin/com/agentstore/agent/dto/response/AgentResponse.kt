@@ -2,6 +2,7 @@ package com.agentstore.agent.dto.response
 
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
+import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
@@ -20,6 +21,8 @@ data class AgentVersionResponse(
     val network: String,
     val asset: String,
     val payTo: String,
+    @field:Schema(allowableValues = ["TEXT", "MARKDOWN", "STRUCTURED", "JSON"])
+    val responseFormat: AgentResponseFormat,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
@@ -35,6 +38,7 @@ data class AgentVersionResponse(
                 version.network,
                 version.asset,
                 version.payTo,
+                version.responseFormat,
                 version.createdAt,
                 version.updatedAt
             )
@@ -49,12 +53,19 @@ data class AgentResponse(
     val slug: String,
     val name: String,
     val description: String,
+    @field:Schema(minimum = "0")
+    val dependencyCount: Int,
     val versions: List<AgentVersionResponse>,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
     companion object {
-        fun from(agent: Agent, developerName: String, versions: List<AgentVersion>): AgentResponse {
+        fun from(
+            agent: Agent,
+            developerName: String,
+            dependencyCount: Int,
+            versions: List<AgentVersion>
+        ): AgentResponse {
             return AgentResponse(
                 agent.id,
                 agent.developerId,
@@ -62,6 +73,7 @@ data class AgentResponse(
                 agent.slug,
                 agent.name,
                 agent.description,
+                dependencyCount,
                 versions.sortedBy { it.createdAt }.map(AgentVersionResponse::from),
                 agent.createdAt,
                 agent.updatedAt
@@ -72,5 +84,5 @@ data class AgentResponse(
 
 data class AgentListResponse(
     val items: List<AgentResponse>,
-    @field:Schema(nullable = false, format = "uuid") val nextCursor: UUID? = null,
+    @field:Schema(nullable = false, description = "서명된 opaque cursor") val nextCursor: String? = null,
 )

@@ -1,5 +1,6 @@
 package com.agentstore.agent.dto.request
 
+import com.agentstore.agent.model.vo.AgentResponseFormat
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
@@ -16,6 +17,7 @@ data class CreateAgentRequest(
     @field:NotBlank @field:Size(max = 128) val network: String,
     @field:NotBlank @field:Size(max = 128) val asset: String,
     @field:NotBlank @field:Size(max = 128) val payTo: String,
+    val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
 )
 
 data class UpdateAgentRequest(
@@ -34,4 +36,5 @@ data class CreateAgentVersionRequest(
     @field:NotBlank @field:Size(max = 128) val network: String,
     @field:NotBlank @field:Size(max = 128) val asset: String,
     @field:NotBlank @field:Size(max = 128) val payTo: String,
+    val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
 )

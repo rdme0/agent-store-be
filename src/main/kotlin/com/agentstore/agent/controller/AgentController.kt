@@ -6,14 +6,17 @@ import com.agentstore.agent.dto.request.UpdateAgentRequest
 import com.agentstore.agent.dto.response.AgentListResponse
 import com.agentstore.agent.dto.response.AgentResponse
 import com.agentstore.agent.dto.response.AgentVersionResponse
+import com.agentstore.agent.model.vo.AgentListSort
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.dto.response.CommonResponse
 import com.agentstore.common.web.AgentStoreErrorResponses
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
 import java.util.*
@@ -26,10 +29,16 @@ class AgentController(private val service: AgentService) {
     @Operation(operationId = "getApiAgents", summary = "List agents")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun list(
+        @Parameter(description = "페이지당 항목 수", example = "20")
         @RequestParam(required = false, defaultValue = "20") @Min(1) @Max(50) limit: Int,
-        @RequestParam(required = false) cursor: UUID?,
+        @Parameter(description = "이전 응답의 서명된 nextCursor")
+        @RequestParam(required = false) cursor: String?,
+        @Parameter(description = "Agent 이름 또는 설명 검색어", example = "risk")
+        @RequestParam(required = false) @Size(max = 100) q: String?,
+        @Parameter(description = "정렬 기준", example = "NEWEST")
+        @RequestParam(required = false, defaultValue = "NEWEST") sort: AgentListSort,
     ): CommonResponse<AgentListResponse> {
-        return CommonResponse.success(service.list(limit, cursor))
+        return CommonResponse.success(service.list(limit, cursor, q, sort))
     }
 
     @GetMapping("/agents/{slug}")

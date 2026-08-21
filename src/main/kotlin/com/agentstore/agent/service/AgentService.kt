@@ -10,6 +10,7 @@ import com.agentstore.agent.exception.AgentNotFoundException
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.entity.Developer
+import com.agentstore.agent.model.vo.AgentListSort
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
@@ -19,6 +20,7 @@ import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import jakarta.transaction.Transactional
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import java.math.BigInteger
 import java.util.*
@@ -29,6 +31,7 @@ class AgentService(
     private val agentVersionRepository: AgentVersionRepository,
     private val developerRepository: DeveloperRepository,
     private val endpointPolicy: AgentEndpointPolicy,
+    private val cursorCodec: AgentListCursorCodec,
 ) {
     /** Agent-owned read boundary used by dependency, quote and revenue use cases. */
     fun requireAgent(id: UUID): Agent {
@@ -92,24 +95,26 @@ class AgentService(
     }
 
     @Transactional
-    fun list(limit: Int, cursor: UUID?): AgentListResponse {
+    fun list(limit: Int, cursor: String?, query: String?, sort: AgentListSort): AgentListResponse {
         requireLimit(limit)
-        val active = agentRepository.findAllByOrderByCreatedAtDesc()
-            .map { agent -> agent to activeVersions(agent.id) }
-            .filter { (_, versions) -> versions.isNotEmpty() }
-            .filter { cursor == null || it.first.id.toString() < cursor.toString() }
-        val page = active.take(limit + 1)
+        val normalizedQuery = normalizeQuery(query)
+        val decodedCursor = cursor?.let { cursorCodec.decode(it, normalizedQuery, sort) }
+        val page = marketplaceAgents(normalizedQuery, sort, decodedCursor, limit)
+        val visibleItems = page.take(limit)
+        val dependencyCounts = dependencyCounts(visibleItems.map { agent -> agent.id })
         return AgentListResponse(
-            items = page.take(limit)
-                .map { (agent, versions) -> AgentResponse.from(agent, developerName(agent.developerId), versions) },
-            nextCursor = page.getOrNull(limit)?.first?.id,
+            items = visibleItems
+                .map { agent -> marketplaceResponse(agent, dependencyCounts[agent.id] ?: 0) },
+            nextCursor = visibleItems.lastOrNull()
+                ?.takeIf { page.size > limit }
+                ?.let { agent -> cursorCodec.encode(agent, normalizedQuery, sort) },
         )
     }
 
     @Transactional
     fun getBySlug(slug: String): AgentResponse {
         return agentRepository.findBySlug(slug)?.let { agent ->
-            AgentResponse.from(agent, developerName(agent.developerId), versions(agent.id))
+            response(agent, dependencyCounts(listOf(agent.id))[agent.id] ?: 0)
         } ?: throw AgentNotFoundException()
     }
 
@@ -136,10 +141,11 @@ class AgentService(
                     BigInteger(request.priceAtomic),
                     request.network,
                     request.asset,
-                    request.payTo
+                    request.payTo,
+                    request.responseFormat
                 )
             )
-            AgentResponse.from(saved, developer.displayName, versions(saved.id))
+            AgentResponse.from(saved, developer.displayName, 0, versions(saved.id))
         } catch (exception: DataIntegrityViolationException) {
             throw DomainClientException(ErrorCode.AGENT_ALREADY_EXISTS)
         }
@@ -152,7 +158,7 @@ class AgentService(
         }
         val agent = requireAgent(id)
         agent.updateMetadata(request.name ?: agent.name, request.description ?: agent.description)
-        return AgentResponse.from(agent, developerName(agent.developerId), versions(agent.id))
+        return response(agent, dependencyCounts(listOf(agent.id))[agent.id] ?: 0)
     }
 
     @Transactional
@@ -178,7 +184,8 @@ class AgentService(
                 BigInteger(request.priceAtomic),
                 request.network,
                 request.asset,
-                request.payTo
+                request.payTo,
+                request.responseFormat
             )
         )
         return AgentVersionResponse.from(version)
@@ -241,6 +248,66 @@ class AgentService(
         if (limit !in 1..50) {
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
+    }
+
+    private fun marketplaceAgents(
+        query: String?,
+        sort: AgentListSort,
+        cursor: AgentListCursorPayload?,
+        limit: Int,
+    ): List<Agent> {
+        val cursorId = cursor?.let { payload -> parseCursorId(payload.id) }
+        val pageable = PageRequest.of(0, limit + 1)
+        return when (sort) {
+            AgentListSort.NEWEST -> agentRepository.findMarketplaceAgentsByCreatedAtDesc(
+                query,
+                AgentVersionStatus.ACTIVE,
+                cursor != null,
+                cursor?.createdAt,
+                cursorId,
+                pageable,
+            )
+            AgentListSort.NAME_ASC -> agentRepository.findMarketplaceAgentsByNameAsc(
+                query,
+                AgentVersionStatus.ACTIVE,
+                cursor != null,
+                cursor?.nameKey,
+                cursorId,
+                pageable,
+            )
+        }
+    }
+
+    private fun normalizeQuery(query: String?): String? {
+        if (query != null && query.length > 100) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        return query?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun parseCursorId(id: String): UUID {
+        return try {
+            UUID.fromString(id)
+        } catch (_: IllegalArgumentException) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+    }
+
+    private fun dependencyCounts(agentIds: Collection<UUID>): Map<UUID, Int> {
+        if (agentIds.isEmpty()) {
+            return emptyMap()
+        }
+        return agentRepository.countDistinctDependenciesByAgentIds(agentIds).associate { projection ->
+            projection.agentId to projection.dependencyCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+    }
+
+    private fun response(agent: Agent, dependencyCount: Int): AgentResponse {
+        return AgentResponse.from(agent, developerName(agent.developerId), dependencyCount, versions(agent.id))
+    }
+
+    private fun marketplaceResponse(agent: Agent, dependencyCount: Int): AgentResponse {
+        return AgentResponse.from(agent, developerName(agent.developerId), dependencyCount, activeVersions(agent.id))
     }
 
     private fun developerName(id: UUID): String {
