@@ -11,3 +11,5 @@ node/**/test/*.d.ts
 node/**/*.tsbuildinfo
 node/.env
 out/
+.kotlin
+backups
