@@ -1,7 +1,8 @@
 pluginManagement {
-    def kotlinVersion = '2.3.20'
+    def kotlinVersion = '2.3.21'
     def springBootVersion = '4.0.5'
     def dependencyManagementVersion = '1.1.7'
+    def detektVersion = '2.0.0-alpha.3'
 
     plugins {
         id 'org.jetbrains.kotlin.jvm' version kotlinVersion
@@ -10,6 +11,7 @@ pluginManagement {
         id 'org.jetbrains.kotlin.plugin.lombok' version kotlinVersion
         id 'org.springframework.boot' version springBootVersion
         id 'io.spring.dependency-management' version dependencyManagementVersion
+        id 'dev.detekt' version detektVersion
     }
 }
 

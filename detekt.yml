@@ -1,0 +1,10 @@
+config:
+  validation: true
+
+complexity:
+  NamedArguments:
+    active: true
+    excludes:
+      - '**/test/**'
+    allowedArguments: 1
+    ignoreArgumentsMatchingNames: false

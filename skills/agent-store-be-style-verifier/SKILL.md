@@ -1,47 +1,57 @@
 ---
 name: agent-store-be-style-verifier
-description: Independently review AgentStore Kotlin/Spring production diffs for eco-knock-be-central package style, JPA boundaries, migrations, runtime invariants, SSE, and payment safety without editing.
+description: Independently verify AgentStore Kotlin/Spring readability, layering, configuration, Flyway, runtime, SSE, and payment invariants without editing.
 ---
 
 # AgentStore BE Style Verifier
 
-Read `AI.md`, this skill, the maintainer skill, and the closest reference precedent. Review only the developer-owned
-diff; preserve unrelated dirty paths. Never edit, format, install, generate, migrate, snapshot-update, or start the
-application. Read-only `lint`, `typecheck/classes`, existing tests, `bootJar`, and `git diff --check` are allowed when
-they do not rewrite files. Compare `git status --short` before and after any command.
+Read `AI.md`, `HANDOFF.md`, this skill, the maintainer skill, and the closest reference precedent.
+Review only developer-owned diff paths. Never edit, format, install, generate, migrate, update a
+snapshot, or start the app. Read-only style/classes/tests/bootJar/diff checks are allowed. Compare
+`git status --short` before and after commands.
 
-Require the original requirement, risk classification, invariants, complete HIGH_RISK failure matrix and row-to-test
-mapping, owned/pre-existing dirty paths, contract/schema changes, exact checks/results, assumptions, and unrun checks.
-Missing matrix rows or test mappings are blocking only for HIGH_RISK changes.
+Require the original requirement, risk classification, invariants, HIGH_RISK failure matrix and
+row-to-test mapping, owned/pre-existing paths, contract/schema changes, checks, assumptions, and
+unrun checks. Missing HIGH_RISK rows are blocking.
 
-Review in two passes:
+Review in three passes:
 
-1. Check matrix, state transitions, trust boundaries, transaction/lock order, startup readiness, payment crash windows,
-   recovery, callback/terminal races, and SSE replay/live lifecycle.
-2. Map every matrix row to the actual diff/tests, then inspect package roles, Java/Kotlin boundaries, constructor
-   injection, controller thinness, cross-domain Repository access, transaction ownership, JPA/Flyway schema, OpenAPI,
-   duplicate/stale paths, and dirty-path preservation.
+1. Check state transitions, trust boundaries, transaction/lock order, readiness, payment crash
+   windows, recovery, callback/terminal races, and SSE replay/live lifecycle.
+2. Map matrix rows to diff/tests; inspect package roles, controller thinness, cross-domain repository
+   access, transaction ownership, JPA/Flyway, OpenAPI, stale paths, and dirty-path preservation.
+3. Run `gradlew.bat verifyProjectStyle`, then independently inspect what a text gate cannot prove.
+   Named arguments are required; only convention-identical annotations are redundant.
 
-## Structural rules
+## Blocking structural and style rules
 
-- A domain creates only the role packages it actually uses; do not require every domain to contain every layer.
-- `service` contains use cases; resolvers, runners, clients, event components, tokens, and orchestrators stay in their
-  role packages.
-- HTTP DTOs are in `dto/request` or `dto/response`; internal transport/projection DTOs are in `dto/internal`; grouped
-  DTOs are allowed when closely related.
-- Kotlin/Java roles follow the maintainer boundary and every JPA entity extends `BaseEntity`.
-- Ordinary services do not inject another domain's Repository. Cross-domain operations must cross a public service or
-  explicit orchestrator boundary. Controllers never inject repositories.
-- Public JSON controllers must return the `CommonResponse<T>` envelope; failure bodies must use `isSuccess=false`,
-  `message`, `errorCode`, and `result=null`, with trace correlation only in `X-Trace-Id`.
-- Prefer scalar UUID FKs and service boundaries. `@ManyToOne` is discouraged and is a finding unless the diff includes
-  a concrete schema/cardinality/use-case justification, LAZY mapping, and no entity serialization or boundary bypass.
-- One primary production class per file is the default; closely related DTO groups are the exception. Moved classes must
-  not remain duplicated at the old path.
+- `service` owns use cases/domain decisions; `client` owns transport. Prefer private service
+  functions for cohesive one-use decisions. Reject both catch-all classes and invented one-use
+  `Policy`/`Evaluator`/`Verifier`/`Helper` layers.
+- Controllers bind related query parameters through validated request DTOs. Wire enum values are
+  lowercase snake_case. Check OpenAPI and frontend consumers for every contract change.
+- Every Kotlin function has a block body. Every companion is at the top and contains only constants,
+  loggers, factories, or stateless converters.
+- Kotlin calls/constructors with two or more arguments use named arguments. Java calls are the sole
+  language-level exception and remain vertically formatted.
+- Wildcard imports and body-qualified types/calls are blocking. Repeated byte literals use named
+  constants. Unused helper parameters and one-line delegation wrappers are blocking.
+- Required configuration has no constructor default and no `${ENV:default}` or `${ENV:-default}`.
+  Standard datasource properties replace custom URL parsers. Only Flyway SQL belongs to production
+  migration support; no production `common/migration` package or integration-profile YAML remains.
+- Common responses, exceptions, error codes, and the global exception handler are Kotlin. Internal
+  DTOs end in `Dto`; HTTP types end in `Request` or `Response`.
+- Remove redundant repository `@Param` and convention-identical entity `@Column(name)` metadata.
+  Keep metadata that changes actual binding or schema semantics.
+- Preserve blank-line breathing room. Dense validation/transformation/side-effect chains are a
+  readability finding even if compilation succeeds.
+- Public JSON uses the `CommonResponse<T>` envelope and trace correlation only in `X-Trace-Id`.
+- Ordinary services never inject another domain repository. Controllers never inject repositories.
+- Every JPA entity extends `BaseEntity`; moved classes do not remain duplicated at old paths.
 
-Report every blocking finding together, grouped by invariant family, in this form:
+Report every blocking finding together, grouped by invariant family:
 
 `[severity] [family] file:line — invariant/matrix row — violated maintainer rule — adjacent paths reviewed — refactor scope — automatic-refactor: yes|no`
 
-Finish with `PASS`, `REFRACTOR REQUIRED`, or `RISK REMAINS`. A second finding in one family requires a family-level
-redesign; a third is recorded as a workflow failure, not waived.
+Finish with `PASS`, `REFRACTOR REQUIRED`, or `RISK REMAINS`. A second finding in one family requires
+a family-level redesign; a third is a workflow failure, not waived.
