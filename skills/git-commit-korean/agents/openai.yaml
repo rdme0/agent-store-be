@@ -1,4 +1,7 @@
 interface:
-  display_name: "Korean Commit Maintainer"
-  short_description: "Create small Korean commits matching BE history."
-  default_prompt: "Use $git-commit-korean to organize and commit the AgentStore backend diff in Korean."
+  display_name: "Git Commit Korean"
+  short_description: "작고 논리적인 한국어 커밋 단위로 나눠 커밋합니다."
+  default_prompt: "Use $git-commit-korean to inspect the diff, split it into the smallest logical commits, and create Korean commit messages that match this repository."
+
+policy:
+  allow_implicit_invocation: true
