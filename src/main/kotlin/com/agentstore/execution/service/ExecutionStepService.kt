@@ -1,12 +1,14 @@
 package com.agentstore.execution.service
 
+import com.agentstore.execution.model.entity.ExecutionStep
 import com.agentstore.execution.model.vo.ExecutionStepStatus
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
+import java.math.BigInteger
+import java.util.UUID
 import org.springframework.stereotype.Service
-import java.util.*
 
 @Service
 class ExecutionStepService(
@@ -54,7 +56,7 @@ class ExecutionStepService(
     }
 
     @Transactional
-    fun complete(stepId: UUID, output: JsonNode, costAtomic: java.math.BigInteger) {
+    fun complete(stepId: UUID, output: JsonNode, costAtomic: BigInteger) {
         val step = repository.findByIdForUpdate(stepId) ?: error("execution_step_not_found")
         if (step.status != ExecutionStepStatus.RUNNING && step.status != ExecutionStepStatus.COMPLETED) {
             return
@@ -72,12 +74,15 @@ class ExecutionStepService(
     }
 
     fun callPath(stepId: UUID): List<String> {
-        return repository.findById(stepId).map { step -> step.callPath.map { it.asText() } }.orElse(emptyList())
+        return repository.findById(stepId).map { step -> step.callPath.map { it.asText() } }
+            .orElse(emptyList())
     }
 
     fun isPaymentSettled(stepId: UUID): Boolean {
         return repository.findById(stepId).map { step ->
-            step.status == ExecutionStepStatus.PAYMENT_SETTLED || step.status == ExecutionStepStatus.RUNNING || step.status == ExecutionStepStatus.COMPLETED
+            step.status == ExecutionStepStatus.PAYMENT_SETTLED ||
+                step.status == ExecutionStepStatus.RUNNING ||
+                step.status == ExecutionStepStatus.COMPLETED
         }.orElse(false)
     }
 
@@ -88,10 +93,14 @@ class ExecutionStepService(
         agentVersionId: UUID,
         callPath: List<String>,
         idempotencyKey: String
-    ): com.agentstore.execution.model.entity.ExecutionStep {
-        repository.findByParentStepIdAndIdempotencyKey(parentStepId, idempotencyKey)?.let { return it }
+    ): ExecutionStep {
+        repository.findByParentStepIdAndIdempotencyKey(
+            parentStepId = parentStepId,
+            idempotencyKey = idempotencyKey,
+        )
+            ?.let { return it }
         return repository.save(
-            com.agentstore.execution.model.entity.ExecutionStep(
+            ExecutionStep(
                 UUID.randomUUID(),
                 executionId,
                 parentStepId,

@@ -1,7 +1,7 @@
 package com.agentstore.agent.resolver
 
-import org.springframework.stereotype.Component
 import java.net.InetAddress
+import org.springframework.stereotype.Component
 
 @Component
 class DnsAgentEndpointAddressResolver : AgentEndpointAddressResolver {

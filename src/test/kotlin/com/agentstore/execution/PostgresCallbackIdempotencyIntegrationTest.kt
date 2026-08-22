@@ -2,13 +2,13 @@ package com.agentstore.execution
 
 import com.agentstore.execution.guard.RuntimeCallbackAdmissionService
 import com.agentstore.support.PostgresIntegrationTestSupport
-import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
-import org.springframework.beans.factory.annotation.Autowired
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 
 @EnabledIfEnvironmentVariable(named = "RUN_POSTGRES_INTEGRATION_TESTS", matches = "true")
 @EnabledIfEnvironmentVariable(named = "SPRING_EXCLUSIVE_MAINTENANCE", matches = "true")

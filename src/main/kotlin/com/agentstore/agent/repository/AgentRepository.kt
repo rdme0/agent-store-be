@@ -2,11 +2,11 @@ package com.agentstore.agent.repository
 
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.vo.AgentVersionStatus
+import java.time.Instant
+import java.util.UUID
 import org.springframework.data.domain.Pageable
-import org.springframework.data.repository.query.Param
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
-import java.util.*
 
 interface AgentRepository : JpaRepository<Agent, UUID> {
     fun findBySlug(slug: String): Agent?
@@ -38,11 +38,11 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
         """
     )
     fun findMarketplaceAgentsByCreatedAtDesc(
-        @Param("query") query: String?,
-        @Param("status") status: AgentVersionStatus,
-        @Param("hasCursor") hasCursor: Boolean,
-        @Param("cursorCreatedAt") cursorCreatedAt: java.time.Instant?,
-        @Param("cursorId") cursorId: UUID?,
+        query: String?,
+        status: AgentVersionStatus,
+        hasCursor: Boolean,
+        cursorCreatedAt: Instant?,
+        cursorId: UUID?,
         pageable: Pageable,
     ): List<Agent>
 
@@ -73,11 +73,11 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
         """
     )
     fun findMarketplaceAgentsByNameAsc(
-        @Param("query") query: String?,
-        @Param("status") status: AgentVersionStatus,
-        @Param("hasCursor") hasCursor: Boolean,
-        @Param("cursorNameKey") cursorNameKey: String?,
-        @Param("cursorId") cursorId: UUID?,
+        query: String?,
+        status: AgentVersionStatus,
+        hasCursor: Boolean,
+        cursorNameKey: String?,
+        cursorId: UUID?,
         pageable: Pageable,
     ): List<Agent>
 
@@ -91,6 +91,6 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
         """
     )
     fun countDistinctDependenciesByAgentIds(
-        @Param("agentIds") agentIds: Collection<UUID>,
+        agentIds: Collection<UUID>,
     ): List<AgentDependencyCountProjection>
 }

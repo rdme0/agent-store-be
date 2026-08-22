@@ -2,8 +2,12 @@ package com.agentstore.dependency.dto.request
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import io.swagger.v3.oas.annotations.media.Schema
-import jakarta.validation.constraints.*
-import java.util.*
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
+import java.util.UUID
 
 data class CreateDependencyRequest(
     val targetAgentId: UUID,

@@ -10,8 +10,8 @@ import com.agentstore.payment.service.PaymentService
 import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.revenue.service.RevenueSettlementService
 import jakarta.transaction.Transactional
+import java.util.UUID
 import org.springframework.stereotype.Component
-import java.util.*
 
 /** Atomically projects a journal-backed external settlement; it never invokes a payer. */
 @Component
@@ -29,8 +29,10 @@ class ExecutionPaymentRecoveryProjectionOrchestrator(
         val attempt = paymentService.find(attemptId)
         val step = stepRepository.findById(attempt.executionStepId)
             .orElseThrow { IllegalStateException("execution_step_not_found") }
-        val execution = executionRepository.findByIdForUpdate(step.executionId) ?: error("execution_not_found")
-        val lockedStep = stepRepository.findByIdForUpdate(step.id) ?: error("execution_step_not_found")
+        val execution =
+            executionRepository.findByIdForUpdate(step.executionId) ?: error("execution_not_found")
+        val lockedStep =
+            stepRepository.findByIdForUpdate(step.id) ?: error("execution_step_not_found")
         val lockedAttempt = paymentService.findForUpdate(attemptId)
         if (lockedAttempt.status != PaymentAttemptStatus.SETTLED) {
             return false
@@ -39,7 +41,10 @@ class ExecutionPaymentRecoveryProjectionOrchestrator(
         if (lockedAttempt.projectedAt != null) {
             return false
         }
-        budgetGuard.reconcile(execution.id, lockedAttempt.amountAtomic)
+        budgetGuard.reconcile(
+            executionId = execution.id,
+            amount = lockedAttempt.amountAtomic,
+        )
         if (lockedStep.status == ExecutionStepStatus.PAYMENT_REQUIRED) {
             lockedStep.paymentSettled()
             stepRepository.save(lockedStep)
@@ -49,16 +54,18 @@ class ExecutionPaymentRecoveryProjectionOrchestrator(
         } else {
             RevenueType.DEPENDENCY
         }
-        revenueSettlementService.record(lockedAttempt, type)
+        revenueSettlementService.record(attempt = lockedAttempt, type = type)
         paymentService.markProjected(lockedAttempt.id)
         eventService.append(
-            execution.id, "PAYMENT_SETTLED", mapOf(
+            executionId = execution.id,
+            type = "PAYMENT_SETTLED",
+            payload = mapOf(
                 "stepId" to lockedStep.id,
                 "paymentAttemptId" to lockedAttempt.id,
                 "amountAtomic" to lockedAttempt.amountAtomic.toString(),
                 "transactionHash" to lockedAttempt.transactionHash,
                 "recovered" to true,
-            )
+            ),
         )
         return true
     }

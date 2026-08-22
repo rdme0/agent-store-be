@@ -2,11 +2,12 @@ package com.agentstore.execution.service
 
 import com.agentstore.execution.event.ExecutionEventService
 import com.agentstore.execution.model.vo.ExecutionStatus
+import com.agentstore.execution.model.vo.ExecutionStepStatus
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import jakarta.transaction.Transactional
+import java.util.UUID
 import org.springframework.stereotype.Service
-import java.util.*
 
 @Service
 class ExecutionRunService(
@@ -33,7 +34,11 @@ class ExecutionRunService(
         }
         execution.start()
         executionRepository.save(execution)
-        eventService.append(executionId, "EXECUTION_RUNNING", mapOf("stepId" to stepId))
+        eventService.append(
+            executionId = executionId,
+            type = "EXECUTION_RUNNING",
+            payload = mapOf("stepId" to stepId),
+        )
         return true
     }
 
@@ -56,7 +61,9 @@ class ExecutionRunService(
         execution.fail(failureCode)
         executionRepository.save(execution)
         stepRepository.findAllByExecutionIdOrderByCreatedAtAsc(executionId)
-            .filter { it.status != com.agentstore.execution.model.vo.ExecutionStepStatus.COMPLETED && it.status != com.agentstore.execution.model.vo.ExecutionStepStatus.FAILED }
+            .filter { step ->
+                step.status != ExecutionStepStatus.COMPLETED && step.status != ExecutionStepStatus.FAILED
+            }
             .forEach { it.fail(failureCode); stepRepository.save(it) }
     }
 }

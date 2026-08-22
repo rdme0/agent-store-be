@@ -4,7 +4,7 @@ import com.agentstore.agent.model.vo.AgentResponseFormat
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
-import java.util.*
+import java.util.UUID
 
 data class CreateAgentRequest(
     val developerId: UUID,

@@ -6,7 +6,7 @@ import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 
 data class AgentVersionResponse(
     val id: UUID,
@@ -29,18 +29,18 @@ data class AgentVersionResponse(
     companion object {
         fun from(version: AgentVersion): AgentVersionResponse {
             return AgentVersionResponse(
-                version.id,
-                version.agentId,
-                version.semver,
-                version.status,
-                version.endpoint,
-                version.priceAtomic.toString(),
-                version.network,
-                version.asset,
-                version.payTo,
-                version.responseFormat,
-                version.createdAt,
-                version.updatedAt
+                id = version.id,
+                agentId = version.agentId,
+                semver = version.semver,
+                status = version.status,
+                endpoint = version.endpoint,
+                priceAtomic = version.priceAtomic.toString(),
+                network = version.network,
+                asset = version.asset,
+                payTo = version.payTo,
+                responseFormat = version.responseFormat,
+                createdAt = version.createdAt,
+                updatedAt = version.updatedAt,
             )
         }
     }
@@ -67,16 +67,16 @@ data class AgentResponse(
             versions: List<AgentVersion>
         ): AgentResponse {
             return AgentResponse(
-                agent.id,
-                agent.developerId,
-                developerName,
-                agent.slug,
-                agent.name,
-                agent.description,
-                dependencyCount,
-                versions.sortedBy { it.createdAt }.map(AgentVersionResponse::from),
-                agent.createdAt,
-                agent.updatedAt
+                id = agent.id,
+                developerId = agent.developerId,
+                developerName = developerName,
+                slug = agent.slug,
+                name = agent.name,
+                description = agent.description,
+                dependencyCount = dependencyCount,
+                versions = versions.sortedBy { version -> version.createdAt }.map(AgentVersionResponse::from),
+                createdAt = agent.createdAt,
+                updatedAt = agent.updatedAt,
             )
         }
     }
@@ -84,5 +84,8 @@ data class AgentResponse(
 
 data class AgentListResponse(
     val items: List<AgentResponse>,
-    @field:Schema(nullable = false, description = "서명된 opaque cursor") val nextCursor: String? = null,
+    @field:Schema(
+        nullable = false,
+        description = "서명된 opaque cursor"
+    ) val nextCursor: String? = null,
 )

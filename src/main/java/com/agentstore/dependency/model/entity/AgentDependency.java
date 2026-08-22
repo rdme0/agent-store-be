@@ -1,44 +1,50 @@
 package com.agentstore.dependency.model.entity;
 
 import com.agentstore.common.model.entity.BaseEntity;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import java.math.BigInteger;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.math.BigInteger;
-import java.util.UUID;
-
 @Entity
-@Table(name = "agent_dependencies", uniqueConstraints = @UniqueConstraint(columnNames = {"source_version_id", "target_agent_id"}))
+@Table(name = "agent_dependencies", uniqueConstraints = @UniqueConstraint(columnNames = {
+        "source_version_id", "target_agent_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AgentDependency extends BaseEntity {
+
     @Id
     private UUID id;
 
-    @Column(name = "source_version_id", nullable = false)
+    @Column(nullable = false)
     private UUID sourceVersionId;
 
-    @Column(name = "target_agent_id", nullable = false)
+    @Column(nullable = false)
     private UUID targetAgentId;
 
-    @Column(name = "version_constraint", nullable = false)
+    @Column(nullable = false)
     private String versionConstraint;
 
     @Column(nullable = false)
     private boolean required = true;
 
     @JdbcTypeCode(SqlTypes.BIGINT)
-    @Column(name = "max_price_atomic", nullable = false, columnDefinition = "BIGINT")
+    @Column(nullable = false, columnDefinition = "BIGINT")
     private BigInteger maxPriceAtomic;
 
-    @Column(name = "max_calls", nullable = false)
+    @Column(nullable = false)
     private int maxCalls = 1;
 
-    public AgentDependency(UUID id, UUID sourceVersionId, UUID targetAgentId, String versionConstraint, boolean required, BigInteger maxPriceAtomic, int maxCalls) {
+    public AgentDependency(UUID id, UUID sourceVersionId, UUID targetAgentId,
+            String versionConstraint, boolean required, BigInteger maxPriceAtomic, int maxCalls) {
         this.id = id;
         this.sourceVersionId = sourceVersionId;
         this.targetAgentId = targetAgentId;
@@ -48,7 +54,8 @@ public class AgentDependency extends BaseEntity {
         this.maxCalls = maxCalls;
     }
 
-    public void update(String versionConstraint, boolean required, BigInteger maxPriceAtomic, int maxCalls) {
+    public void update(String versionConstraint, boolean required, BigInteger maxPriceAtomic,
+            int maxCalls) {
         this.versionConstraint = versionConstraint;
         this.required = required;
         this.maxPriceAtomic = maxPriceAtomic;

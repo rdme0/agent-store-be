@@ -3,8 +3,8 @@ package com.agentstore.dependency.resolver
 import com.agentstore.agent.service.AgentService
 import com.agentstore.dependency.exception.DependencyCycleDetectedException
 import com.agentstore.dependency.repository.AgentDependencyRepository
+import java.util.UUID
 import org.springframework.stereotype.Component
-import java.util.*
 
 @Component
 class CycleValidator(
@@ -16,7 +16,14 @@ class CycleValidator(
             throw cycle(listOf(sourceSlug, targetSlug))
         }
         val path = mutableListOf(sourceSlug)
-        if (reachable(targetAgentId, sourceAgentId, mutableSetOf(), path)) {
+        if (
+            reachable(
+                currentAgentId = targetAgentId,
+                targetAgentId = sourceAgentId,
+                visited = mutableSetOf(),
+                path = path,
+            )
+        ) {
             throw cycle(path + sourceSlug)
         }
     }
@@ -36,10 +43,10 @@ class CycleValidator(
         val found = versions.any { version ->
             dependencyRepository.findAllBySourceVersionId(version.id).any { dependency ->
                 dependency.targetAgentId == targetAgentId || reachable(
-                    dependency.targetAgentId,
-                    targetAgentId,
-                    visited,
-                    path
+                    currentAgentId = dependency.targetAgentId,
+                    targetAgentId = targetAgentId,
+                    visited = visited,
+                    path = path,
                 )
             }
         }

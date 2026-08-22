@@ -6,9 +6,9 @@ import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.service.PaymentService
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Component
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
+import org.springframework.stereotype.Component
 
 @Component
 class ExecutionPaymentPreparationService(
@@ -27,13 +27,24 @@ class ExecutionPaymentPreparationService(
         payTo: String,
         paymentMode: PaymentMode
     ): UUID {
-        budgetGuard.reserve(executionId, amount)
-        val attemptId = paymentService.require(stepId, amount, network, asset, payTo, paymentMode)
-        stepService.markPaymentRequired(stepId)
+        budgetGuard.reserve(executionId = executionId, amount = amount)
+        val attemptId = paymentService.require(
+            stepId = stepId,
+            amount = amount,
+            network = network,
+            asset = asset,
+            payTo = payTo,
+            mode = paymentMode,
+        )
+        stepService.markPaymentRequired(stepId = stepId)
         eventService.append(
-            executionId,
-            "PAYMENT_REQUIRED",
-            mapOf("stepId" to stepId, "paymentAttemptId" to attemptId, "amountAtomic" to amount.toString())
+            executionId = executionId,
+            type = "PAYMENT_REQUIRED",
+            payload = mapOf(
+                "stepId" to stepId,
+                "paymentAttemptId" to attemptId,
+                "amountAtomic" to amount.toString(),
+            ),
         )
         return attemptId
     }

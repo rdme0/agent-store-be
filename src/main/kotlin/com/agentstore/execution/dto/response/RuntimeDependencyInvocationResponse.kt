@@ -1,5 +1,9 @@
 package com.agentstore.execution.dto.response
 
-import java.util.*
+import java.util.UUID
 
-data class RuntimeDependencyInvocationResponse(val stepId: UUID, val output: Any?, val costAtomic: String)
+data class RuntimeDependencyInvocationResponse(
+    val stepId: UUID,
+    val output: Any?,
+    val costAtomic: String
+)

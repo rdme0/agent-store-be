@@ -5,12 +5,13 @@ import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.revenue.dto.response.DeveloperRevenueResponse
 import com.agentstore.revenue.dto.response.RevenueEntryResponse
+import com.agentstore.revenue.model.entity.RevenueEntry
 import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.revenue.repository.RevenueEntryRepository
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Service
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
+import org.springframework.stereotype.Service
 
 @Service
 class RevenueService(
@@ -38,7 +39,7 @@ class RevenueService(
         val page = all.drop(start).take(limit + 1)
         val direct = all.filter { it.type == RevenueType.DIRECT }
         val dependency = all.filter { it.type == RevenueType.DEPENDENCY }
-        fun sum(entries: List<com.agentstore.revenue.model.entity.RevenueEntry>): BigInteger {
+        fun sum(entries: List<RevenueEntry>): BigInteger {
             return entries.fold(BigInteger.ZERO) { total, entry -> total + entry.amountAtomic }
         }
         return DeveloperRevenueResponse(

@@ -10,8 +10,8 @@ import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
+import java.util.UUID
 import org.springframework.stereotype.Component
-import java.util.*
 
 /**
  * Admission is a locking guard, not a general execution use case. It owns the
@@ -46,7 +46,11 @@ class RuntimeCallbackAdmissionService(
         ) {
             throw DomainClientException(ErrorCode.PARENT_STEP_NOT_ACTIVE)
         }
-        stepRepository.findByParentStepIdAndIdempotencyKey(parentStepId, idempotencyKey)?.let { return it }
+        stepRepository.findByParentStepIdAndIdempotencyKey(
+            parentStepId = parentStepId,
+            idempotencyKey = idempotencyKey,
+        )
+            ?.let { return it }
         return stepRepository.save(
             ExecutionStep(
                 UUID.randomUUID(),

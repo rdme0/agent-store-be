@@ -5,7 +5,7 @@ import com.agentstore.revenue.model.entity.RevenueEntry
 import com.agentstore.revenue.model.vo.RevenueType
 import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 
 data class RevenueEntryResponse(
     val id: UUID,

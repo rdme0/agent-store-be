@@ -1,5 +1,6 @@
 package com.agentstore.agent
 
+import com.agentstore.agent.codec.AgentListCursorCodec
 import com.agentstore.agent.dto.request.CreateAgentRequest
 import com.agentstore.agent.dto.request.CreateAgentVersionRequest
 import com.agentstore.agent.model.entity.Agent
@@ -10,7 +11,6 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
-import com.agentstore.agent.service.AgentListCursorCodec
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.model.entity.AgentDependency
@@ -24,22 +24,27 @@ import com.agentstore.dependency.resolver.DependencyResolver
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.payment.client.PinnedAgentRestClientFactory
 import com.agentstore.payment.client.SimulatedPaymentClient
-import com.agentstore.payment.dto.internal.PaymentInvocationRequest
+import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sun.net.httpserver.HttpServer
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Test
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.`when`
-import org.springframework.mock.env.MockEnvironment
 import java.math.BigInteger
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.util.*
+import java.time.Duration
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Test
+import org.mockito.Mockito.`when`
+import org.mockito.Mockito.mock
+import org.springframework.mock.env.MockEnvironment
 
 class AgentEndpointAdmissionTest {
+    private companion object {
+        const val RECEIVER = "0x0000000000000000000000000000000000000001"
+    }
+
     @Test
     fun `registration and draft version reject unsafe endpoints before persistence`() {
         val service = agentService()
@@ -56,7 +61,14 @@ class AgentEndpointAdmissionTest {
             RECEIVER
         )
         val versionRequest =
-            CreateAgentVersionRequest("1.0.0", "https://agent.example.com", "1", "eip155:84532", "USDC", RECEIVER)
+            CreateAgentVersionRequest(
+                "1.0.0",
+                "https://agent.example.com",
+                "1",
+                "eip155:84532",
+                "USDC",
+                RECEIVER
+            )
 
         assertUnsafe { service.create(request) }
         assertUnsafe { service.createVersion(UUID.randomUUID(), versionRequest) }
@@ -93,7 +105,15 @@ class AgentEndpointAdmissionTest {
         val rootAgent = Agent(UUID.randomUUID(), UUID.randomUUID(), "root-agent", "root", "root")
         val root = activeVersion(rootAgent.id, "https://8.8.8.8/invoke")
         val child = activeVersion(UUID.randomUUID(), "https://agent.example.com/invoke")
-        val dependency = AgentDependency(UUID.randomUUID(), root.id, child.agentId, "*", false, BigInteger.ONE, 1)
+        val dependency = AgentDependency(
+            UUID.randomUUID(),
+            root.id,
+            child.agentId,
+            "*",
+            false,
+            BigInteger.ONE,
+            1
+        )
         val graph = ResolvedGraph(
             ResolvedNode(
                 resolved(root, "root-agent"),
@@ -111,7 +131,13 @@ class AgentEndpointAdmissionTest {
         val resolver = mock(DependencyResolver::class.java)
         `when`(agentService.findBySlug("root-agent")).thenReturn(rootAgent)
         `when`(agentService.activeVersions(rootAgent.id)).thenReturn(listOf(root))
-        `when`(resolver.resolve(root.id)).thenReturn(graph)
+        `when`(
+            resolver.resolve(
+                rootVersionId = root.id,
+                allowUnresolvedRequired = false,
+                allowPriceExceeded = false,
+            )
+        ).thenReturn(graph)
         val quotePolicy = AgentEndpointPolicy(
             MockEnvironment().apply { setActiveProfiles("prod") },
             AgentEndpointAddressResolver { host ->
@@ -134,8 +160,13 @@ class AgentEndpointAdmissionTest {
 
     @Test
     fun `simulated client rejects unsafe endpoint before outbound request construction`() {
-        val client = SimulatedPaymentClient(productionPolicy(), PinnedAgentRestClientFactory(), ObjectMapper())
-        val request = PaymentInvocationRequest(
+        val client = SimulatedPaymentClient(
+            endpointPolicy = productionPolicy(),
+            pinnedClientFactory = PinnedAgentRestClientFactory(),
+            objectMapper = ObjectMapper(),
+            invocationDeadline = Duration.ofSeconds(30),
+        )
+        val request = PaymentInvocationRequestDto(
             "attempt",
             "key",
             "token",
@@ -166,7 +197,10 @@ class AgentEndpointAdmissionTest {
         val redirect = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/invoke") { exchange ->
                 receivedHost = exchange.requestHeaders.getFirst("Host")
-                exchange.responseHeaders.add("Location", "http://127.0.0.1:${target.address.port}/target")
+                exchange.responseHeaders.add(
+                    "Location",
+                    "http://127.0.0.1:${target.address.port}/target"
+                )
                 exchange.sendResponseHeaders(302, -1)
                 exchange.close()
             }
@@ -176,8 +210,13 @@ class AgentEndpointAdmissionTest {
             val policy = AgentEndpointPolicy(
                 MockEnvironment().apply { setActiveProfiles("dev") },
                 AgentEndpointAddressResolver { error("loopback must not use DNS") })
-            val client = SimulatedPaymentClient(policy, PinnedAgentRestClientFactory(), ObjectMapper())
-            val request = PaymentInvocationRequest(
+            val client = SimulatedPaymentClient(
+                endpointPolicy = policy,
+                pinnedClientFactory = PinnedAgentRestClientFactory(),
+                objectMapper = ObjectMapper(),
+                invocationDeadline = Duration.ofSeconds(30),
+            )
+            val request = PaymentInvocationRequestDto(
                 "attempt",
                 "key",
                 "token",
@@ -212,7 +251,18 @@ class AgentEndpointAdmissionTest {
     private fun productionPolicy(): AgentEndpointPolicy {
         return AgentEndpointPolicy(
             MockEnvironment().apply { setActiveProfiles("prod") },
-            AgentEndpointAddressResolver { listOf(InetAddress.getByAddress(byteArrayOf(10, 0, 0, 1))) },
+            AgentEndpointAddressResolver {
+                listOf(
+                    InetAddress.getByAddress(
+                        byteArrayOf(
+                            10,
+                            0,
+                            0,
+                            1
+                        )
+                    )
+                )
+            },
         )
     }
 
@@ -244,10 +294,10 @@ class AgentEndpointAdmissionTest {
     }
 
     private fun assertUnsafe(action: () -> Unit) {
-        assertEquals("AGENT_400_005", assertThrows(DomainClientException::class.java, action).errorCode.code)
+        assertEquals(
+            "AGENT_400_005",
+            assertThrows(DomainClientException::class.java, action).errorCode.code
+        )
     }
 
-    private companion object {
-        const val RECEIVER = "0x0000000000000000000000000000000000000001"
-    }
 }

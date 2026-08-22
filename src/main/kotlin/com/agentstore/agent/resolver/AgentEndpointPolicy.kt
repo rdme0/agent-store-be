@@ -3,85 +3,98 @@ package com.agentstore.agent.resolver
 import com.agentstore.agent.model.vo.ValidatedAgentEndpoint
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
-import org.springframework.core.env.Environment
-import org.springframework.stereotype.Component
 import java.net.Inet4Address
 import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.URI
-import java.util.*
+import java.util.Locale
+import org.springframework.core.env.Environment
+import org.springframework.stereotype.Component
 
 @Component
 class AgentEndpointPolicy(
     private val environment: Environment,
     private val addressResolver: AgentEndpointAddressResolver,
 ) {
+    private companion object {
+        private val IPV6_LOOPBACK = ByteArray(16).apply { this[lastIndex] = 1 }
+        private val IPV4_LOOPBACK = byteArrayOf(127, 0, 0, 1)
+        private val HTTP_SCHEMES = setOf("http", "https")
+        private val DEVELOPMENT_LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1", "::1")
+    }
+
     fun validate(endpoint: String) {
         resolve(endpoint)
     }
 
     fun resolve(endpoint: String): ValidatedAgentEndpoint {
         val uri = runCatching { URI(endpoint) }.getOrElse {
-            throw invalid("endpoint must be an absolute HTTP(S) URL")
+            throw DomainClientException(
+                errorCode = ErrorCode.INVALID_ENDPOINT,
+                messageArguments = arrayOf("endpoint must be an absolute HTTP(S) URL"),
+            )
         }
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
         val host = uri.host?.trim('[', ']')?.lowercase(Locale.ROOT)
-        if (!uri.isAbsolute || scheme !in HTTP_SCHEMES || host.isNullOrBlank() || uri.userInfo != null || uri.fragment != null) {
-            throw invalid("endpoint must be an absolute HTTP(S) URL without credentials or fragments")
+        val hasInvalidStructure = !uri.isAbsolute ||
+            scheme !in HTTP_SCHEMES ||
+            host.isNullOrBlank() ||
+            uri.userInfo != null ||
+            uri.fragment != null
+        if (hasInvalidStructure) {
+            throw DomainClientException(
+                errorCode = ErrorCode.INVALID_ENDPOINT,
+                messageArguments = arrayOf(
+                    "endpoint must be an absolute HTTP(S) URL without credentials or fragments",
+                ),
+            )
         }
 
         if (isDevelopmentProfile()) {
             if (host !in DEVELOPMENT_LOOPBACK_HOSTS) {
-                throw unsafe("development only permits loopback Agent endpoints")
+                throw DomainClientException(
+                    errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
+                    messageArguments = arrayOf("development only permits loopback Agent endpoints"),
+                )
             }
-            return ValidatedAgentEndpoint(uri, developmentLoopbackAddress(host))
+            return ValidatedAgentEndpoint(uri = uri, addresses = developmentLoopbackAddress(host))
         }
 
         if (scheme != "https") {
-            throw unsafe("production Agent endpoints must use HTTPS")
+            throw DomainClientException(
+                errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
+                messageArguments = arrayOf("production Agent endpoints must use HTTPS"),
+            )
         }
         val addresses = runCatching { addressResolver.resolve(host) }.getOrElse {
-            throw unsafe("Agent endpoint host could not be resolved")
+            throw DomainClientException(
+                errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
+                messageArguments = arrayOf("Agent endpoint host could not be resolved"),
+            )
         }
         if (addresses.isEmpty() || addresses.any { !isPubliclyRoutable(it) }) {
-            throw unsafe("Agent endpoint must resolve exclusively to publicly routable addresses")
+            throw DomainClientException(
+                errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
+                messageArguments = arrayOf(
+                    "Agent endpoint must resolve exclusively to publicly routable addresses",
+                ),
+            )
         }
-        return ValidatedAgentEndpoint(uri, addresses)
+        return ValidatedAgentEndpoint(uri = uri, addresses = addresses)
     }
 
     private fun isDevelopmentProfile(): Boolean {
         return environment.matchesProfiles("dev", "development", "test")
     }
 
-    private fun developmentLoopbackAddress(host: String): List<java.net.InetAddress> {
+    private fun developmentLoopbackAddress(host: String): List<InetAddress> {
         return when (host) {
-            "::1" -> listOf(
-                java.net.InetAddress.getByAddress(
-                    byteArrayOf(
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        1
-                    )
-                )
-            )
-
-            else -> listOf(java.net.InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
+            "::1" -> listOf(InetAddress.getByAddress(IPV6_LOOPBACK))
+            else -> listOf(InetAddress.getByAddress(IPV4_LOOPBACK))
         }
     }
 
-    private fun isPubliclyRoutable(address: java.net.InetAddress): Boolean {
+    private fun isPubliclyRoutable(address: InetAddress): Boolean {
         return when (address) {
             is Inet4Address -> isPublicIpv4(address.address)
             is Inet6Address -> isPublicIpv6(address.address)
@@ -132,22 +145,14 @@ class AgentEndpointPolicy(
         if (first !in 0x20..0x3f) {
             return false
         }
-        if (first == 0x20 && second == 0x01 && bytes[2].toInt() and 0xff == 0x0d && bytes[3].toInt() and 0xff == 0xb8) {
+        val isDocumentationPrefix = first == 0x20 &&
+            second == 0x01 &&
+            bytes[2].toInt() and 0xff == 0x0d &&
+            bytes[3].toInt() and 0xff == 0xb8
+        if (isDocumentationPrefix) {
             return false
         }
         return true
     }
 
-    private fun invalid(message: String): DomainClientException {
-        return DomainClientException(ErrorCode.INVALID_ENDPOINT)
-    }
-
-    private fun unsafe(message: String): DomainClientException {
-        return DomainClientException(ErrorCode.UNSAFE_AGENT_ENDPOINT)
-    }
-
-    private companion object {
-        val HTTP_SCHEMES = setOf("http", "https")
-        val DEVELOPMENT_LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1", "::1")
-    }
 }

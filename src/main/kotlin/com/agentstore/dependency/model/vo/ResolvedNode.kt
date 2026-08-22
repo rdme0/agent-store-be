@@ -1,13 +1,13 @@
 package com.agentstore.dependency.model.vo
 
-import com.agentstore.dependency.dto.internal.DependencySnapshot
-import com.agentstore.dependency.dto.internal.QuoteSnapshot
-import com.agentstore.dependency.dto.internal.ResolvedVersionSnapshot
+import com.agentstore.dependency.dto.internal.DependencySnapshotDto
+import com.agentstore.dependency.dto.internal.QuoteSnapshotDto
+import com.agentstore.dependency.dto.internal.ResolvedVersionSnapshotDto
 
 data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<ResolvedEdge>) {
-    fun snapshot(): QuoteSnapshot {
-        return QuoteSnapshot(
-            version = ResolvedVersionSnapshot(
+    fun snapshot(): QuoteSnapshotDto {
+        return QuoteSnapshotDto(
+            version = ResolvedVersionSnapshotDto(
                 id = version.id,
                 agentId = version.agentId,
                 agentSlug = version.agentSlug,
@@ -20,7 +20,7 @@ data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<Res
                 responseFormat = version.responseFormat,
             ),
             dependencies = dependencies.map { edge ->
-                DependencySnapshot(
+                DependencySnapshotDto(
                     dependencyId = edge.dependency.id,
                     targetAgentId = edge.dependency.targetAgentId,
                     targetAgentSlug = edge.targetAgentSlug,

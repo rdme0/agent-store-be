@@ -2,7 +2,7 @@ package com.agentstore.dependency.model.vo
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
 
 data class ResolvedVersion(
     val id: UUID,

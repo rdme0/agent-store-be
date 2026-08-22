@@ -1,6 +1,6 @@
 package com.agentstore.execution.token
 
-import java.util.*
+import java.util.UUID
 
 data class InvocationTokenClaims(
     val executionId: UUID,

@@ -14,11 +14,20 @@ class AgentOutputFormatValidatorTest {
     @Test
     fun `text and markdown accept only strings`() {
         assertDoesNotThrow {
-            AgentOutputFormatValidator.validate(AgentResponseFormat.TEXT, objectMapper.readTree("\"hello\""))
-            AgentOutputFormatValidator.validate(AgentResponseFormat.MARKDOWN, objectMapper.readTree("\"# hello\""))
+            AgentOutputFormatValidator.validate(
+                AgentResponseFormat.TEXT,
+                objectMapper.readTree("\"hello\"")
+            )
+            AgentOutputFormatValidator.validate(
+                AgentResponseFormat.MARKDOWN,
+                objectMapper.readTree("\"# hello\"")
+            )
         }
         assertThrows(AgentOutputFormatException::class.java) {
-            AgentOutputFormatValidator.validate(AgentResponseFormat.TEXT, objectMapper.readTree("{\"value\":1}"))
+            AgentOutputFormatValidator.validate(
+                AgentResponseFormat.TEXT,
+                objectMapper.readTree("{\"value\":1}")
+            )
         }
     }
 
@@ -27,7 +36,12 @@ class AgentOutputFormatValidatorTest {
         val valid = objectMapper.readTree(
             """{"title":"Summary","sections":[{"label":"Score","value":0.82},{"label":"Ready","value":true}]}"""
         )
-        assertDoesNotThrow { AgentOutputFormatValidator.validate(AgentResponseFormat.STRUCTURED, valid) }
+        assertDoesNotThrow {
+            AgentOutputFormatValidator.validate(
+                AgentResponseFormat.STRUCTURED,
+                valid
+            )
+        }
 
         val invalid = objectMapper.readTree(
             """{"title":"Summary","sections":[{"label":"Nested","value":{"bad":true}}]}"""
@@ -40,7 +54,10 @@ class AgentOutputFormatValidatorTest {
     @Test
     fun `json accepts arbitrary json`() {
         assertDoesNotThrow {
-            AgentOutputFormatValidator.validate(AgentResponseFormat.JSON, objectMapper.readTree("{\"anything\":[1,true,null]}"))
+            AgentOutputFormatValidator.validate(
+                AgentResponseFormat.JSON,
+                objectMapper.readTree("{\"anything\":[1,true,null]}")
+            )
         }
     }
 }

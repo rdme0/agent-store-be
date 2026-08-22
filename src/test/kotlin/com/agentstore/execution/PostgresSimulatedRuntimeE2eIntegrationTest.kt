@@ -1,28 +1,31 @@
 package com.agentstore.execution
 
 import com.agentstore.execution.dto.request.RuntimeDependencyInvocationRequest
+import com.agentstore.execution.dto.response.ExecutionEventResponse
 import com.agentstore.execution.event.ExecutionEventService
 import com.agentstore.execution.runner.ExecutionRunner
 import com.agentstore.execution.service.RuntimeCallbackService
 import com.agentstore.execution.token.InvocationTokenService
 import com.agentstore.payment.client.PaymentClient
-import com.agentstore.payment.dto.internal.PaymentInvocationRequest
-import com.agentstore.payment.dto.internal.PaymentInvocationResult
+import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
+import com.agentstore.payment.dto.internal.PaymentInvocationResultDto
+import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.support.DependencyRuntimeFixture
 import com.agentstore.support.PostgresIntegrationTestSupport
 import com.fasterxml.jackson.databind.ObjectMapper
+import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
-import org.springframework.beans.factory.ObjectProvider
+import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
-import java.util.*
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 @EnabledIfEnvironmentVariable(named = "RUN_POSTGRES_INTEGRATION_TESTS", matches = "true")
 @EnabledIfEnvironmentVariable(named = "SPRING_EXCLUSIVE_MAINTENANCE", matches = "true")
@@ -30,8 +33,10 @@ import java.util.concurrent.TimeUnit
 class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
     @Autowired
     private lateinit var runner: ExecutionRunner
+
     @Autowired
     private lateinit var events: ExecutionEventService
+
     @Autowired
     private lateinit var paymentClient: CallbackPaymentClient
 
@@ -169,7 +174,7 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
         ).isEqualTo(1)
     }
 
-    private fun awaitTerminalEvents(executionId: UUID): List<com.agentstore.execution.dto.response.ExecutionEventResponse> {
+    private fun awaitTerminalEvents(executionId: UUID): List<ExecutionEventResponse> {
         repeat(50) {
             val replay = events.replay(executionId, 0)
             if (replay.lastOrNull()?.type in setOf(
@@ -208,7 +213,8 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
             tokenService: InvocationTokenService,
             callbackService: ObjectProvider<RuntimeCallbackService>,
             objectMapper: ObjectMapper,
-        ): CallbackPaymentClient = CallbackPaymentClient(tokenService, callbackService, objectMapper)
+        ): CallbackPaymentClient =
+            CallbackPaymentClient(tokenService, callbackService, objectMapper)
     }
 
     class CallbackPaymentClient(
@@ -216,13 +222,14 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
         private val callbackService: ObjectProvider<RuntimeCallbackService>,
         private val objectMapper: ObjectMapper,
     ) : PaymentClient {
-        override val mode = com.agentstore.payment.model.vo.PaymentMode.SIMULATED
+        override val mode = PaymentMode.SIMULATED
 
         @Volatile
         private var fixture: DependencyRuntimeFixture? = null
+
         @Volatile
         private var callbackException: Throwable? = null
-        private val invocationCount = java.util.concurrent.atomic.AtomicInteger()
+        private val invocationCount = AtomicInteger()
 
         fun arm(fixture: DependencyRuntimeFixture) {
             this.fixture = fixture
@@ -239,7 +246,7 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
                 .joinToString("\ncaused by: ") { it.stackTraceToString() }
         }
 
-        override fun invoke(request: PaymentInvocationRequest): PaymentInvocationResult {
+        override fun invoke(request: PaymentInvocationRequestDto): PaymentInvocationResultDto {
             invocationCount.incrementAndGet()
             val scenario = fixture ?: error("callback payment client is not armed")
             val claims = tokenService.verify(request.invocationToken)
@@ -259,13 +266,13 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
                     callbackException = exception
                     throw exception
                 }
-                return PaymentInvocationResult(
+                return PaymentInvocationResultDto(
                     objectMapper.readTree("{\"agent\":\"root\",\"status\":\"completed\"}"),
                     "simulated-root-${request.paymentAttemptId}",
                     request.paymentAttemptId
                 )
             }
-            return PaymentInvocationResult(
+            return PaymentInvocationResultDto(
                 objectMapper.readTree("{\"agent\":\"child\",\"status\":\"completed\"}"),
                 "simulated-child-${request.paymentAttemptId}",
                 request.paymentAttemptId

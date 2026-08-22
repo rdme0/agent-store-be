@@ -3,31 +3,35 @@ package com.agentstore.execution.model.entity;
 import com.agentstore.common.model.entity.BaseEntity;
 import com.agentstore.execution.model.vo.ExecutionStepStatus;
 import com.fasterxml.jackson.databind.JsonNode;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.math.BigInteger;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.math.BigInteger;
-import java.util.UUID;
-
 @Entity
 @Table(name = "execution_steps")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ExecutionStep extends BaseEntity {
+
     @Id
     private UUID id;
 
-    @Column(name = "execution_id", nullable = false)
+    @Column(nullable = false)
     private UUID executionId;
 
-    @Column(name = "parent_step_id")
     private UUID parentStepId;
 
-    @Column(name = "agent_version_id", nullable = false)
+    @Column(nullable = false)
     private UUID agentVersionId;
 
     @Enumerated(EnumType.STRING)
@@ -36,27 +40,25 @@ public class ExecutionStep extends BaseEntity {
     private ExecutionStepStatus status = ExecutionStepStatus.CREATED;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "call_path", nullable = false, columnDefinition = "jsonb")
+    @Column(nullable = false, columnDefinition = "jsonb")
     private JsonNode callPath;
 
-    @Column(name = "idempotency_key")
     private String idempotencyKey;
 
-    @Column(name = "request_fingerprint")
     private String requestFingerprint;
 
     @JdbcTypeCode(SqlTypes.BIGINT)
-    @Column(name = "cost_atomic", nullable = false, columnDefinition = "BIGINT")
+    @Column(nullable = false, columnDefinition = "BIGINT")
     private BigInteger costAtomic = BigInteger.ZERO;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private JsonNode output;
 
-    @Column(name = "failure_code")
     private String failureCode;
 
-    public ExecutionStep(UUID id, UUID executionId, UUID parentStepId, UUID agentVersionId, JsonNode callPath) {
+    public ExecutionStep(UUID id, UUID executionId, UUID parentStepId, UUID agentVersionId,
+            JsonNode callPath) {
         this.id = id;
         this.executionId = executionId;
         this.parentStepId = parentStepId;
@@ -65,7 +67,8 @@ public class ExecutionStep extends BaseEntity {
         this.status = ExecutionStepStatus.CREATED;
     }
 
-    public ExecutionStep(UUID id, UUID executionId, UUID parentStepId, UUID agentVersionId, JsonNode callPath, String idempotencyKey) {
+    public ExecutionStep(UUID id, UUID executionId, UUID parentStepId, UUID agentVersionId,
+            JsonNode callPath, String idempotencyKey) {
         this(id, executionId, parentStepId, agentVersionId, callPath);
         this.idempotencyKey = idempotencyKey;
     }

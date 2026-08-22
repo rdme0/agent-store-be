@@ -4,13 +4,13 @@ import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.model.vo.CostCalculation
 import com.agentstore.dependency.model.vo.ResolvedNode
-import org.springframework.stereotype.Component
 import java.math.BigInteger
+import org.springframework.stereotype.Component
 
 @Component
 class CostResolver {
     fun resolve(root: ResolvedNode): CostCalculation {
-        return calculate(root, 0)
+        return calculate(node = root, depth = 0)
     }
 
     private fun calculate(node: ResolvedNode, depth: Int): CostCalculation {
@@ -19,10 +19,10 @@ class CostResolver {
         var maxDepth = depth
         node.dependencies.forEach { edge ->
             edge.resolved?.let { child ->
-                val calculation = calculate(child, depth + 1)
+                val calculation = calculate(node = child, depth = depth + 1)
                 cost += edge.dependency.maxCalls.toBigInteger() * calculation.maxCostAtomic
                 steps += edge.dependency.maxCalls * calculation.steps
-                maxDepth = maxOf(maxDepth, calculation.maxDepth)
+                maxDepth = maxOf(a = maxDepth, b = calculation.maxDepth)
                 if (steps > 32) {
                     throw DomainClientException(ErrorCode.EXECUTION_STEPS_EXCEEDED)
                 }
@@ -31,6 +31,10 @@ class CostResolver {
         if (cost > BigInteger.TEN.pow(60)) {
             throw DomainClientException(ErrorCode.COST_OVERFLOW)
         }
-        return CostCalculation(cost, steps, maxDepth)
+        return CostCalculation(
+            maxCostAtomic = cost,
+            steps = steps,
+            maxDepth = maxDepth,
+        )
     }
 }

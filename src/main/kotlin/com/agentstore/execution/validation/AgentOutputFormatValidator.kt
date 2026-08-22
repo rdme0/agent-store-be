@@ -15,12 +15,15 @@ object AgentOutputFormatValidator {
             AgentResponseFormat.MARKDOWN -> if (!output.isTextual) {
                 throw AgentOutputFormatException(format)
             }
+
             AgentResponseFormat.STRUCTURED -> validateStructured(output)
         }
     }
 
     private fun validateStructured(output: JsonNode) {
-        if (!output.isObject || !output.path("title").isTextual || output.path("title").asText().isBlank()) {
+        if (!output.isObject || !output.path("title").isTextual || output.path("title").asText()
+                .isBlank()
+        ) {
             throw AgentOutputFormatException(AgentResponseFormat.STRUCTURED)
         }
         val summary = output.get("summary")
@@ -34,7 +37,9 @@ object AgentOutputFormatValidator {
         sections.forEach { section ->
             val label = section.path("label")
             val value = section.get("value")
-            if (!section.isObject || !label.isTextual || label.asText().isBlank() || value == null || !isScalar(value)) {
+            if (!section.isObject || !label.isTextual || label.asText()
+                    .isBlank() || value == null || !isScalar(value)
+            ) {
                 throw AgentOutputFormatException(AgentResponseFormat.STRUCTURED)
             }
         }

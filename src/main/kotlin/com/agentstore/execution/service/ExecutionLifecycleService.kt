@@ -7,9 +7,9 @@ import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.fasterxml.jackson.databind.JsonNode
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Service
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
+import org.springframework.stereotype.Service
 
 @Service
 class ExecutionLifecycleService(
@@ -30,9 +30,13 @@ class ExecutionLifecycleService(
         stepRepository.save(step)
         executionRepository.save(execution)
         eventService.append(
-            executionId,
-            "EXECUTION_COMPLETED",
-            mapOf("stepId" to stepId, "actualCostAtomic" to execution.actualCostAtomic.toString(), "output" to output)
+            executionId = executionId,
+            type = "EXECUTION_COMPLETED",
+            payload = mapOf(
+                "stepId" to stepId,
+                "actualCostAtomic" to execution.actualCostAtomic.toString(),
+                "output" to output,
+            ),
         )
     }
 
@@ -49,9 +53,9 @@ class ExecutionLifecycleService(
         stepRepository.save(step)
         executionRepository.save(execution)
         eventService.append(
-            executionId,
-            "EXECUTION_FAILED",
-            mapOf("stepId" to stepId, "failureCode" to execution.failureCode)
+            executionId = executionId,
+            type = "EXECUTION_FAILED",
+            payload = mapOf("stepId" to stepId, "failureCode" to execution.failureCode),
         )
     }
 }

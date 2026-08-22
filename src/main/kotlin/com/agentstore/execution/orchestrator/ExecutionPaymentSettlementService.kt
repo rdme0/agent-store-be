@@ -12,9 +12,9 @@ import com.agentstore.payment.service.PaymentService
 import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.revenue.service.RevenueSettlementService
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Component
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
+import org.springframework.stereotype.Component
 
 /** Applies a known external settlement only while the locked execution state remains active. */
 @Component
@@ -39,28 +39,36 @@ class ExecutionPaymentSettlementService(
         paymentMode: PaymentMode,
     ): Boolean {
         // Global execution state-machine lock order: execution → step → payment attempt.
-        val execution = executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
+        val execution =
+            executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
         val step = stepRepository.findByIdForUpdate(stepId) ?: error("execution_step_not_found")
         if (step.executionId != executionId) {
             error("execution_step_mismatch")
         }
 
-        paymentExternalSettlementService.record(attemptId, transactionHash, paymentIdentifier)
+        paymentExternalSettlementService.record(
+            attemptId = attemptId,
+            transactionHash = transactionHash,
+            paymentIdentifier = paymentIdentifier,
+        )
         if (execution.status != ExecutionStatus.RUNNING || step.status != ExecutionStepStatus.PAYMENT_REQUIRED) {
-            paymentService.markSettlementRecoveryRequired(attemptId, "FAILED_AFTER_PAYMENT")
+            paymentService.markSettlementRecoveryRequired(
+                attemptId = attemptId,
+                failureCode = "FAILED_AFTER_PAYMENT",
+            )
             return false
         }
 
         val attempt = paymentService.find(attemptId)
-        budgetGuard.settle(executionId, amount)
-        revenueSettlementService.record(attempt, revenueType)
+        budgetGuard.settle(executionId = executionId, amount = amount)
+        revenueSettlementService.record(attempt = attempt, type = revenueType)
         step.paymentSettled()
         step.running()
         stepRepository.save(step)
         eventService.append(
-            executionId,
-            "PAYMENT_SETTLED",
-            mapOf(
+            executionId = executionId,
+            type = "PAYMENT_SETTLED",
+            payload = mapOf(
                 "stepId" to stepId,
                 "paymentAttemptId" to attemptId,
                 "amountAtomic" to amount.toString(),

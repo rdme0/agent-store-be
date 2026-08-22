@@ -1,5 +1,7 @@
 package com.agentstore.agent.service
 
+import com.agentstore.agent.codec.AgentListCursorCodec
+import com.agentstore.agent.dto.internal.AgentListCursorPayloadDto
 import com.agentstore.agent.dto.request.CreateAgentRequest
 import com.agentstore.agent.dto.request.CreateAgentVersionRequest
 import com.agentstore.agent.dto.request.UpdateAgentRequest
@@ -19,11 +21,11 @@ import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import jakarta.transaction.Transactional
+import java.math.BigInteger
+import java.util.UUID
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
-import java.math.BigInteger
-import java.util.*
 
 @Service
 class AgentService(
@@ -33,6 +35,14 @@ class AgentService(
     private val endpointPolicy: AgentEndpointPolicy,
     private val cursorCodec: AgentListCursorCodec,
 ) {
+    companion object {
+        private val SEMVER = Regex(
+            "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)" +
+                "(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?" +
+                "(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+        )
+    }
+
     /** Agent-owned read boundary used by dependency, quote and revenue use cases. */
     fun requireAgent(id: UUID): Agent {
         return agentRepository.findById(id).orElseThrow {
@@ -55,12 +65,18 @@ class AgentService(
     }
 
     fun activeVersions(agentId: UUID): List<AgentVersion> {
-        return agentVersionRepository.findAllByAgentIdAndStatus(agentId, AgentVersionStatus.ACTIVE)
+        return agentVersionRepository.findAllByAgentIdAndStatus(
+            agentId = agentId,
+            status = AgentVersionStatus.ACTIVE,
+        )
     }
 
     fun draftOrActiveVersions(agentId: UUID): List<AgentVersion> {
         return activeVersions(agentId).ifEmpty {
-            agentVersionRepository.findAllByAgentIdAndStatus(agentId, AgentVersionStatus.DRAFT)
+            agentVersionRepository.findAllByAgentIdAndStatus(
+                agentId = agentId,
+                status = AgentVersionStatus.DRAFT,
+            )
         }
     }
 
@@ -69,7 +85,7 @@ class AgentService(
     }
 
     fun versionBySemver(agentId: UUID, semver: String): AgentVersion? {
-        return agentVersionRepository.findByAgentIdAndSemver(agentId, semver)
+        return agentVersionRepository.findByAgentIdAndSemver(agentId = agentId, semver = semver)
     }
 
     fun requireDeveloper(id: UUID): Developer {
@@ -98,38 +114,56 @@ class AgentService(
     fun list(limit: Int, cursor: String?, query: String?, sort: AgentListSort): AgentListResponse {
         requireLimit(limit)
         val normalizedQuery = normalizeQuery(query)
-        val decodedCursor = cursor?.let { cursorCodec.decode(it, normalizedQuery, sort) }
-        val page = marketplaceAgents(normalizedQuery, sort, decodedCursor, limit)
+        val decodedCursor = cursor?.let { value ->
+            cursorCodec.decode(cursor = value, query = normalizedQuery, sort = sort)
+        }
+        val page = marketplaceAgents(
+            query = normalizedQuery,
+            sort = sort,
+            cursor = decodedCursor,
+            limit = limit,
+        )
         val visibleItems = page.take(limit)
         val dependencyCounts = dependencyCounts(visibleItems.map { agent -> agent.id })
         return AgentListResponse(
             items = visibleItems
-                .map { agent -> marketplaceResponse(agent, dependencyCounts[agent.id] ?: 0) },
+                .map { agent ->
+                    marketplaceResponse(
+                        agent = agent,
+                        dependencyCount = dependencyCounts[agent.id] ?: 0,
+                    )
+                },
             nextCursor = visibleItems.lastOrNull()
                 ?.takeIf { page.size > limit }
-                ?.let { agent -> cursorCodec.encode(agent, normalizedQuery, sort) },
+                ?.let { agent ->
+                    cursorCodec.encode(agent = agent, query = normalizedQuery, sort = sort)
+                },
         )
     }
 
     @Transactional
     fun getBySlug(slug: String): AgentResponse {
         return agentRepository.findBySlug(slug)?.let { agent ->
-            response(agent, dependencyCounts(listOf(agent.id))[agent.id] ?: 0)
+            response(
+                agent = agent,
+                dependencyCount = dependencyCounts(agentIds = listOf(agent.id))[agent.id] ?: 0,
+            )
         } ?: throw AgentNotFoundException()
     }
 
     @Transactional
     fun create(request: CreateAgentRequest): AgentResponse {
         validateVersion(
-            request.semver,
-            request.endpoint,
-            request.priceAtomic,
-            request.network,
-            request.asset,
-            request.payTo
+            semver = request.semver,
+            endpoint = request.endpoint,
+            priceAtomic = request.priceAtomic,
+            network = request.network,
+            asset = request.asset,
+            payTo = request.payTo,
         )
         val developer = requireDeveloper(request.developerId)
-        val agent = Agent(UUID.randomUUID(), developer.id, request.slug, request.name, request.description)
+        val agent =
+            Agent(UUID.randomUUID(), developer.id, request.slug, request.name, request.description)
         return try {
             val saved = agentRepository.save(agent)
             agentVersionRepository.save(
@@ -145,7 +179,12 @@ class AgentService(
                     request.responseFormat
                 )
             )
-            AgentResponse.from(saved, developer.displayName, 0, versions(saved.id))
+            AgentResponse.from(
+                agent = saved,
+                developerName = developer.displayName,
+                dependencyCount = 0,
+                versions = versions(agentId = saved.id),
+            )
         } catch (exception: DataIntegrityViolationException) {
             throw DomainClientException(ErrorCode.AGENT_ALREADY_EXISTS)
         }
@@ -158,21 +197,24 @@ class AgentService(
         }
         val agent = requireAgent(id)
         agent.updateMetadata(request.name ?: agent.name, request.description ?: agent.description)
-        return response(agent, dependencyCounts(listOf(agent.id))[agent.id] ?: 0)
+        return response(
+            agent = agent,
+            dependencyCount = dependencyCounts(agentIds = listOf(agent.id))[agent.id] ?: 0,
+        )
     }
 
     @Transactional
     fun createVersion(agentId: UUID, request: CreateAgentVersionRequest): AgentVersionResponse {
         validateVersion(
-            request.semver,
-            request.endpoint,
-            request.priceAtomic,
-            request.network,
-            request.asset,
-            request.payTo
+            semver = request.semver,
+            endpoint = request.endpoint,
+            priceAtomic = request.priceAtomic,
+            network = request.network,
+            asset = request.asset,
+            payTo = request.payTo,
         )
         val agent = requireAgent(agentId)
-        if (versionBySemver(agentId, request.semver) != null) {
+        if (versionBySemver(agentId = agentId, semver = request.semver) != null) {
             throw DomainClientException(ErrorCode.AGENT_VERSION_ALREADY_EXISTS)
         }
         val version = agentVersionRepository.save(
@@ -253,27 +295,28 @@ class AgentService(
     private fun marketplaceAgents(
         query: String?,
         sort: AgentListSort,
-        cursor: AgentListCursorPayload?,
+        cursor: AgentListCursorPayloadDto?,
         limit: Int,
     ): List<Agent> {
         val cursorId = cursor?.let { payload -> parseCursorId(payload.id) }
         val pageable = PageRequest.of(0, limit + 1)
         return when (sort) {
             AgentListSort.NEWEST -> agentRepository.findMarketplaceAgentsByCreatedAtDesc(
-                query,
-                AgentVersionStatus.ACTIVE,
-                cursor != null,
-                cursor?.createdAt,
-                cursorId,
-                pageable,
+                query = query,
+                status = AgentVersionStatus.ACTIVE,
+                hasCursor = cursor != null,
+                cursorCreatedAt = cursor?.createdAt,
+                cursorId = cursorId,
+                pageable = pageable,
             )
+
             AgentListSort.NAME_ASC -> agentRepository.findMarketplaceAgentsByNameAsc(
-                query,
-                AgentVersionStatus.ACTIVE,
-                cursor != null,
-                cursor?.nameKey,
-                cursorId,
-                pageable,
+                query = query,
+                status = AgentVersionStatus.ACTIVE,
+                hasCursor = cursor != null,
+                cursorNameKey = cursor?.nameKey,
+                cursorId = cursorId,
+                pageable = pageable,
             )
         }
     }
@@ -297,25 +340,33 @@ class AgentService(
         if (agentIds.isEmpty()) {
             return emptyMap()
         }
-        return agentRepository.countDistinctDependenciesByAgentIds(agentIds).associate { projection ->
-            projection.agentId to projection.dependencyCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-        }
+        return agentRepository.countDistinctDependenciesByAgentIds(agentIds = agentIds)
+            .associate { projection ->
+                projection.agentId to projection.dependencyCount.coerceAtMost(Int.MAX_VALUE.toLong())
+                    .toInt()
+            }
     }
 
     private fun response(agent: Agent, dependencyCount: Int): AgentResponse {
-        return AgentResponse.from(agent, developerName(agent.developerId), dependencyCount, versions(agent.id))
+        return AgentResponse.from(
+            agent = agent,
+            developerName = developerName(id = agent.developerId),
+            dependencyCount = dependencyCount,
+            versions = versions(agentId = agent.id),
+        )
     }
 
     private fun marketplaceResponse(agent: Agent, dependencyCount: Int): AgentResponse {
-        return AgentResponse.from(agent, developerName(agent.developerId), dependencyCount, activeVersions(agent.id))
+        return AgentResponse.from(
+            agent = agent,
+            developerName = developerName(id = agent.developerId),
+            dependencyCount = dependencyCount,
+            versions = activeVersions(agentId = agent.id),
+        )
     }
 
     private fun developerName(id: UUID): String {
         return requireDeveloper(id).displayName
     }
 
-    companion object {
-        private val SEMVER =
-            Regex("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$")
-    }
 }

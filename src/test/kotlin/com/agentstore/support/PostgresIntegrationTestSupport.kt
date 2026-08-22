@@ -1,7 +1,5 @@
 package com.agentstore.support
 
-import com.agentstore.common.config.AgentStoreProperties
-import com.agentstore.common.config.DatabaseUrlParser
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
@@ -10,12 +8,21 @@ import org.springframework.core.env.Environment
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.ActiveProfiles
 
-@SpringBootTest
+@SpringBootTest(
+    properties = [
+        "spring.datasource.url=\${INTEGRATION_DATASOURCE_URL}",
+        "spring.datasource.username=\${INTEGRATION_DATASOURCE_USERNAME}",
+        "spring.datasource.password=\${INTEGRATION_DATASOURCE_PASSWORD}",
+        "agent-store.service-name=agent-store-api",
+        "agent-store.api-version=0.1.0",
+        "agent-store.runtime-callback-base-url=http://127.0.0.1:8080",
+        "agent-store.cors-origins=http://localhost:*",
+        "agent-store.runtime-token-secret=integration-runtime-secret",
+        "agent-store.payment-mode=simulated",
+    ],
+)
 @ActiveProfiles("postgres-integration")
 abstract class PostgresIntegrationTestSupport {
-    @Autowired
-    private lateinit var properties: AgentStoreProperties
-
     @Autowired
     private lateinit var environment: Environment
 
@@ -28,10 +35,11 @@ abstract class PostgresIntegrationTestSupport {
     @BeforeEach
     fun verifyIsolatedDatabaseAndCreateCleaner() {
         check(environment.matchesProfiles("postgres-integration"))
-        val expectedDatabase = DatabaseUrlParser.parse(properties.databaseUrl).jdbcUrl
+        val expectedDatabase = checkNotNull(System.getenv("INTEGRATION_DATASOURCE_URL"))
             .substringAfterLast('/')
             .substringBefore('?')
-        val actualDatabase = jdbcTemplate.queryForObject("select current_database()", String::class.java)
+        val actualDatabase =
+            jdbcTemplate.queryForObject("select current_database()", String::class.java)
         check(actualDatabase == expectedDatabase) { "Integration test connected to '$actualDatabase', expected '$expectedDatabase'" }
         check(actualDatabase != "agent_store") {
             "PostgreSQL integration tests must use the dedicated agent_store_integration database"

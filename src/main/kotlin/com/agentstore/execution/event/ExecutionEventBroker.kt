@@ -1,20 +1,25 @@
 package com.agentstore.execution.event
 
 import com.agentstore.execution.dto.response.ExecutionEventResponse
-import org.springframework.stereotype.Component
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
-import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.UUID
+import org.springframework.stereotype.Component
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 
 @Component
 class ExecutionEventBroker {
     private val locks = ConcurrentHashMap<UUID, Any>()
     private val subscriptions = ConcurrentHashMap<UUID, CopyOnWriteArrayList<Subscription>>()
-    private val terminalTypes = setOf("EXECUTION_COMPLETED", "EXECUTION_FAILED", "EXECUTION_RECONCILIATION_REQUIRED")
+    private val terminalTypes =
+        setOf("EXECUTION_COMPLETED", "EXECUTION_FAILED", "EXECUTION_RECONCILIATION_REQUIRED")
 
-    fun subscribe(executionId: UUID, afterSequence: Int, replay: () -> List<ExecutionEventResponse>): SseEmitter {
+    fun subscribe(
+        executionId: UUID,
+        afterSequence: Int,
+        replay: () -> List<ExecutionEventResponse>
+    ): SseEmitter {
         val emitter = SseEmitter(0L)
         val lock = locks.computeIfAbsent(executionId) { Any() }
         synchronized(lock) {
@@ -32,11 +37,18 @@ class ExecutionEventBroker {
                 if (terminal) {
                     emitter.complete()
                 } else {
-                    val subscription = Subscription(emitter, cursor)
-                    subscriptions.computeIfAbsent(executionId) { CopyOnWriteArrayList() }.add(subscription)
-                    emitter.onCompletion { remove(executionId, subscription) }
-                    emitter.onTimeout { remove(executionId, subscription) }
-                    emitter.onError { remove(executionId, subscription) }
+                    val subscription = Subscription(emitter = emitter, cursor = cursor)
+                    subscriptions.computeIfAbsent(executionId) { CopyOnWriteArrayList() }
+                        .add(subscription)
+                    emitter.onCompletion {
+                        remove(executionId = executionId, subscription = subscription)
+                    }
+                    emitter.onTimeout {
+                        remove(executionId = executionId, subscription = subscription)
+                    }
+                    emitter.onError {
+                        remove(executionId = executionId, subscription = subscription)
+                    }
                 }
             } catch (exception: Exception) {
                 emitter.completeWithError(exception)

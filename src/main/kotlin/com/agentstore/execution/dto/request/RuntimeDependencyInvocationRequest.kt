@@ -1,7 +1,7 @@
 package com.agentstore.execution.dto.request
 
 import jakarta.validation.constraints.NotNull
-import java.util.*
+import java.util.UUID
 
 data class RuntimeDependencyInvocationRequest(
     @field:NotNull val agentVersionId: UUID?,

@@ -13,10 +13,10 @@ import com.agentstore.dependency.repository.AgentDependencyRepository
 import com.agentstore.dependency.resolver.CycleValidator
 import com.agentstore.dependency.resolver.DependencyResolver
 import jakarta.transaction.Transactional
+import java.math.BigInteger
+import java.util.UUID
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
-import java.math.BigInteger
-import java.util.*
 
 @Service
 class DependencyService(
@@ -30,7 +30,7 @@ class DependencyService(
         requireVersion(sourceVersionId)
         return dependencyRepository.findAllBySourceVersionId(sourceVersionId).map { dependency ->
             val target = agentService.requireAgent(dependency.targetAgentId)
-            DependencyResponse.from(dependency, target.slug)
+            DependencyResponse.from(dependency = dependency, targetAgentSlug = target.slug)
         }
     }
 
@@ -38,9 +38,14 @@ class DependencyService(
     fun create(sourceVersionId: UUID, request: CreateDependencyRequest): DependencyResponse {
         val source = requireDraft(sourceVersionId)
         val target = agentService.requireAgent(request.targetAgentId)
-        cycleValidator.validate(source.agentId, target.id, sourceSlug(source.agentId), target.slug)
+        cycleValidator.validate(
+            sourceAgentId = source.agentId,
+            targetAgentId = target.id,
+            sourceSlug = sourceSlug(agentId = source.agentId),
+            targetSlug = target.slug,
+        )
         resolver.validateConstraint(request.versionConstraint)
-        validateLimits(request.maxPriceAtomic, request.maxCalls)
+        validateLimits(maxPriceAtomic = request.maxPriceAtomic, maxCalls = request.maxCalls)
         val dependency = AgentDependency(
             UUID.randomUUID(),
             source.id,
@@ -51,36 +56,56 @@ class DependencyService(
             request.maxCalls
         )
         return try {
-            DependencyResponse.from(dependencyRepository.saveAndFlush(dependency), target.slug)
+            DependencyResponse.from(
+                dependency = dependencyRepository.saveAndFlush(dependency),
+                targetAgentSlug = target.slug,
+            )
         } catch (exception: DataIntegrityViolationException) {
             throw DomainClientException(ErrorCode.DEPENDENCY_ALREADY_EXISTS)
         }
     }
 
     @Transactional
-    fun update(sourceVersionId: UUID, dependencyId: UUID, request: UpdateDependencyRequest): DependencyResponse {
+    fun update(
+        sourceVersionId: UUID,
+        dependencyId: UUID,
+        request: UpdateDependencyRequest
+    ): DependencyResponse {
         val source = requireDraft(sourceVersionId)
         if (request.isEmpty()) {
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
-        val dependency = dependencyRepository.findByIdAndSourceVersionId(dependencyId, sourceVersionId)
-            ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
+        val dependency =
+            dependencyRepository.findByIdAndSourceVersionId(
+                id = dependencyId,
+                sourceVersionId = sourceVersionId,
+            )
+                ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
         val constraint = request.versionConstraint ?: dependency.versionConstraint
         resolver.validateConstraint(constraint)
         val maxPrice = request.maxPriceAtomic?.let { BigInteger(it) } ?: dependency.maxPriceAtomic
         val maxCalls = request.maxCalls ?: dependency.maxCalls
-        validateLimits(maxPrice.toString(), maxCalls)
+        validateLimits(maxPriceAtomic = maxPrice.toString(), maxCalls = maxCalls)
         val target = agentService.requireAgent(dependency.targetAgentId)
-        cycleValidator.validate(source.agentId, target.id, sourceSlug(source.agentId), target.slug)
+        cycleValidator.validate(
+            sourceAgentId = source.agentId,
+            targetAgentId = target.id,
+            sourceSlug = sourceSlug(agentId = source.agentId),
+            targetSlug = target.slug,
+        )
         dependency.update(constraint, request.required ?: dependency.isRequired, maxPrice, maxCalls)
-        return DependencyResponse.from(dependency, target.slug)
+        return DependencyResponse.from(dependency = dependency, targetAgentSlug = target.slug)
     }
 
     @Transactional
     fun remove(sourceVersionId: UUID, dependencyId: UUID) {
         requireDraft(sourceVersionId)
-        val dependency = dependencyRepository.findByIdAndSourceVersionId(dependencyId, sourceVersionId)
-            ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
+        val dependency =
+            dependencyRepository.findByIdAndSourceVersionId(
+                id = dependencyId,
+                sourceVersionId = sourceVersionId,
+            )
+                ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
         dependencyRepository.delete(dependency)
     }
 

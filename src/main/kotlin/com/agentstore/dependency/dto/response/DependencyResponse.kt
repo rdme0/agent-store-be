@@ -1,9 +1,10 @@
 package com.agentstore.dependency.dto.response
 
+import com.agentstore.dependency.dto.internal.QuoteSnapshotDto
 import com.agentstore.dependency.model.entity.AgentDependency
 import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 
 data class DependencyResponse(
     val id: UUID,
@@ -20,16 +21,16 @@ data class DependencyResponse(
     companion object {
         fun from(dependency: AgentDependency, targetAgentSlug: String): DependencyResponse {
             return DependencyResponse(
-                dependency.id,
-                dependency.sourceVersionId,
-                dependency.targetAgentId,
-                targetAgentSlug,
-                dependency.versionConstraint,
-                dependency.isRequired,
-                dependency.maxPriceAtomic.toString(),
-                dependency.maxCalls,
-                dependency.createdAt,
-                dependency.updatedAt
+                id = dependency.id,
+                sourceVersionId = dependency.sourceVersionId,
+                targetAgentId = dependency.targetAgentId,
+                targetAgentSlug = targetAgentSlug,
+                versionConstraint = dependency.versionConstraint,
+                required = dependency.isRequired,
+                maxPriceAtomic = dependency.maxPriceAtomic.toString(),
+                maxCalls = dependency.maxCalls,
+                createdAt = dependency.createdAt,
+                updatedAt = dependency.updatedAt,
             )
         }
     }
@@ -48,6 +49,6 @@ data class QuoteResponse(
     val rootVersionId: UUID,
     val expiresAt: Instant,
     @field:Schema(pattern = "^[0-9]+$") val maxCostAtomic: String,
-    val snapshot: com.agentstore.dependency.dto.internal.QuoteSnapshot,
+    val snapshot: QuoteSnapshotDto,
     val warnings: List<QuoteWarning>
 )

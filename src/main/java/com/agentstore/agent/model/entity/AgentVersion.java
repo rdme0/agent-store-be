@@ -1,27 +1,34 @@
 package com.agentstore.agent.model.entity;
 
-import com.agentstore.agent.model.vo.AgentVersionStatus;
 import com.agentstore.agent.model.vo.AgentResponseFormat;
+import com.agentstore.agent.model.vo.AgentVersionStatus;
 import com.agentstore.common.model.entity.BaseEntity;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import java.math.BigInteger;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.math.BigInteger;
-import java.util.UUID;
-
 @Entity
-@Table(name = "agent_versions", uniqueConstraints = @UniqueConstraint(columnNames = {"agent_id", "semver"}))
+@Table(name = "agent_versions", uniqueConstraints = @UniqueConstraint(columnNames = {"agent_id",
+        "semver"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AgentVersion extends BaseEntity {
+
     @Id
     private UUID id;
 
-    @Column(name = "agent_id", nullable = false)
+    @Column(nullable = false)
     private UUID agentId;
 
     @Column(nullable = false, length = 32)
@@ -36,7 +43,7 @@ public class AgentVersion extends BaseEntity {
     private String endpoint;
 
     @JdbcTypeCode(SqlTypes.BIGINT)
-    @Column(name = "price_atomic", nullable = false, columnDefinition = "BIGINT")
+    @Column(nullable = false, columnDefinition = "BIGINT")
     private BigInteger priceAtomic;
 
     @Column(nullable = false)
@@ -45,19 +52,23 @@ public class AgentVersion extends BaseEntity {
     @Column(nullable = false)
     private String asset;
 
-    @Column(name = "pay_to", nullable = false)
+    @Column(nullable = false)
     private String payTo;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @Column(name = "response_format", nullable = false, columnDefinition = "AgentResponseFormat")
+    @Column(nullable = false, columnDefinition = "AgentResponseFormat")
     private AgentResponseFormat responseFormat = AgentResponseFormat.JSON;
 
-    public AgentVersion(UUID id, UUID agentId, String semver, String endpoint, BigInteger priceAtomic, String network, String asset, String payTo) {
-        this(id, agentId, semver, endpoint, priceAtomic, network, asset, payTo, AgentResponseFormat.JSON);
+    public AgentVersion(UUID id, UUID agentId, String semver, String endpoint,
+            BigInteger priceAtomic, String network, String asset, String payTo) {
+        this(id, agentId, semver, endpoint, priceAtomic, network, asset, payTo,
+                AgentResponseFormat.JSON);
     }
 
-    public AgentVersion(UUID id, UUID agentId, String semver, String endpoint, BigInteger priceAtomic, String network, String asset, String payTo, AgentResponseFormat responseFormat) {
+    public AgentVersion(UUID id, UUID agentId, String semver, String endpoint,
+            BigInteger priceAtomic, String network, String asset, String payTo,
+            AgentResponseFormat responseFormat) {
         this.id = id;
         this.agentId = agentId;
         this.semver = semver;

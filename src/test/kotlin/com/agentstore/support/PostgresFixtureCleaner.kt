@@ -1,7 +1,8 @@
 package com.agentstore.support
 
+import java.util.LinkedHashSet
+import java.util.UUID
 import org.springframework.jdbc.core.JdbcTemplate
-import java.util.*
 
 /** Tracks only rows created by an integration test; cleanup never uses broad table deletes. */
 class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
@@ -84,7 +85,12 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
             )
         }
         stepIds.reversed()
-            .forEach { id -> jdbcTemplate.update("delete from revenue_entries where execution_step_id = ?", id) }
+            .forEach { id ->
+                jdbcTemplate.update(
+                    "delete from revenue_entries where execution_step_id = ?",
+                    id
+                )
+            }
         deleteTracked("revenue_entries", revenueEntryIds)
         deleteTracked("payment_settlement_journals", paymentJournalIds)
         deleteTracked("payment_attempts", paymentAttemptIds)

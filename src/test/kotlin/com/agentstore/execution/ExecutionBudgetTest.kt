@@ -2,11 +2,11 @@ package com.agentstore.execution
 
 import com.agentstore.execution.model.entity.Execution
 import com.agentstore.execution.model.vo.ExecutionStatus
+import java.math.BigInteger
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
-import java.math.BigInteger
-import java.util.*
 
 class ExecutionBudgetTest {
     @Test

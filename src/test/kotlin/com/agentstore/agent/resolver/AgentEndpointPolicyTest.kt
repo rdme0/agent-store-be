@@ -1,11 +1,13 @@
 package com.agentstore.agent.resolver
 
 import com.agentstore.common.exception.client.DomainClientException
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.Test
-import org.springframework.mock.env.MockEnvironment
 import java.net.InetAddress
 import java.net.UnknownHostException
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Test
+import org.springframework.mock.env.MockEnvironment
 
 class AgentEndpointPolicyTest {
     @Test
@@ -37,7 +39,14 @@ class AgentEndpointPolicyTest {
 
         assertUnsafe { policy("prod") { listOf(private) }.validate("https://agent.example.com") }
         assertUnsafe { policy("prod") { listOf(documentation) }.validate("https://agent.example.com") }
-        assertUnsafe { policy("prod") { listOf(public, private) }.validate("https://agent.example.com") }
+        assertUnsafe {
+            policy("prod") {
+                listOf(
+                    public,
+                    private
+                )
+            }.validate("https://agent.example.com")
+        }
     }
 
     @Test
@@ -56,15 +65,24 @@ class AgentEndpointPolicyTest {
         assertUnsafe { policy("production") { listOf(documentationV6) }.validate("https://agent.example.com") }
     }
 
-    private fun policy(profile: String, resolver: AgentEndpointAddressResolver): AgentEndpointPolicy {
+    private fun policy(
+        profile: String,
+        resolver: AgentEndpointAddressResolver
+    ): AgentEndpointPolicy {
         return AgentEndpointPolicy(MockEnvironment().apply { setActiveProfiles(profile) }, resolver)
     }
 
     private fun assertUnsafe(action: () -> Unit) {
-        assertEquals("AGENT_400_005", assertThrows(DomainClientException::class.java, action).errorCode.code)
+        assertEquals(
+            "AGENT_400_005",
+            assertThrows(DomainClientException::class.java, action).errorCode.code
+        )
     }
 
     private fun assertInvalid(action: () -> Unit) {
-        assertEquals("AGENT_400_002", assertThrows(DomainClientException::class.java, action).errorCode.code)
+        assertEquals(
+            "AGENT_400_002",
+            assertThrows(DomainClientException::class.java, action).errorCode.code
+        )
     }
 }

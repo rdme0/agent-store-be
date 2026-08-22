@@ -2,22 +2,24 @@ package com.agentstore.execution.guard
 
 import com.agentstore.execution.repository.ExecutionRepository
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Component
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
+import org.springframework.stereotype.Component
 
 @Component
 class BudgetGuard(private val executionRepository: ExecutionRepository) {
     @Transactional
     fun reserve(executionId: UUID, amount: BigInteger) {
-        val execution = executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
+        val execution =
+            executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
         execution.reserve(amount)
         executionRepository.save(execution)
     }
 
     @Transactional
     fun settle(executionId: UUID, amount: BigInteger) {
-        val execution = executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
+        val execution =
+            executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
         execution.settle(amount)
         executionRepository.save(execution)
     }
@@ -34,7 +36,8 @@ class BudgetGuard(private val executionRepository: ExecutionRepository) {
 
     @Transactional
     fun reconcile(executionId: UUID, amount: BigInteger) {
-        val execution = executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
+        val execution =
+            executionRepository.findByIdForUpdate(executionId) ?: error("execution_not_found")
         if (execution.reservedCostAtomic.compareTo(amount) >= 0) {
             execution.settle(amount)
             executionRepository.save(execution)

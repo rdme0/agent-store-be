@@ -2,8 +2,8 @@ package com.agentstore.execution.guard
 
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
-import org.springframework.stereotype.Component
 import java.util.concurrent.atomic.AtomicBoolean
+import org.springframework.stereotype.Component
 
 /** Blocks execution-changing requests until restart payment recovery has established durable state. */
 @Component

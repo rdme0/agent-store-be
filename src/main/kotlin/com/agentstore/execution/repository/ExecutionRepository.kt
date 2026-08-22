@@ -3,10 +3,10 @@ package com.agentstore.execution.repository
 import com.agentstore.execution.model.entity.Execution
 import com.agentstore.execution.model.vo.ExecutionStatus
 import jakarta.persistence.LockModeType
+import java.util.UUID
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
-import java.util.*
 
 interface ExecutionRepository : JpaRepository<Execution, UUID> {
     fun findAllByStatusIn(statuses: Collection<ExecutionStatus>): List<Execution>

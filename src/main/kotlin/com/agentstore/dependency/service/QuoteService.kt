@@ -1,22 +1,24 @@
 package com.agentstore.dependency.service
 
-import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.exception.AgentNotFoundException
+import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.dto.response.QuoteResponse
 import com.agentstore.dependency.model.entity.ExecutionQuote
+import com.agentstore.dependency.model.vo.ResolvedNode
 import com.agentstore.dependency.repository.ExecutionQuoteRepository
 import com.agentstore.dependency.resolver.CostResolver
 import com.agentstore.dependency.resolver.DependencyResolver
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.*
+import java.util.UUID
+import org.springframework.stereotype.Service
 
 @Service
 class QuoteService(
@@ -37,7 +39,7 @@ class QuoteService(
         return quoteRepository.findById(id).orElse(null)
     }
 
-    fun snapshot(id: UUID): com.fasterxml.jackson.databind.JsonNode {
+    fun snapshot(id: UUID): JsonNode {
         return requireQuote(id).snapshot
     }
 
@@ -50,15 +52,22 @@ class QuoteService(
         if (candidates.isEmpty()) {
             throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
         }
-        val root = candidates.filter { matches(it.semver, constraint) }.maxByOrNull { versionKey(it.semver) }
+        val root = candidates.filter { candidate ->
+            matches(version = candidate.semver, constraint = constraint)
+        }
+            .maxByOrNull { versionKey(it.semver) }
             ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
-        val graph = resolver.resolve(root.id)
+        val graph = resolver.resolve(
+            rootVersionId = root.id,
+            allowUnresolvedRequired = false,
+            allowPriceExceeded = false,
+        )
         validateEndpoints(graph.root)
         val cost = costResolver.resolve(graph.root)
         val snapshot = graph.root.snapshot()
         val expiresAt = Instant.now().plus(5, ChronoUnit.MINUTES)
         val quote = quoteRepository.save(
-            com.agentstore.dependency.model.entity.ExecutionQuote(
+            ExecutionQuote(
                 UUID.randomUUID(),
                 root.id,
                 expiresAt,
@@ -66,22 +75,38 @@ class QuoteService(
                 objectMapper.valueToTree(snapshot)
             )
         )
-        return QuoteResponse(quote.id, root.id, expiresAt, cost.maxCostAtomic.toString(), snapshot, graph.warnings)
+        return QuoteResponse(
+            id = quote.id,
+            rootVersionId = root.id,
+            expiresAt = expiresAt,
+            maxCostAtomic = cost.maxCostAtomic.toString(),
+            snapshot = snapshot,
+            warnings = graph.warnings,
+        )
     }
 
     private fun matches(version: String, constraint: String): Boolean {
         return when {
             constraint == "*" -> true
-            constraint.startsWith("^") -> versionKey(version) >= versionKey(constraint.drop(1)) && version.substringBefore(
-                '.'
-            ) == constraint.drop(1).substringBefore('.')
-
-            constraint.startsWith("~") -> versionKey(version) >= versionKey(constraint.drop(1)) && version.substringBeforeLast(
-                '.'
-            ).substringBeforeLast('.') == constraint.drop(1).substringBeforeLast('.').substringBeforeLast('.')
-
+            constraint.startsWith("^") -> matchesCaret(version = version, constraint = constraint)
+            constraint.startsWith("~") -> matchesTilde(version = version, constraint = constraint)
             else -> version == constraint
         }
+    }
+
+    private fun matchesCaret(version: String, constraint: String): Boolean {
+        val minimumVersion = constraint.drop(1)
+        return versionKey(value = version) >= versionKey(value = minimumVersion) &&
+            version.substringBefore('.') == minimumVersion.substringBefore('.')
+    }
+
+    private fun matchesTilde(version: String, constraint: String): Boolean {
+        val minimumVersion = constraint.drop(1)
+        val versionMinor = version.substringBeforeLast('.').substringBeforeLast('.')
+        val minimumMinor = minimumVersion.substringBeforeLast('.').substringBeforeLast('.')
+
+        return versionKey(value = version) >= versionKey(value = minimumVersion) &&
+            versionMinor == minimumMinor
     }
 
     private fun versionKey(value: String): Long {
@@ -90,7 +115,7 @@ class QuoteService(
             .toLong()
     }
 
-    private fun validateEndpoints(node: com.agentstore.dependency.model.vo.ResolvedNode) {
+    private fun validateEndpoints(node: ResolvedNode) {
         endpointPolicy.validate(node.version.endpoint)
         node.dependencies.mapNotNull { it.resolved }.forEach(::validateEndpoints)
     }

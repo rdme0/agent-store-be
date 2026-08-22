@@ -4,20 +4,31 @@ import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
-import java.util.*
+import java.util.Base64
+import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import org.springframework.stereotype.Component
 
 @Component
 class InvocationTokenService(
     private val properties: AgentStoreProperties,
     private val objectMapper: ObjectMapper,
 ) {
-    fun issue(executionId: UUID, stepId: UUID, agentVersionId: UUID, callPath: List<String>): String {
+    private companion object {
+        const val ALGORITHM = "HmacSHA256"
+        const val TTL_SECONDS = 300L
+    }
+
+    fun issue(
+        executionId: UUID,
+        stepId: UUID,
+        agentVersionId: UUID,
+        callPath: List<String>
+    ): String {
         val claims = mapOf(
             "executionId" to executionId,
             "stepId" to stepId,
@@ -32,38 +43,49 @@ class InvocationTokenService(
     fun verify(token: String): InvocationTokenClaims {
         val parts = token.split('.')
         if (parts.size != 2) {
-            throw invalidToken()
+            throw DomainClientException(errorCode = ErrorCode.INVALID_INVOCATION_TOKEN)
         }
         val expected = sign(parts[0].toByteArray(StandardCharsets.UTF_8))
-        val actual = runCatching { Base64.getUrlDecoder().decode(parts[1]) }.getOrElse { throw invalidToken() }
+        val actual = runCatching {
+            Base64.getUrlDecoder().decode(parts[1])
+        }.getOrElse {
+            throw DomainClientException(errorCode = ErrorCode.INVALID_INVOCATION_TOKEN)
+        }
         if (!MessageDigest.isEqual(expected, actual)) {
-            throw invalidToken()
+            throw DomainClientException(errorCode = ErrorCode.INVALID_INVOCATION_TOKEN)
         }
         val payload = runCatching {
             objectMapper.readTree(
                 Base64.getUrlDecoder().decode(parts[0])
             )
-        }.getOrElse { throw invalidToken() }
+        }.getOrElse {
+            throw DomainClientException(errorCode = ErrorCode.INVALID_INVOCATION_TOKEN)
+        }
         val expiresAt = payload.path("expiresAt").asLong(0)
         if (expiresAt <= Instant.now().epochSecond) {
             throw DomainClientException(ErrorCode.INVOCATION_TOKEN_EXPIRED)
         }
         return try {
             InvocationTokenClaims(
-                UUID.fromString(payload.path("executionId").asText()),
-                UUID.fromString(payload.path("stepId").asText()),
-                UUID.fromString(payload.path("agentVersionId").asText()),
-                payload.path("callPath").map { it.asText() },
-                expiresAt,
+                executionId = UUID.fromString(payload.path("executionId").asText()),
+                stepId = UUID.fromString(payload.path("stepId").asText()),
+                agentVersionId = UUID.fromString(payload.path("agentVersionId").asText()),
+                callPath = payload.path("callPath").map { node -> node.asText() },
+                expiresAtEpochSeconds = expiresAt,
             )
         } catch (exception: IllegalArgumentException) {
-            throw invalidToken()
+            throw DomainClientException(errorCode = ErrorCode.INVALID_INVOCATION_TOKEN)
         }
     }
 
     private fun sign(value: ByteArray): ByteArray {
         return Mac.getInstance(ALGORITHM).run {
-            init(SecretKeySpec(properties.runtimeTokenSecret.toByteArray(StandardCharsets.UTF_8), ALGORITHM))
+            init(
+                SecretKeySpec(
+                    properties.runtimeTokenSecret.toByteArray(StandardCharsets.UTF_8),
+                    ALGORITHM
+                )
+            )
             doFinal(value)
         }
     }
@@ -72,12 +94,4 @@ class InvocationTokenService(
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value)
     }
 
-    private fun invalidToken(): DomainClientException {
-        return DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
-    }
-
-    private companion object {
-        const val ALGORITHM = "HmacSHA256"
-        const val TTL_SECONDS = 300L
-    }
 }

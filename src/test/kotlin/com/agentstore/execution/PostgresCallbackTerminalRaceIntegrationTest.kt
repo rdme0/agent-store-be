@@ -8,28 +8,32 @@ import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.service.PaymentService
 import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.support.PostgresIntegrationTestSupport
-import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
-import org.springframework.beans.factory.annotation.Autowired
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 
 @EnabledIfEnvironmentVariable(named = "RUN_POSTGRES_INTEGRATION_TESTS", matches = "true")
 @EnabledIfEnvironmentVariable(named = "SPRING_EXCLUSIVE_MAINTENANCE", matches = "true")
 class PostgresCallbackTerminalRaceIntegrationTest : PostgresIntegrationTestSupport() {
     @Autowired
     private lateinit var admission: RuntimeCallbackAdmissionService
+
     @Autowired
     private lateinit var executionRunService: ExecutionRunService
+
     @Autowired
     private lateinit var settlement: ExecutionPaymentSettlementService
+
     @Autowired
     private lateinit var paymentService: PaymentService
+
     @Autowired
     private lateinit var budgetGuard: BudgetGuard
 

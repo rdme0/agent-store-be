@@ -1,5 +1,6 @@
 package com.agentstore.agent
 
+import com.agentstore.agent.codec.AgentListCursorCodec
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.entity.Developer
@@ -11,24 +12,23 @@ import com.agentstore.agent.repository.AgentVersionRepository
 import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
-import com.agentstore.agent.service.AgentListCursorCodec
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Test
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.`when`
-import org.springframework.data.domain.PageRequest
-import org.springframework.mock.env.MockEnvironment
-import org.springframework.test.util.ReflectionTestUtils
 import java.math.BigInteger
 import java.net.InetAddress
 import java.time.Instant
 import java.util.Optional
 import java.util.UUID
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Test
+import org.mockito.Mockito.`when`
+import org.mockito.Mockito.mock
+import org.springframework.data.domain.PageRequest
+import org.springframework.mock.env.MockEnvironment
+import org.springframework.test.util.ReflectionTestUtils
 
 class AgentMarketplaceListTest {
     @Test
@@ -39,23 +39,34 @@ class AgentMarketplaceListTest {
                 "risk", AgentVersionStatus.ACTIVE, false, null, null, PageRequest.of(0, 3),
             )
         ).thenReturn(fixture.newest.take(3))
-        `when`(fixture.agentRepository.countDistinctDependenciesByAgentIds(fixture.newest.take(2).map { it.id }))
+        `when`(
+            fixture.agentRepository.countDistinctDependenciesByAgentIds(
+                fixture.newest.take(2).map { it.id })
+        )
             .thenReturn(emptyList())
 
         val firstResult = fixture.service.list(2, null, " risk ", AgentListSort.NEWEST)
         val lastVisible = fixture.newest[1]
         `when`(
             fixture.agentRepository.findMarketplaceAgentsByCreatedAtDesc(
-                "risk", AgentVersionStatus.ACTIVE, true, lastVisible.createdAt, lastVisible.id, PageRequest.of(0, 3),
+                "risk",
+                AgentVersionStatus.ACTIVE,
+                true,
+                lastVisible.createdAt,
+                lastVisible.id,
+                PageRequest.of(0, 3),
             )
         ).thenReturn(listOf(fixture.newest[2]))
         `when`(fixture.agentRepository.countDistinctDependenciesByAgentIds(listOf(fixture.newest[2].id)))
             .thenReturn(emptyList())
 
-        val secondResult = fixture.service.list(2, firstResult.nextCursor, "risk", AgentListSort.NEWEST)
+        val secondResult =
+            fixture.service.list(2, firstResult.nextCursor, "risk", AgentListSort.NEWEST)
 
         assertEquals(listOf("newest-a", "newest-b"), firstResult.items.map { it.slug })
-        assertEquals(listOf(AgentVersionStatus.ACTIVE), firstResult.items.first().versions.map { it.status })
+        assertEquals(
+            listOf(AgentVersionStatus.ACTIVE),
+            firstResult.items.first().versions.map { it.status })
         assertEquals(listOf("newest-c"), secondResult.items.map { it.slug })
         assertEquals(null, secondResult.nextCursor)
     }
@@ -101,7 +112,9 @@ class AgentMarketplaceListTest {
                 null, AgentVersionStatus.ACTIVE, false, null, null, PageRequest.of(0, 21),
             )
         ).thenReturn(listOf(agent))
-        `when`(fixture.agentRepository.countDistinctDependenciesByAgentIds(listOf(agent.id))).thenReturn(listOf(count))
+        `when`(fixture.agentRepository.countDistinctDependenciesByAgentIds(listOf(agent.id))).thenReturn(
+            listOf(count)
+        )
 
         val result = fixture.service.list(20, null, null, AgentListSort.NAME_ASC)
 
@@ -135,22 +148,48 @@ class AgentMarketplaceListTest {
             `when`(versionRepository.findAllByAgentIdAndStatus(agent.id, AgentVersionStatus.ACTIVE))
                 .thenReturn(listOf(activeVersion))
             `when`(versionRepository.findAllByAgentId(agent.id))
-                .thenReturn(listOf(activeVersion, draftVersion(agent.id), disabledVersion(agent.id)))
+                .thenReturn(
+                    listOf(
+                        activeVersion,
+                        draftVersion(agent.id),
+                        disabledVersion(agent.id)
+                    )
+                )
         }
         val policy = AgentEndpointPolicy(
             MockEnvironment().apply { setActiveProfiles("dev") },
-            AgentEndpointAddressResolver { listOf(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))) },
+            AgentEndpointAddressResolver {
+                listOf(
+                    InetAddress.getByAddress(
+                        byteArrayOf(
+                            127,
+                            0,
+                            0,
+                            1
+                        )
+                    )
+                )
+            },
         )
         val cursorCodec = AgentListCursorCodec(
             jacksonObjectMapper().findAndRegisterModules(),
             AgentStoreProperties(
+                serviceName = "agent-store-api",
+                apiVersion = "0.1.0",
+                runtimeCallbackBaseUrl = "http://127.0.0.1:8080",
                 corsOrigins = listOf("http://localhost:5173"),
                 runtimeTokenSecret = "test-cursor-secret",
-                databaseUrl = "postgresql://postgres:postgres@localhost:5432/agent_store",
+                paymentMode = "simulated",
             ),
         )
         return Fixture(
-            AgentService(agentRepository, versionRepository, developerRepository, policy, cursorCodec),
+            AgentService(
+                agentRepository,
+                versionRepository,
+                developerRepository,
+                policy,
+                cursorCodec
+            ),
             agentRepository,
             newest,
         )

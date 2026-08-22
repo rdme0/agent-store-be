@@ -7,11 +7,14 @@ import com.agentstore.payment.model.entity.PaymentAttempt
 import com.fasterxml.jackson.databind.JsonNode
 import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
-import java.util.*
+import java.util.UUID
 
 data class PaymentAttemptResponse(
     val id: UUID,
-    @field:Schema(allowableValues = ["REQUIRED", "AUTHORIZED", "SETTLED", "FAILED", "RECONCILIATION_REQUIRED"]) val status: String,
+    @field:Schema(
+        allowableValues = ["REQUIRED", "AUTHORIZED", "SETTLED", "FAILED", "RECONCILIATION_REQUIRED"],
+    )
+    val status: String,
     @field:Schema(pattern = "^[0-9]+$") val amountAtomic: String,
     @field:Schema(allowableValues = ["simulated", "x402"]) val mode: String,
     @field:Schema(nullable = false) val transactionHash: String? = null,
@@ -23,7 +26,10 @@ data class ExecutionStepResponse(
     val id: UUID,
     val parentStepId: UUID?,
     val agentVersionId: UUID,
-    @field:Schema(allowableValues = ["CREATED", "PAYMENT_REQUIRED", "PAYMENT_SETTLED", "RUNNING", "COMPLETED", "FAILED"]) val status: String,
+    @field:Schema(
+        allowableValues = ["CREATED", "PAYMENT_REQUIRED", "PAYMENT_SETTLED", "RUNNING", "COMPLETED", "FAILED"],
+    )
+    val status: String,
     @field:Schema(pattern = "^[0-9]+$") val costAtomic: String,
     @field:Schema(allowableValues = ["TEXT", "MARKDOWN", "STRUCTURED", "JSON"])
     val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
@@ -41,27 +47,27 @@ data class ExecutionStepResponse(
             responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
         ): ExecutionStepResponse {
             return ExecutionStepResponse(
-                step.id,
-                step.parentStepId,
-                step.agentVersionId,
-                step.status.name,
-                step.costAtomic.toString(),
-                responseFormat,
-                output,
-                step.failureCode,
-                payments.map {
+                id = step.id,
+                parentStepId = step.parentStepId,
+                agentVersionId = step.agentVersionId,
+                status = step.status.name,
+                costAtomic = step.costAtomic.toString(),
+                responseFormat = responseFormat,
+                output = output,
+                failureCode = step.failureCode,
+                payments = payments.map { payment ->
                     PaymentAttemptResponse(
-                        it.id,
-                        it.status.name,
-                        it.amountAtomic.toString(),
-                        it.paymentMode.name.lowercase(),
-                        it.transactionHash,
-                        it.paymentIdentifier,
-                        it.failureCode
+                        id = payment.id,
+                        status = payment.status.name,
+                        amountAtomic = payment.amountAtomic.toString(),
+                        mode = payment.paymentMode.name.lowercase(),
+                        transactionHash = payment.transactionHash,
+                        paymentIdentifier = payment.paymentIdentifier,
+                        failureCode = payment.failureCode,
                     )
                 },
-                step.createdAt,
-                step.updatedAt,
+                createdAt = step.createdAt,
+                updatedAt = step.updatedAt,
             )
         }
     }
@@ -93,12 +99,12 @@ data class ExecutionEventResponse(
     companion object {
         fun from(event: ExecutionEvent, payload: Any = event.payload): ExecutionEventResponse {
             return ExecutionEventResponse(
-                event.id,
-                event.executionId,
-                event.sequence,
-                event.type,
-                payload,
-                event.createdAt
+                id = event.id,
+                executionId = event.executionId,
+                sequence = event.sequence,
+                type = event.type,
+                payload = payload,
+                createdAt = event.createdAt,
             )
         }
     }
