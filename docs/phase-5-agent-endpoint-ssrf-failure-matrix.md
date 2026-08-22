@@ -1,7 +1,9 @@
 # Spring Phase 5 — Agent endpoint SSRF policy failure matrix
 
-Risk: `HIGH_RISK`. An Agent endpoint is a persisted external-side-effect destination. The endpoint is checked at write,
-activation, quote snapshot, and immediately before the existing payment client sends the request. A later DNS rebinding
+Risk: `HIGH_RISK`. An Agent endpoint is a persisted external-side-effect destination. The endpoint
+is checked at write,
+activation, quote snapshot, and immediately before the existing payment client sends the request. A
+later DNS rebinding
 therefore fails closed at invocation time rather than relying on the earlier validation.
 
 | Boundary                   | Failure or attack                                                                                       | Durable result                                                                     | Retry/idempotency                                                                                 | User-visible outcome                      | Test                                                                                                                                                 |
@@ -14,6 +16,9 @@ therefore fails closed at invocation time rather than relying on the earlier val
 | development                | external or alternate loopback spelling                                                                 | no request is sent                                                                 | no DNS lookup is trusted                                                                          | `UNSAFE_AGENT_ENDPOINT`                   | `development accepts only explicit loopback hosts`                                                                                                   |
 | production DNS             | resolution failure, private, link-local, loopback, multicast, unspecified, reserved, or mixed addresses | no request is sent                                                                 | retry only after all addresses are public                                                         | `UNSAFE_AGENT_ENDPOINT`                   | production policy tests                                                                                                                              |
 
-The x402 bridge client must call `AgentEndpointPolicy.validate` immediately before any future outbound Agent invocation
-as part of its own HIGH_RISK handoff. The policy intentionally allows only `localhost`, `127.0.0.1`, and `[::1]` in
-`dev`, `development`, and `test` profiles; every other profile requires HTTPS plus an all-public DNS result.
+The native x402 client resolves through `AgentEndpointPolicy` immediately before its outbound Agent
+invocation and uses
+the resulting pinned client for both the unpaid and paid request. The policy intentionally allows
+only `localhost`, `127.0.0.1`, and `[::1]` in
+`dev`, `development`, and `test` profiles; every other profile requires HTTPS plus an all-public DNS
+result.

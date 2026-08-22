@@ -1,6 +1,7 @@
 # AgentStore BE
 
-AgentStore는 **AI Agent를 등록하고, Agent끼리 의존성을 연결하고, 실행 전에 최대 비용을 확정한 뒤, 실행·결제·수익을 추적하는 Marketplace**입니다. 이 저장소는 계약과 실행을 책임지는 Kotlin/Spring 백엔드이며 PostgreSQL, x402 결제 bridge, demo agent와 함께 동작합니다.
+AgentStore는 **AI Agent를 등록하고, Agent끼리 의존성을 연결하고, 실행 전에 최대 비용을 확정한 뒤, 실행·결제·수익을 추적하는 Marketplace**
+입니다. 이 저장소는 계약과 실행, native x402 결제를 책임지는 Kotlin/Spring 백엔드이며 PostgreSQL과 선택적인 demo agent와 함께 동작합니다.
 
 이 문서는 현재 구현만 설명합니다. 미래 계획이나 아직 연결되지 않은 기능은 포함하지 않습니다.
 
@@ -38,26 +39,24 @@ flowchart TB
     Browser["브라우저\nReact FE :5173 또는 :5174"]
     Spring["AgentStore API\nSpring Boot :8080"]
     DB[("PostgreSQL\nRegistry, Quote, Execution, Payment, Revenue")]
-    Demo["Demo Agents\nFastify :8090"]
-    Bridge["x402 Bridge\nNode/Fastify :8091"]
-    Chain["x402 Facilitator / Base Sepolia"]
+    Demo["Demo Agent\nGo/Gin :8090"]
+    Facilitator["x402 Facilitator"]
+    Chain["Base Sepolia"]
     Browser -->|JSON API와 SSE| Spring
     Spring -->|JPA transaction| DB
-    Spring -->|simulated 호출| Demo
-    Spring -->|서명된 내부 요청| Bridge
-    Bridge -->|pay and invoke| Demo
-    Bridge -->|지갑 서명과 settlement| Chain
+    Spring -->|simulated 또는 EIP - 3009 서명 호출| Demo
+    Demo -->|verify / settle| Facilitator
+    Facilitator -->|USDC settlement| Chain
 ```
 
-| 구성 요소 | 책임 | 가지면 안 되는 책임 |
-|---|---|---|
-| React FE | 목록, 입력, 승인, 실행 상태 표현 | DB 접근, private key, 결제 서명 |
-| Spring API | 검증, Version 해석, Quote, 예산, 실행, 복구, 수익 | 사용자 지갑 private key |
-| PostgreSQL | 영속 상태와 복구 근거 | 외부 Agent 호출 |
-| Demo Agents | 로컬 실행 대상과 x402 응답 시뮬레이션 | Marketplace 원장 관리 |
-| x402 Bridge | 비밀키, x402 SDK, pay-and-invoke, reconciliation | 공개 브라우저 API |
+| 구성 요소       | 책임                                                               | 가지면 안 되는 책임               |
+|-------------|------------------------------------------------------------------|---------------------------|
+| React FE    | 목록, 입력, 승인, 실행 상태 표현                                             | DB 접근, private key, 결제 서명 |
+| Spring API  | 검증, Version 해석, Quote, 예산, 실행, 복구, 수익, 전용 hot-wallet EIP-3009 서명 | 사용자 임의 지갑 관리              |
+| PostgreSQL  | 영속 상태와 복구 근거                                                     | 외부 Agent 호출               |
+| Go Demo Agent | 로컬 실행 대상과 x402 응답 시뮬레이션                                       | Marketplace 원장 관리         |
 
-Spring API는 `8080`, demo agents는 `8090`, x402 bridge는 `8091`입니다. 이전 TypeScript API는 parity 참고 대상이었을 뿐 현재 runtime에 포함되지 않습니다.
+Spring API는 `8080`, 선택적인 Go demo-agent는 `8090`입니다. 운영 결제에 별도 런타임은 필요하지 않습니다.
 
 ## 3. 핵심 도메인
 
@@ -69,8 +68,10 @@ Spring API는 `8080`, demo agents는 `8090`, x402 bridge는 `8091`입니다. 이
 - Marketplace와 Quote resolver는 `ACTIVE` Version만 사용합니다.
 - `slug`는 소문자 영숫자와 하이픈 조합이며 최대 80자입니다.
 - `priceAtomic`은 숫자로만 된 문자열입니다. 부동소수점 반올림을 피하려고 JSON number를 쓰지 않습니다.
-- `responseFormat`은 Version이 반환할 결과 표현을 선언합니다. `TEXT`, `MARKDOWN`, `STRUCTURED`, `JSON` 중 하나이며, 생략된 기존 Version은 `JSON`으로 취급합니다.
-- `TEXT`와 `MARKDOWN`은 문자열을, `STRUCTURED`는 `title`과 하나 이상의 `{label, value}` 섹션을 요구합니다. 섹션 값은 문자열·숫자·불리언만 허용합니다. `JSON`은 임의의 JSON을 허용합니다.
+- `responseFormat`은 Version이 반환할 결과 표현을 선언합니다. `TEXT`, `MARKDOWN`, `STRUCTURED`, `JSON` 중 하나이며, 생략된
+  기존 Version은 `JSON`으로 취급합니다.
+- `TEXT`와 `MARKDOWN`은 문자열을, `STRUCTURED`는 `title`과 하나 이상의 `{label, value}` 섹션을 요구합니다. 섹션 값은
+  문자열·숫자·불리언만 허용합니다. `JSON`은 임의의 JSON을 허용합니다.
 
 ```mermaid
 stateDiagram-v2
@@ -82,19 +83,23 @@ stateDiagram-v2
 
 ### Dependency
 
-| 필드 | 의미 |
-|---|---|
-| `targetAgentId` | 호출할 대상 Agent |
+| 필드                  | 의미                              |
+|---------------------|---------------------------------|
+| `targetAgentId`     | 호출할 대상 Agent                    |
 | `versionConstraint` | exact, `^`, `~`, `*` Version 범위 |
-| `required` | 해석 실패 시 Quote 전체를 실패시킬지 여부 |
-| `maxPriceAtomic` | 선택할 dependency 가격 상한 |
-| `maxCalls` | 이 edge의 최대 호출 수, 1~5 |
+| `required`          | 해석 실패 시 Quote 전체를 실패시킬지 여부      |
+| `maxPriceAtomic`    | 선택할 dependency 가격 상한            |
+| `maxCalls`          | 이 edge의 최대 호출 수, 1~5            |
 
-필수 dependency의 Version을 찾지 못하면 Quote가 실패합니다. 선택 dependency의 Version을 찾지 못한 경우에만 warning `OPTIONAL_DEPENDENCY_NOT_RESOLVED`를 남깁니다. Version은 찾았지만 `maxPriceAtomic`을 넘으면 required 여부와 관계없이 `DEPENDENCY_PRICE_EXCEEDED`로 Quote 전체를 거부합니다. 순환 참조는 전체 경로와 함께 거부되며, 호출 경로는 root를 포함해 최대 5개 Agent입니다.
+필수 dependency의 Version을 찾지 못하면 Quote가 실패합니다. 선택 dependency의 Version을 찾지 못한 경우에만 warning
+`OPTIONAL_DEPENDENCY_NOT_RESOLVED`를 남깁니다. Version은 찾았지만 `maxPriceAtomic`을 넘으면 required 여부와 관계없이
+`DEPENDENCY_PRICE_EXCEEDED`로 Quote 전체를 거부합니다. 순환 참조는 전체 경로와 함께 거부되며, 호출 경로는 root를 포함해 최대 5개
+Agent입니다.
 
 ### Quote는 견적이면서 실행 계약이다
 
-Quote는 선택된 정확한 Version, endpoint, 가격, payment term, dependency graph를 snapshot으로 고정합니다. Quote 뒤에 새 Version이 publish되어도 이미 발급된 Quote의 의미는 바뀌지 않습니다.
+Quote는 선택된 정확한 Version, endpoint, 가격, payment term, dependency graph를 snapshot으로 고정합니다. Quote 뒤에 새
+Version이 publish되어도 이미 발급된 Quote의 의미는 바뀌지 않습니다.
 
 ```mermaid
 flowchart TD
@@ -119,7 +124,9 @@ flowchart TD
 
 ### Execution과 Step
 
-사용자는 Quote ID, 질문, `maxBudgetAtomic`을 제출합니다. 예산은 Quote의 `maxCostAtomic`과 **정확히 같아야** 합니다. Execution, root Step, 최초 event는 한 transaction에서 저장되고 실제 runner는 `afterCommit`에서만 시작합니다. commit되지 않은 실행이 외부 Agent를 호출하는 일을 막는 경계입니다.
+사용자는 Quote ID, 질문, `maxBudgetAtomic`을 제출합니다. 예산은 Quote의 `maxCostAtomic`과 **정확히 같아야** 합니다. Execution,
+root Step, 최초 event는 한 transaction에서 저장되고 실제 runner는 `afterCommit`에서만 시작합니다. commit되지 않은 실행이 외부
+Agent를 호출하는 일을 막는 경계입니다.
 
 ```mermaid
 sequenceDiagram
@@ -128,25 +135,29 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant Root as Root Agent
     participant Dep as Dependency Agent
-    FE->>API: POST quote
-    API->>DB: graph snapshot 저장
-    API-->>FE: Quote와 maxCostAtomic
-    FE->>API: POST execution, 동일한 maxBudgetAtomic
-    API->>DB: Execution, root Step, event 저장
-    DB-->>API: COMMIT
-    API-->>FE: Execution ID
-    API->>Root: commit 이후 invoke
-    Root->>API: dependency callback와 idempotency key
-    API->>DB: frozen snapshot, 예산, 중복 확인
-    API->>Dep: 허용된 dependency invoke
-    Dep-->>API: result
-    API->>DB: step, payment, event, revenue 기록
-    API-->>FE: SSE event
+    FE ->> API: POST quote
+    API ->> DB: graph snapshot 저장
+    API -->> FE: Quote와 maxCostAtomic
+    FE ->> API: POST execution, 동일한 maxBudgetAtomic
+    API ->> DB: Execution, root Step, event 저장
+    DB -->> API: COMMIT
+    API -->> FE: Execution ID
+    API ->> Root: commit 이후 invoke
+    Root ->> API: dependency callback와 idempotency key
+    API ->> DB: frozen snapshot, 예산, 중복 확인
+    API ->> Dep: 허용된 dependency invoke
+    Dep -->> API: result
+    API ->> DB: step, payment, event, revenue 기록
+    API -->> FE: SSE event
 ```
 
-Execution은 `PENDING → RUNNING → COMPLETED/FAILED`입니다. Step은 `CREATED`, `PAYMENT_REQUIRED`, `PAYMENT_SETTLED`, `RUNNING`, `COMPLETED`, `FAILED`를 사용하고 Payment는 `REQUIRED`, `AUTHORIZED`, `SETTLED`, `FAILED`, `RECONCILIATION_REQUIRED`를 사용합니다. 전체 실행, 개별 Step, Payment 상태가 같다고 가정하면 안 됩니다.
+Execution은 `PENDING → RUNNING → COMPLETED/FAILED`입니다. Step은 `CREATED`, `PAYMENT_REQUIRED`,
+`PAYMENT_SETTLED`, `RUNNING`, `COMPLETED`, `FAILED`를 사용하고 Payment는 `REQUIRED`, `AUTHORIZED`,
+`SETTLED`, `FAILED`, `RECONCILIATION_REQUIRED`를 사용합니다. 전체 실행, 개별 Step, Payment 상태가 같다고 가정하면 안 됩니다.
 
-Agent output이 Version의 `responseFormat`과 맞지 않으면 결제 기록을 보존한 채 Step과 Execution을 `FAILED`로 전환하고 `AGENT_OUTPUT_FORMAT_INVALID`를 failure code로 기록합니다. 이 검증은 root Agent와 runtime dependency Agent 모두에 적용됩니다.
+Agent output이 Version의 `responseFormat`과 맞지 않으면 결제 기록을 보존한 채 Step과 Execution을 `FAILED`로 전환하고
+`AGENT_OUTPUT_FORMAT_INVALID`를 failure code로 기록합니다. 이 검증은 root Agent와 runtime dependency Agent 모두에
+적용됩니다.
 
 ### Runtime dependency callback
 
@@ -164,18 +175,22 @@ Agent output이 Version의 `responseFormat`과 맞지 않으면 결제 기록을
 ## 4. 결제, 장애, 복구
 
 - `PAYMENT_MODE=simulated`: 실제 chain 결제 없이 동일한 원장 흐름을 검사합니다.
-- `PAYMENT_MODE=x402`: Spring이 인증된 내부 요청을 bridge에 보내고 bridge가 x402 SDK와 private key를 씁니다.
+- `PAYMENT_MODE=x402`: Spring이 전용 hot-wallet private key로 Base Sepolia USDC EIP-3009 payload를 직접
+  서명합니다.
 
-네트워크 timeout은 실패를 뜻하지 않습니다. 외부 결제는 성공하고 응답만 유실될 수 있어 서버는 side effect 전에 payment intent와 budget reservation을 먼저 영속화합니다.
+네트워크 timeout은 실패를 뜻하지 않습니다. 외부 결제는 성공하고 응답만 유실될 수 있어 서버는 side effect 전에 payment intent와 budget
+reservation을 먼저 영속화합니다.
 
 ```mermaid
 flowchart TD
-    Reserve["Payment intent와 예산 reservation 저장"] --> Call["외부 결제 또는 bridge 호출"]
-    Call --> Known{"settlement 증거가 명확한가?"}
+    Reserve["Payment intent와 예산 reservation 저장"] --> Call["Agent 402 challenge 요청"]
+    Call --> Validate["Quote와 challenge 조건 대조"]
+    Validate --> Sign["EIP-3009 서명 후 paid invoke"]
+    Sign --> Known{"settlement 증거가 명확한가?"}
     Known -->|성공| Settle["SETTLED를 정확히 한 번 projection"]
     Known -->|timeout 또는 UNKNOWN| Reconcile["RECONCILIATION_REQUIRED 유지"]
     Known -->|settled 아님| Reconcile
-    Reconcile --> Check["bridge reconciliation"]
+    Reconcile --> Check["native in-memory receipt correlation"]
     Check -->|settled 증명| Settle
     Check -->|SETTLED 이외 모든 결과| Reconcile
     Settle --> Local{"로컬 step와 revenue 반영 성공?"}
@@ -183,7 +198,10 @@ flowchart TD
     Local -->|아니오| AfterPay["FAILED_AFTER_PAYMENT\n증거와 reservation 보존"]
 ```
 
-UNKNOWN뿐 아니라 현재 reconciliation이 `SETTLED`을 증명하지 못한 모든 경우에 `RECONCILIATION_REQUIRED`와 reservation을 유지합니다. `DEFINITE_FAILURE` 응답도 자동으로 `FAILED` 전환하거나 reservation을 해제하는 근거로 쓰지 않습니다. settlement 뒤 로컬 projection이 실패해도 결제 사실을 지우지 않아 복구 근거를 보존합니다. private key, bridge secret, signed payload는 FE 환경 변수나 Git에 넣지 마세요.
+서명 이후 receipt가 없거나 불명확하면 `RECONCILIATION_REQUIRED`와 reservation을 유지합니다. JVM 안의 동일 attempt/key
+correlation이 성공 receipt를 증명할 때만 settlement를 복구하며, restart로 증거가 사라지면 재결제하지 않고 `UNKNOWN`을 유지합니다.
+settlement 뒤 로컬 projection이 실패해도 결제 사실을 지우지 않아 복구 근거를 보존합니다. private key, typed data, signature와 raw
+x402 header는 DB나 로그에 기록하지 않고 FE 환경 변수나 Git에 넣지 마세요.
 
 ## 5. SSE 실시간 이벤트
 
@@ -199,7 +217,7 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 
 `GET /api/agents`는 `q`, `sort`, `cursor`, `limit`을 받습니다.
 
-- `sort`: `NEWEST` 또는 `NAME_ASC`.
+- `sort`: `newest` 또는 `name_asc`.
 - ACTIVE Version이 하나 이상 있는 Agent만 반환합니다.
 - 항목의 Version 목록도 ACTIVE만 포함합니다.
 - `dependencyCount`는 서로 다른 target Agent 수입니다.
@@ -212,81 +230,79 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 일반 JSON은 `CommonResponse<T>` envelope를 사용합니다. 추적 ID는 JSON이 아니라 `X-Trace-Id` header에 있습니다.
 
 ```json
-{"isSuccess": true, "message": "요청이 성공했습니다.", "result": {}}
+{
+  "isSuccess": true,
+  "message": "요청이 성공했습니다.",
+  "result": {}
+}
 ```
 
-| Method | Path | 역할 |
-|---|---|---|
-| GET | `/health` | 상태 확인 |
-| GET / POST | `/api/agents` | 목록 / 등록 |
-| GET | `/api/agents/{slug}` | 상세 |
-| PATCH / DELETE | `/api/agents/{id}` | 수정 / 삭제 |
-| POST | `/api/agents/{id}/versions` | Version 생성 |
-| POST | `/api/agent-versions/{id}/publish` | 활성화 |
-| POST | `/api/agent-versions/{id}/disable` | 비활성화 |
-| GET / POST | `/api/agent-versions/{id}/dependencies` | dependency 조회 / 추가 |
-| PATCH / DELETE | `/api/agent-versions/{id}/dependencies/{dependencyId}` | 수정 / 삭제 |
-| POST | `/api/agents/{slug}/quotes` | Quote 발급 |
-| POST / GET | `/api/executions`, `/api/executions/{id}` | 시작 / snapshot |
-| GET | `/api/executions/{id}/events` | SSE |
-| GET | `/api/developers/{id}/revenue` | 수익 |
+| Method         | Path                                                   | 역할                 |
+|----------------|--------------------------------------------------------|--------------------|
+| GET            | `/health`                                              | 상태 확인              |
+| GET / POST     | `/api/agents`                                          | 목록 / 등록            |
+| GET            | `/api/agents/{slug}`                                   | 상세                 |
+| PATCH / DELETE | `/api/agents/{id}`                                     | 수정 / 삭제            |
+| POST           | `/api/agents/{id}/versions`                            | Version 생성         |
+| POST           | `/api/agent-versions/{id}/publish`                     | 활성화                |
+| POST           | `/api/agent-versions/{id}/disable`                     | 비활성화               |
+| GET / POST     | `/api/agent-versions/{id}/dependencies`                | dependency 조회 / 추가 |
+| PATCH / DELETE | `/api/agent-versions/{id}/dependencies/{dependencyId}` | 수정 / 삭제            |
+| POST           | `/api/agents/{slug}/quotes`                            | Quote 발급           |
+| POST / GET     | `/api/executions`, `/api/executions/{id}`              | 시작 / snapshot      |
+| GET            | `/api/executions/{id}/events`                          | SSE                |
+| GET            | `/api/developers/{id}/revenue`                         | 수익                 |
 
 runtime callback은 일반 사용자용 API가 아닙니다.
 
 ## 8. 로컬 실행
 
-준비물은 Java 25, PostgreSQL, Node.js 24입니다.
+Spring 운영 준비물은 Java 25와 PostgreSQL입니다. 선택적인 demo-agent는 별도 Go 1.26 프로젝트로 실행합니다.
 
 ```powershell
 Copy-Item .env.example .env
+docker compose up -d postgres
 .\gradlew.bat classes
 .\gradlew.bat test
 .\gradlew.bat bootRun
 ```
 
-API는 `http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`입니다. 기본 DB는 `localhost:5432/agent_store`입니다. Docker가 다른 host port를 쓰면 `.env`의 `DATABASE_URL`도 맞추십시오. 시작 시 Flyway migration을 적용하고 Hibernate가 schema를 validate합니다. 이미 적용한 migration을 수정하지 말고 새 migration을 추가합니다.
+루트 `docker-compose.yml`은 Docker Compose의 기본 `.env` interpolation으로 `POSTGRES_*` 값만 읽어
+`pgvector/pgvector:pg17` PostgreSQL을 시작합니다. Spring의 private key 같은 다른 secret은 DB container에 전달하지
+않습니다. 최초 volume 생성 시 `agent_store`와 `agent_store_integration` DB를 준비합니다. API는
+`http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`입니다. 예시 DB는 `localhost:
+5432/agent_store`입니다. `POSTGRES_PORT`를 바꾸면 `.env`의 `SPRING_DATASOURCE_URL`과 `INTEGRATION_DATASOURCE_URL` port도
+맞추십시오. Spring 시작 시 Flyway migration을 적용하고 Hibernate가 schema를 validate합니다. 이미 적용한 migration을 수정하지 말고
+새 migration을 추가합니다.
 
-| 변수 | 기본/예시 | 설명 |
-|---|---|---|
-| `PORT` | `8080` | API port |
-| `DATABASE_URL` | PostgreSQL URL | DB와 schema |
-| `CORS_ORIGINS` | `http://localhost:*` | 쉼표 구분 origin pattern |
-| `RUNTIME_TOKEN_SECRET` | 로컬 값 필요 | callback token과 cursor 서명 |
-| `PAYMENT_MODE` | `simulated` | `simulated` 또는 `x402` |
-| `X402_BRIDGE_URL` | `http://127.0.0.1:8091` | bridge 주소 |
-| `X402_BRIDGE_SECRET` | 로컬 값 필요 | Spring↔bridge 인증 |
-| `DEMO_PAYMENT_MODE` | `simulated` | demo agent 결제 동작 |
+| 변수                                    | 예시                    | 설명                                          |
+|---------------------------------------|----------------------|---------------------------------------------|
+| `PORT`                                | `8080`               | API port                                    |
+| `SPRING_DATASOURCE_URL`               | JDBC PostgreSQL URL  | DB와 schema                                  |
+| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | `postgres` | Spring datasource 계정 |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` | `postgres`           | compose PostgreSQL 계정                       |
+| `POSTGRES_DB`                         | `agent_store`        | compose 기본 DB                               |
+| `POSTGRES_PORT`                       | `5432`               | compose host port                           |
+| `CORS_ORIGINS`                        | `http://localhost:*` | 쉼표 구분 origin pattern                        |
+| `RUNTIME_TOKEN_SECRET`                | 로컬 값 필요              | callback token과 cursor 서명                   |
+| `PAYMENT_MODE`                        | `simulated`          | `simulated` 또는 `x402`                       |
+| `X402_PRIVATE_KEY`                    | 없음                   | x402 mode 전용 저잔액 payer key, `0x` + 64자리 hex |
 
-credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다. 운영에서는 정확한 HTTPS origin으로 제한합니다.
+credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
+운영에서는 정확한 HTTPS origin으로 제한합니다.
 
-Node 하위 앱의 `dev` script는 실행 위치 기준 `../../.env`, 즉 **BE root가 아니라 `node/.env`**를 읽습니다. root 설정을 복사한 후 Node 전용 값을 그 파일에 추가합니다. 이 파일도 Git에 올리지 않습니다.
+Demo Agent는 `C:\Users\we661\GolandProjects\demo-agent`의 독립 Go 서비스입니다. 설정 예시, x402 facilitator 값,
+실행과 검증 명령은 해당 프로젝트의 README와 `.env.example`이 소유합니다. Spring의 `X402_PRIVATE_KEY`는 demo-agent에
+복사하지 않습니다.
 
-```powershell
-# agent-store-be root
-Copy-Item .env node\.env
-```
-
-Demo Agents는 별도 terminal에서 실행합니다. simulated mode는 `DEMO_PAYMENT_MODE=simulated`만으로 실행됩니다. x402 demo mode에는 `X402_FACILITATOR_URL`과 Investment/Financial/News/Risk 각각의 `DEMO_<NAME>_PRICE_ATOMIC`, `DEMO_<NAME>_PAY_TO`가 필요하며 asset을 지정한다면 `DEMO_<NAME>_ASSET`도 공식 Base Sepolia USDC 주소와 일치해야 합니다.
-
-```powershell
-Set-Location node\apps\demo-agents
-npm install
-npm run dev
-```
-
-x402 bridge는 `PAYMENT_MODE=x402`일 때 별도 terminal에서 실행합니다. `node/.env`에 Spring과 동일한 `X402_BRIDGE_SECRET` 및 `0x` 뒤 64자리 hex인 유효한 `X402_PRIVATE_KEY`가 반드시 있어야 하며 선택적으로 `X402_BRIDGE_PORT`를 지정할 수 있습니다.
-
-```powershell
-Set-Location node\apps\x402-bridge
-npm install
-npm run dev
-```
-
-실제 x402 smoke는 지갑, facilitator, network 자금이 준비돼야 합니다. funded Base Sepolia 성공을 보장하지 않습니다.
+`PAYMENT_MODE=x402`에서 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
+v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet
+자금이 준비돼야 하며 funded Base Sepolia 성공을 보장하지 않습니다.
 
 ## 9. OpenAPI와 FE 계약
 
-Spring controller/DTO가 계약의 원본입니다. 계약을 바꾼 뒤 서버를 실행하고 다른 terminal에서 아래처럼 정적 artifact를 갱신합니다. `bootRun`만으로 파일이 자동 저장되지는 않습니다.
+Spring controller/DTO가 계약의 원본입니다. 계약을 바꾼 뒤 서버를 실행하고 다른 terminal에서 아래처럼 정적 artifact를 갱신합니다. `bootRun`
+만으로 파일이 자동 저장되지는 않습니다.
 
 ```powershell
 Invoke-WebRequest http://localhost:8080/openapi.json -OutFile openapi\openapi.json
@@ -303,20 +319,28 @@ Invoke-WebRequest http://localhost:8080/openapi.json -OutFile openapi\openapi.js
 git diff --check
 ```
 
-PostgreSQL integration test는 일반 개발 DB와 분리된 `agent_store_integration` DB를 사용합니다. 기본 test profile은 `INTEGRATION_DATABASE_URL`이 없으면 이 DB를 사용하고, 명시적으로 전용 DB를 지정할 때만 이 변수를 override합니다. DB가 없다면 PostgreSQL 관리자 계정으로 먼저 생성합니다.
+PostgreSQL integration test는 일반 개발 DB와 분리된 `agent_store_integration` DB를 사용합니다. 새 compose volume은 이
+DB를 자동 생성합니다. 기존 volume에 DB가 없다면 PostgreSQL 관리자 계정으로 한 번 생성합니다. 테스트 실행 전
+`INTEGRATION_DATASOURCE_URL`, `INTEGRATION_DATASOURCE_USERNAME`, `INTEGRATION_DATASOURCE_PASSWORD`를 모두 명시해야 합니다.
 
 ```powershell
-docker exec pgvector createdb -U postgres agent_store_integration
+docker compose exec postgres createdb -U postgres agent_store_integration
 ```
 
-그 뒤 `RUN_POSTGRES_INTEGRATION_TESTS=true`와 `SPRING_EXCLUSIVE_MAINTENANCE=true`를 모두 명시해야 실제 integration test가 실행됩니다. 일반 server boot용 안전장치가 아니라 파괴적 fixture 정리를 허용하는 test opt-in이며, 테스트 지원 코드도 `agent_store`에 연결되면 실패합니다. Node 하위 앱은 각 폴더에서 `npm run typecheck`, `npm test`, `npm run build`로 확인합니다.
+그 뒤 `RUN_POSTGRES_INTEGRATION_TESTS=true`와 `SPRING_EXCLUSIVE_MAINTENANCE=true`를 모두 명시해야 실제
+integration test가 실행됩니다. 일반 server boot용 안전장치가 아니라 파괴적 fixture 정리를 허용하는 test opt-in이며, 테스트 지원 코드도
+`agent_store`에 연결되면 실패합니다. 독립 Go demo-agent는 해당 프로젝트에서 `go test ./...`, `go vet ./...`,
+`go build ./...`로 확인합니다.
 
 ## 11. 문제 해결
 
-- **CORS 403:** 요청 `Origin`이 `CORS_ORIGINS`와 맞는지 확인하고 Spring을 재시작합니다. query string은 origin에 포함되지 않습니다.
-- **Flyway checksum 오류:** 적용된 migration을 임의 수정한 상태입니다. 원본을 복구하거나 새 migration을 추가합니다. 공유 DB에서 성급히 `repair`하면 drift를 숨길 수 있습니다.
+- **CORS 403:** 요청 `Origin`이 `CORS_ORIGINS`와 맞는지 확인하고 Spring을 재시작합니다. query string은 origin에 포함되지
+  않습니다.
+- **Flyway checksum 오류:** 적용된 migration을 임의 수정한 상태입니다. 원본을 복구하거나 새 migration을 추가합니다. 공유 DB에서 성급히
+  `repair`하면 drift를 숨길 수 있습니다.
 - **relation/column JDBC 오류:** 연결 DB/schema, Flyway 적용 상태, Docker host port와 `.env`를 확인합니다.
-- **Quote 뒤 실행 거부:** Quote가 5분을 넘겼거나 예산이 정확히 같지 않거나 recovery readiness가 준비되지 않았을 수 있습니다. 새 Quote로 다시 승인합니다.
+- **Quote 뒤 실행 거부:** Quote가 5분을 넘겼거나 예산이 정확히 같지 않거나 recovery readiness가 준비되지 않았을 수 있습니다. 새 Quote로 다시
+  승인합니다.
 
 ## 12. 보안 경계
 
@@ -324,5 +348,5 @@ docker exec pgvector createdb -U postgres agent_store_integration
 - endpoint와 dependency는 Quote 시 검증되고 snapshot으로 고정됩니다.
 - callback은 서명 token과 idempotency key를 검사합니다.
 - 외부 결제 전 durable intent/reservation을 만듭니다.
-- private key와 bridge secret은 브라우저와 Git 바깥에 둡니다.
+- `X402_PRIVATE_KEY`는 Spring 배포 secret으로만 주입하고 브라우저, DB, 로그와 Git 바깥에 둡니다.
 - `X-Trace-Id`는 추적용이지 인증 수단이 아닙니다.
