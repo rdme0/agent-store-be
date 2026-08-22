@@ -4,8 +4,9 @@ import com.agentstore.execution.orchestrator.ExecutionPaymentRecoveryProjectionO
 import com.agentstore.execution.service.ExecutionLifecycleService
 import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.payment.client.PaymentReconciliationClient
-import com.agentstore.payment.model.vo.BridgeReconciliationStatus
 import com.agentstore.payment.model.vo.PaymentMode
+import com.agentstore.payment.model.vo.PaymentReconciliationStatus
+import java.util.UUID
 import org.springframework.stereotype.Service
 
 /** Replays journal-backed local settlement work without invoking an external payer again. */
@@ -28,18 +29,22 @@ class PaymentSettlementRecoveryService(
                 return@forEach
             }
             val result = reconciliationClient.reconcile(attempt)
-            // Neither a bridge restart/transport UNKNOWN nor a 4xx request rejection can prove
+            // Neither a process restart/transport UNKNOWN nor a request rejection can prove
             // that the original signed payment did not settle. Both retain the reservation.
-            if (result.status != BridgeReconciliationStatus.SETTLED) {
+            if (result.status != PaymentReconciliationStatus.SETTLED) {
                 return@forEach
             }
-            paymentExternalSettlementService.record(attempt.id, result.transactionHash!!, result.paymentIdentifier)
+            paymentExternalSettlementService.record(
+                attemptId = attempt.id,
+                transactionHash = result.transactionHash!!,
+                paymentIdentifier = result.paymentIdentifier,
+            )
             recovered += projectSettledAttempt(attempt.id)
         }
         return recovered
     }
 
-    private fun projectSettledAttempt(attemptId: java.util.UUID): Int {
+    private fun projectSettledAttempt(attemptId: UUID): Int {
         val attempt = paymentService.find(attemptId)
         val executionId = stepService.executionId(attempt.executionStepId) ?: return 0
         return try {
@@ -51,8 +56,15 @@ class PaymentSettlementRecoveryService(
         } catch (_: Exception) {
             // A settled journal is external-payment evidence. Never release its reservation
             // or downgrade the attempt when local reconciliation cannot finish.
-            paymentService.markSettlementRecoveryRequired(attempt.id, "FAILED_AFTER_PAYMENT")
-            executionLifecycleService.fail(executionId, attempt.executionStepId, "FAILED_AFTER_PAYMENT")
+            paymentService.markSettlementRecoveryRequired(
+                attemptId = attempt.id,
+                failureCode = "FAILED_AFTER_PAYMENT",
+            )
+            executionLifecycleService.fail(
+                executionId = executionId,
+                stepId = attempt.executionStepId,
+                failureCode = "FAILED_AFTER_PAYMENT",
+            )
             0
         }
     }

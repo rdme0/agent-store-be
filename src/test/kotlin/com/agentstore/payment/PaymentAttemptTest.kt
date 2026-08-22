@@ -3,10 +3,10 @@ package com.agentstore.payment
 import com.agentstore.payment.model.entity.PaymentAttempt
 import com.agentstore.payment.model.vo.PaymentAttemptStatus
 import com.agentstore.payment.model.vo.PaymentMode
+import java.math.BigInteger
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.math.BigInteger
-import java.util.*
 
 class PaymentAttemptTest {
     @Test

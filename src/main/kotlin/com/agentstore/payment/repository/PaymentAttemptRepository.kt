@@ -3,10 +3,10 @@ package com.agentstore.payment.repository
 import com.agentstore.payment.model.entity.PaymentAttempt
 import com.agentstore.payment.model.vo.PaymentAttemptStatus
 import jakarta.persistence.LockModeType
+import java.util.UUID
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
-import java.util.*
 
 interface PaymentAttemptRepository : JpaRepository<PaymentAttempt, UUID> {
     fun findAllByStatusIn(statuses: Collection<PaymentAttemptStatus>): List<PaymentAttempt>

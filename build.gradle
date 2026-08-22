@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.security.MessageDigest
 
 plugins {
     id 'java'
@@ -8,6 +9,7 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.lombok'
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
+    id 'dev.detekt'
 }
 
 group = 'com.agentstore'
@@ -25,6 +27,11 @@ kotlin {
 
 repositories { mavenCentral() }
 
+detekt {
+    config.setFrom(file('detekt.yml'))
+    buildUponDefaultConfig = false
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.apache.httpcomponents.client5:httpclient5'
@@ -40,6 +47,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     implementation 'me.paulschwarz:springboot4-dotenv:5.1.0'
     implementation 'org.semver4j:semver4j:6.0.0'
+    implementation 'org.web3j:core:6.0.0'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
@@ -51,5 +59,138 @@ dependencies {
 tasks.named('test') { useJUnitPlatform() }
 
 tasks.withType(JavaCompile).configureEach { options.release = 25 }
+
+tasks.register('verifyProjectStyle') {
+    group = 'verification'
+    description = 'Fails on project-specific readability and configuration debt.'
+
+    doLast {
+        def violations = []
+        def kotlinFiles = fileTree('src') {
+            include '**/*.kt'
+        }
+
+        kotlinFiles.each { sourceFile ->
+            def isProduction = project.relativePath(sourceFile).replace('\\', '/').startsWith('src/main/kotlin/')
+            def classBodyMemberSeen = false
+            def classHeaderDepth = 0
+
+            sourceFile.readLines('UTF-8').eachWithIndex { line, index ->
+                def location = "${project.relativePath(sourceFile)}:${index + 1}"
+
+                if (line ==~ /\s*(?:(?:private|internal|public|protected|data|enum|sealed|open|abstract)\s+)*class\s+.*/) {
+                    classBodyMemberSeen = false
+                    classHeaderDepth = line.count('(') - line.count(')')
+                    return
+                }
+                if (classHeaderDepth > 0) {
+                    classHeaderDepth += line.count('(') - line.count(')')
+                    return
+                }
+                if (line ==~ /\s*(?:private\s+)?companion object.*/ && classBodyMemberSeen) {
+                    violations << "${location} companion object must be at the top of its class"
+                }
+
+                if (line ==~ /\s*(?:(?:override|private|protected|internal|public)\s+)*(?:fun\b.*|(?:val|var)\s+\w+.*)/) {
+                    classBodyMemberSeen = true
+                }
+                if (line ==~ /\s*(?:(?:override|private|protected|internal|public)\s+)*fun\b.*\)\s*(?::\s*[^=]+)?=.*/) {
+                    violations << "${location} expression-bodied function"
+                }
+                if (isProduction && line.length() > 120) {
+                    violations << "${location} line exceeds 120 characters"
+                }
+                if (line ==~ /\s*import\s+.*\.\*\s*/) {
+                    violations << "${location} wildcard import"
+                }
+                if (isProduction &&
+                    !line.trim().startsWith('import ') &&
+                    !line.trim().startsWith('package ') &&
+                    line ==~ /.*\b(?:java|kotlin|com|org)\.[a-z][A-Za-z0-9_.]*.*/) {
+                    violations << "${location} fully qualified reference inside source body"
+                }
+                if (line.contains('@Param(')) {
+                    violations << "${location} redundant repository @Param"
+                }
+                if (line ==~ /.*(?:private|public|protected|internal)\s+val\s+\w+\s*:[^=]+\s*=\s*(?:Duration\.of|Clock\.|SecureRandom\(|[A-Za-z]+Client\().*/) {
+                    violations << "${location} injected runtime dependency or policy default"
+                }
+            }
+        }
+
+        fileTree('src/main/java') {
+            include '**/model/entity/*.java'
+        }.each { sourceFile ->
+            sourceFile.readLines('UTF-8').eachWithIndex { line, index ->
+                if (line.contains('@Column(name')) {
+                    violations << "${project.relativePath(sourceFile)}:${index + 1} convention-identical @Column name"
+                }
+                if (line.trim() == '@Column') {
+                    violations << "${project.relativePath(sourceFile)}:${index + 1} redundant bare @Column"
+                }
+            }
+        }
+
+        def immutableMigrations = [
+            'V1__20260817000000_agent_registry.sql': '0049be6b37b76c5d719dc286e394b95d249bbe5792504e95edacf40a6a4b3f45',
+            'V2__20260817010000_dependency_quotes.sql': 'b14d9de5a5b4e929d66a5fb78bceba1bd4b6a5c2d309a7d1d029e5368e617f82',
+            'V3__20260817020000_execution_runtime.sql': '5c662c8bfac0a70d7a259ecb74222a250c936256dbc1ed073634409ac4264263',
+            'V4__20260817030000_execution_input.sql': 'c42aca7ec2009f6040b3fa5c620be436a0164b34fbe099f058c170f45d836c40',
+            'V5__20260817040000_callback_fingerprint.sql': '40d073623856729a1c64fc1e999de0354ef3ad30dd6475661460c29c614c67cd',
+            'V6__20260817050000_payment_settlement_journal.sql': '6c8ebfd4bce223c2bdfbbfd8dfe36bce2e6ba1b72b7a237c7009062bca8b07ee',
+            'V7__20260817060000_payment_reconciliation_required.sql': '41b728891421177b62e73cd3a7386da6c914b88fbf86592c35cf2312218e0dd7',
+            'V8__20260817070000_x402_revenue.sql': 'cba1103feb5c6e448b6ec459e3c09c0231a3b0e526056c7721ea0aff660ab084',
+            'V9__20260819000000_base_entity_timestamps.sql': '7862b6100647dcdc04b08ee170b28a60175074169a47338b10a1b412e9aa994a',
+            'V10__20260819010000_execution_event_base_entity_timestamp.sql': 'af6dc2f5a5eee7ed16dbddb6388f289a1adfa0a3ba9bbe6f4f93ef0dd9e1704f',
+            'V11__20260820010000_payment_attempt_projection_marker.sql': '4bff81b93cbb4a620e44be930a9162c9f2f8e484ab770f225470b1aa9c10b47e',
+            'V12__20260820020000_backfill_payment_attempt_projection_marker.sql': 'e2011f6a77ad8c787f9dc16dadf6df74bc4cf0f236e9e9525f741126a59f1dee',
+            'V13__20260821000000_agent_response_format.sql': '514e3d6e39fe9231f62970616ae26e7fc5f76b21df6985030e549b043d5cbdce',
+        ]
+        immutableMigrations.each { fileName, expectedHash ->
+            def migrationFile = file("src/main/resources/db/migration/${fileName}")
+            def normalized = migrationFile.getText('UTF-8').replace('\r\n', '\n').replace('\r', '\n')
+            def actualHash = MessageDigest.getInstance('SHA-256')
+                .digest(normalized.getBytes('UTF-8'))
+                .encodeHex()
+                .toString()
+            if (actualHash != expectedHash) {
+                violations << "${project.relativePath(migrationFile)} immutable migration changed"
+            }
+        }
+
+        def configurationFiles = files(
+            fileTree('src/main/resources') { include '**/*.yaml', '**/*.yml' },
+            file('docker-compose.yml'),
+        )
+        configurationFiles.each { sourceFile ->
+            sourceFile.readLines('UTF-8').eachWithIndex { line, index ->
+                if (line ==~ /.*\$\{[^}]+:(?:-|)[^}]+}.*/) {
+                    violations << "${project.relativePath(sourceFile)}:${index + 1} environment fallback"
+                }
+            }
+        }
+
+        [
+            'src/main/kotlin/com/agentstore/common/migration',
+            'src/main/resources/application-postgres-integration.yaml',
+            'src/main/kotlin/com/agentstore/common/config/DatabaseUrlParser.kt',
+        ].each { forbiddenPath ->
+            def forbiddenFile = file(forbiddenPath)
+            def containsFiles = forbiddenFile.isDirectory() && !fileTree(forbiddenFile).isEmpty()
+            if (forbiddenFile.isFile() || containsFiles) {
+                violations << "${forbiddenPath} forbidden migration/configuration debt"
+            }
+        }
+
+        if (!violations.isEmpty()) {
+            throw new GradleException("Project style violations:\n - " + violations.join('\n - '))
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyProjectStyle')
+    dependsOn tasks.named('detektMain')
+}
 
 springBoot { mainClass = 'com.agentstore.AgentStoreApplicationKt' }

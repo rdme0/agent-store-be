@@ -6,30 +6,30 @@ import com.agentstore.execution.orchestrator.ExecutionPaymentSettlementService
 import com.agentstore.execution.service.ExecutionLifecycleService
 import com.agentstore.execution.service.ExecutionRecoveryService
 import com.agentstore.payment.client.PaymentReconciliationClient
-import com.agentstore.payment.dto.internal.BridgeReconciliationResult
+import com.agentstore.payment.dto.internal.PaymentReconciliationResultDto
 import com.agentstore.payment.model.entity.PaymentAttempt
-import com.agentstore.payment.model.vo.BridgeReconciliationStatus
 import com.agentstore.payment.model.vo.PaymentMode
+import com.agentstore.payment.model.vo.PaymentReconciliationStatus
 import com.agentstore.payment.repository.PaymentSettlementJournalRepository
 import com.agentstore.payment.service.PaymentService
 import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.revenue.repository.RevenueEntryRepository
 import com.agentstore.revenue.service.RevenueSettlementService
 import com.agentstore.support.PostgresIntegrationTestSupport
+import java.math.BigInteger
+import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
-import java.math.BigInteger
-import java.util.*
-import java.util.concurrent.Callable
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 @EnabledIfEnvironmentVariable(named = "RUN_POSTGRES_INTEGRATION_TESTS", matches = "true")
 @EnabledIfEnvironmentVariable(named = "SPRING_EXCLUSIVE_MAINTENANCE", matches = "true")
@@ -37,22 +37,31 @@ import java.util.concurrent.TimeUnit
 class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport() {
     @Autowired
     private lateinit var paymentService: PaymentService
+
     @Autowired
     private lateinit var budgetGuard: BudgetGuard
+
     @Autowired
     private lateinit var recovery: ExecutionPaymentRecoveryOrchestrator
+
     @Autowired
     private lateinit var journals: PaymentSettlementJournalRepository
+
     @Autowired
     private lateinit var revenues: RevenueEntryRepository
+
     @Autowired
     private lateinit var revenueSettlement: RevenueSettlementService
+
     @Autowired
     private lateinit var reconciliationClient: TestReconciliationClient
+
     @Autowired
     private lateinit var executionRecovery: ExecutionRecoveryService
+
     @Autowired
     private lateinit var lifecycleService: ExecutionLifecycleService
+
     @Autowired
     private lateinit var settlementService: ExecutionPaymentSettlementService
 
@@ -107,7 +116,11 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
             PaymentMode.SIMULATED
         )
         fixtureCleaner.trackPaymentAttempt(attemptId)
-        paymentService.settle(attemptId, "0x${UUID.randomUUID().toString().replace("-", "")}", "payment-$attemptId")
+        paymentService.settle(
+            attemptId,
+            "0x${UUID.randomUUID().toString().replace("-", "")}",
+            "payment-$attemptId"
+        )
 
         recovery.reconcileSettledPayments()
         recovery.reconcileSettledPayments()
@@ -190,7 +203,11 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
             PaymentMode.SIMULATED
         )
         fixtureCleaner.trackPaymentAttempt(attemptId)
-        paymentService.settle(attemptId, "0x${UUID.randomUUID().toString().replace("-", "")}", "payment-$attemptId")
+        paymentService.settle(
+            attemptId,
+            "0x${UUID.randomUUID().toString().replace("-", "")}",
+            "payment-$attemptId"
+        )
         paymentService.markSettlementRecoveryRequired(attemptId, "FAILED_AFTER_PAYMENT")
 
         recovery.reconcileSettledPayments()
@@ -215,7 +232,7 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
-    fun `unknown x402 payment settles exactly once after bridge reconciliation`() {
+    fun `unknown x402 payment settles exactly once after native reconciliation`() {
         val fixture = runtimeFixture.create()
         budgetGuard.reserve(fixture.executionId, BigInteger.ONE)
         val attemptId = paymentService.require(
@@ -228,7 +245,10 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
         )
         fixtureCleaner.trackPaymentAttempt(attemptId)
         paymentService.markReconciliationRequired(attemptId, "PAYMENT_RECONCILIATION_REQUIRED")
-        reconciliationClient.settled(attemptId, "0x${UUID.randomUUID().toString().replace("-", "")}")
+        reconciliationClient.settled(
+            attemptId,
+            "0x${UUID.randomUUID().toString().replace("-", "")}"
+        )
 
         recovery.reconcileSettledPayments()
         recovery.reconcileSettledPayments()
@@ -319,7 +339,11 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
             PaymentMode.SIMULATED
         )
         fixtureCleaner.trackPaymentAttempt(attemptId)
-        paymentService.settle(attemptId, "0x${UUID.randomUUID().toString().replace("-", "")}", "payment-$attemptId")
+        paymentService.settle(
+            attemptId,
+            "0x${UUID.randomUUID().toString().replace("-", "")}",
+            "payment-$attemptId"
+        )
 
         recovery.reconcileSettledPayments()
 
@@ -340,10 +364,15 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
             PaymentMode.SIMULATED
         )
         fixtureCleaner.trackPaymentAttempt(attemptId)
-        paymentService.settle(attemptId, "0x${UUID.randomUUID().toString().replace("-", "")}", "payment-$attemptId")
+        paymentService.settle(
+            attemptId,
+            "0x${UUID.randomUUID().toString().replace("-", "")}",
+            "payment-$attemptId"
+        )
         val pool = Executors.newFixedThreadPool(2)
         try {
-            val futures = (1..2).map { pool.submit(Callable { recovery.reconcileSettledPayments() }) }
+            val futures =
+                (1..2).map { pool.submit(Callable { recovery.reconcileSettledPayments() }) }
             futures.forEach { it.get(10, TimeUnit.SECONDS) }
         } finally {
             pool.shutdownNow()
@@ -398,7 +427,10 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
             )
         ).isEqualTo(BigInteger.ONE)
         assertThat(paymentService.find(attemptId).status.name).isEqualTo("RECONCILIATION_REQUIRED")
-        reconciliationClient.settled(attemptId, "0x${UUID.randomUUID().toString().replace("-", "")}")
+        reconciliationClient.settled(
+            attemptId,
+            "0x${UUID.randomUUID().toString().replace("-", "")}"
+        )
         recovery.reconcileSettledPayments()
 
         assertThat(
@@ -418,6 +450,60 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
+    fun `startup recovery promotes unmarked required x402 payment and retains reservation`() {
+        val fixture = runtimeFixture.create(maxBudget = BigInteger.ONE, executionStatus = "RUNNING")
+        budgetGuard.reserve(fixture.executionId, BigInteger.ONE)
+        val attemptId = paymentService.require(
+            fixture.rootStepId,
+            BigInteger.ONE,
+            "eip155:84532",
+            "USDC",
+            "0x0000000000000000000000000000000000000001",
+            PaymentMode.X402
+        )
+        fixtureCleaner.trackPaymentAttempt(attemptId)
+
+        executionRecovery.failActiveExecutions()
+
+        assertThat(paymentService.find(attemptId).status.name).isEqualTo("RECONCILIATION_REQUIRED")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select reserved_cost_atomic from executions where id = ?",
+                BigInteger::class.java,
+                fixture.executionId
+            )
+        ).isEqualTo(BigInteger.ONE)
+        assertThat(journals.findByPaymentAttemptId(attemptId)).isNull()
+        assertThat(revenues.findByPaymentAttemptId(attemptId)).isNull()
+    }
+
+    @Test
+    fun `startup recovery releases reservation for unmarked required simulated payment`() {
+        val fixture = runtimeFixture.create(maxBudget = BigInteger.ONE, executionStatus = "RUNNING")
+        budgetGuard.reserve(fixture.executionId, BigInteger.ONE)
+        val attemptId = paymentService.require(
+            fixture.rootStepId,
+            BigInteger.ONE,
+            "simulated",
+            "simulated",
+            "simulated",
+            PaymentMode.SIMULATED
+        )
+        fixtureCleaner.trackPaymentAttempt(attemptId)
+
+        executionRecovery.failActiveExecutions()
+
+        assertThat(paymentService.find(attemptId).status.name).isEqualTo("REQUIRED")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select reserved_cost_atomic from executions where id = ?",
+                BigInteger::class.java,
+                fixture.executionId
+            )
+        ).isEqualTo(BigInteger.ZERO)
+    }
+
+    @Test
     fun `reconciliation projection racing terminalization journals and accounts once`() {
         val fixture = runtimeFixture.create(maxBudget = BigInteger.ONE, executionStatus = "RUNNING")
         budgetGuard.reserve(fixture.executionId, BigInteger.ONE)
@@ -431,11 +517,15 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
         )
         fixtureCleaner.trackPaymentAttempt(attemptId)
         paymentService.markReconciliationRequired(attemptId, "PAYMENT_RECONCILIATION_REQUIRED")
-        reconciliationClient.settled(attemptId, "0x${UUID.randomUUID().toString().replace("-", "")}")
+        reconciliationClient.settled(
+            attemptId,
+            "0x${UUID.randomUUID().toString().replace("-", "")}"
+        )
         val start = CountDownLatch(1)
         val pool = Executors.newFixedThreadPool(2)
         try {
-            val projection = pool.submit(Callable { start.await(); recovery.reconcileSettledPayments() })
+            val projection =
+                pool.submit(Callable { start.await(); recovery.reconcileSettledPayments() })
             val terminal = pool.submit(Callable {
                 start.await(); lifecycleService.fail(
                 fixture.executionId,
@@ -492,10 +582,14 @@ class PostgresSettlementRecoveryIntegrationTest : PostgresIntegrationTestSupport
             settled[attemptId] = transactionHash
         }
 
-        override fun reconcile(attempt: PaymentAttempt): BridgeReconciliationResult {
+        override fun reconcile(attempt: PaymentAttempt): PaymentReconciliationResultDto {
             return settled[attempt.id]?.let {
-                BridgeReconciliationResult(BridgeReconciliationStatus.SETTLED, it, "payment-${attempt.id}")
-            } ?: BridgeReconciliationResult(BridgeReconciliationStatus.UNKNOWN)
+                PaymentReconciliationResultDto(
+                    PaymentReconciliationStatus.SETTLED,
+                    it,
+                    "payment-${attempt.id}"
+                )
+            } ?: PaymentReconciliationResultDto(PaymentReconciliationStatus.UNKNOWN)
         }
     }
 }

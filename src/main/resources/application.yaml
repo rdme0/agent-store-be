@@ -1,8 +1,6 @@
 spring:
   application:
     name: agent-store-be
-  profiles:
-    default: dev
   threads:
     virtual:
       enabled: true
@@ -21,10 +19,14 @@ spring:
           time_zone: UTC
   jackson:
     default-property-inclusion: non_null
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
 server:
-  address: ${HOST:0.0.0.0}
-  port: ${PORT:18080}
+  address: ${HOST}
+  port: ${PORT}
   shutdown: graceful
 
 springdoc:
@@ -32,7 +34,7 @@ springdoc:
     path: /openapi.json
   info:
     title: AgentStore API
-    version: ${API_VERSION:0.1.0}
+    version: ${API_VERSION}
 
 scalar:
   enabled: true
@@ -45,12 +47,9 @@ management:
         include: health,info
 
 agent-store:
-  service-name: ${SERVICE_NAME:agent-store-api}
-  api-version: ${API_VERSION:0.1.0}
-  runtime-callback-base-url: ${RUNTIME_CALLBACK_BASE_URL:http://127.0.0.1:8080}
-  cors-origins: ${CORS_ORIGINS:http://localhost:*}
-  runtime-token-secret: ${RUNTIME_TOKEN_SECRET:agent-store-development-runtime-secret}
-  database-url: ${DATABASE_URL:postgresql://postgres:postgres@localhost:5432/agent_store?schema=public}
-  payment-mode: ${PAYMENT_MODE:simulated}
-  x402-bridge-url: ${X402_BRIDGE_URL:http://127.0.0.1:8091}
-  x402-bridge-secret: ${X402_BRIDGE_SECRET:}
+  service-name: ${SERVICE_NAME}
+  api-version: ${API_VERSION}
+  runtime-callback-base-url: ${RUNTIME_CALLBACK_BASE_URL}
+  cors-origins: ${CORS_ORIGINS}
+  runtime-token-secret: ${RUNTIME_TOKEN_SECRET}
+  payment-mode: ${PAYMENT_MODE}

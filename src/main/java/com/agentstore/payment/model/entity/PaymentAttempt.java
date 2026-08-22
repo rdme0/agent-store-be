@@ -3,26 +3,31 @@ package com.agentstore.payment.model.entity;
 import com.agentstore.common.model.entity.BaseEntity;
 import com.agentstore.payment.model.vo.PaymentAttemptStatus;
 import com.agentstore.payment.model.vo.PaymentMode;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.math.BigInteger;
+import java.time.Instant;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.math.BigInteger;
-import java.time.Instant;
-import java.util.UUID;
-
 @Entity
 @Table(name = "payment_attempts")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PaymentAttempt extends BaseEntity {
+
     @Id
     private UUID id;
 
-    @Column(name = "execution_step_id", nullable = false)
+    @Column(nullable = false)
     private UUID executionStepId;
 
     @Enumerated(EnumType.STRING)
@@ -31,7 +36,7 @@ public class PaymentAttempt extends BaseEntity {
     private PaymentAttemptStatus status = PaymentAttemptStatus.REQUIRED;
 
     @JdbcTypeCode(SqlTypes.BIGINT)
-    @Column(name = "amount_atomic", nullable = false, columnDefinition = "BIGINT")
+    @Column(nullable = false, columnDefinition = "BIGINT")
     private BigInteger amountAtomic;
 
     @Column(nullable = false)
@@ -40,27 +45,24 @@ public class PaymentAttempt extends BaseEntity {
     @Column(nullable = false)
     private String asset;
 
-    @Column(name = "pay_to", nullable = false)
+    @Column(nullable = false)
     private String payTo;
 
-    @Column(name = "transaction_hash")
     private String transactionHash;
 
-    @Column(name = "failure_code")
     private String failureCode;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "payment_mode", nullable = false, columnDefinition = "PaymentMode")
+    @Column(nullable = false, columnDefinition = "PaymentMode")
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private PaymentMode paymentMode = PaymentMode.SIMULATED;
 
-    @Column(name = "payment_identifier")
     private String paymentIdentifier;
 
-    @Column(name = "projected_at")
     private Instant projectedAt;
 
-    public PaymentAttempt(UUID id, UUID executionStepId, BigInteger amountAtomic, String network, String asset, String payTo, PaymentMode paymentMode) {
+    public PaymentAttempt(UUID id, UUID executionStepId, BigInteger amountAtomic, String network,
+            String asset, String payTo, PaymentMode paymentMode) {
         this.id = id;
         this.executionStepId = executionStepId;
         this.amountAtomic = amountAtomic;
@@ -78,7 +80,8 @@ public class PaymentAttempt extends BaseEntity {
     }
 
     public void failed(String failureCode) {
-        if (status == PaymentAttemptStatus.SETTLED || status == PaymentAttemptStatus.RECONCILIATION_REQUIRED) {
+        if (status == PaymentAttemptStatus.SETTLED
+                || status == PaymentAttemptStatus.RECONCILIATION_REQUIRED) {
             return;
         }
         this.status = PaymentAttemptStatus.FAILED;
@@ -94,7 +97,8 @@ public class PaymentAttempt extends BaseEntity {
     }
 
     /**
-     * Journal/hash remain authoritative; this marker records local work still required after settlement.
+     * Journal/hash remain authoritative; this marker records local work still required after
+     * settlement.
      */
     public void markSettlementRecoveryRequired(String failureCode) {
         if (status != PaymentAttemptStatus.SETTLED) {

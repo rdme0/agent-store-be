@@ -7,16 +7,19 @@ import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.repository.PaymentAttemptRepository
 import com.agentstore.payment.repository.PaymentSettlementJournalRepository
 import jakarta.transaction.Transactional
-import org.springframework.stereotype.Service
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
+import org.springframework.stereotype.Service
 
 @Service
 class PaymentService(
     private val attemptRepository: PaymentAttemptRepository,
     private val journalRepository: PaymentSettlementJournalRepository,
 ) {
-    /** Only a durable settlement journal/SETTLED status proves spend; UNKNOWN attempts wait for bridge reconciliation. */
+    /**
+     * Only a durable settlement journal/SETTLED status proves spend.
+     * UNKNOWN attempts wait for native reconciliation.
+     */
     fun findSettledAttempts(): List<PaymentAttempt> {
         return attemptRepository.findAllByStatusIn(listOf(PaymentAttemptStatus.SETTLED))
     }
@@ -33,7 +36,8 @@ class PaymentService(
     }
 
     fun find(attemptId: UUID): PaymentAttempt {
-        return attemptRepository.findById(attemptId).orElseThrow { IllegalStateException("payment_attempt_not_found") }
+        return attemptRepository.findById(attemptId)
+            .orElseThrow { IllegalStateException("payment_attempt_not_found") }
     }
 
     @Transactional
@@ -60,7 +64,8 @@ class PaymentService(
 
     @Transactional
     fun settle(attemptId: UUID, transactionHash: String, paymentIdentifier: String?): BigInteger {
-        val attempt = attemptRepository.findByIdForUpdate(attemptId) ?: error("payment_attempt_not_found")
+        val attempt =
+            attemptRepository.findByIdForUpdate(attemptId) ?: error("payment_attempt_not_found")
         val journal = journalRepository.findByPaymentAttemptId(attempt.id)
         if (attempt.status == PaymentAttemptStatus.SETTLED) {
             if (journal?.transactionHash != transactionHash || attempt.transactionHash != transactionHash) {
@@ -69,7 +74,13 @@ class PaymentService(
             return attempt.amountAtomic
         }
         if (journal == null) {
-            journalRepository.save(PaymentSettlementJournal(UUID.randomUUID(), attempt.id, transactionHash))
+            journalRepository.save(
+                PaymentSettlementJournal(
+                    UUID.randomUUID(),
+                    attempt.id,
+                    transactionHash
+                )
+            )
         } else if (journal.transactionHash != transactionHash) {
             throw IllegalStateException("settlement_hash_mismatch")
         }

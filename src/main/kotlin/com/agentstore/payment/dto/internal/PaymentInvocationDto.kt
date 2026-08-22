@@ -2,7 +2,7 @@ package com.agentstore.payment.dto.internal
 
 import com.fasterxml.jackson.databind.JsonNode
 
-data class PaymentInvocationRequest(
+data class PaymentInvocationRequestDto(
     val paymentAttemptId: String,
     val idempotencyKey: String,
     val invocationToken: String,
@@ -15,7 +15,7 @@ data class PaymentInvocationRequest(
     val body: Any?,
 )
 
-data class PaymentInvocationResult(
+data class PaymentInvocationResultDto(
     val output: JsonNode,
     val transactionHash: String? = null,
     val paymentIdentifier: String? = null,

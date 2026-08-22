@@ -4,16 +4,22 @@ import com.agentstore.execution.orchestrator.ExecutionPaymentRecoveryProjectionO
 import com.agentstore.execution.service.ExecutionLifecycleService
 import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.payment.client.PaymentReconciliationClient
+import com.agentstore.payment.dto.internal.PaymentReconciliationResultDto
 import com.agentstore.payment.model.entity.PaymentAttempt
-import com.agentstore.payment.model.vo.BridgeReconciliationStatus
 import com.agentstore.payment.model.vo.PaymentMode
+import com.agentstore.payment.model.vo.PaymentReconciliationStatus
 import com.agentstore.payment.service.PaymentExternalSettlementService
 import com.agentstore.payment.service.PaymentService
 import com.agentstore.payment.service.PaymentSettlementRecoveryService
-import org.junit.jupiter.api.Test
-import org.mockito.Mockito.*
 import java.math.BigInteger
-import java.util.*
+import java.util.UUID
+import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
+import org.mockito.Mockito.`when`
 
 class PaymentSettlementRecoveryServiceTest {
     @Test
@@ -23,7 +29,8 @@ class PaymentSettlementRecoveryServiceTest {
         val lifecycleService = mock(ExecutionLifecycleService::class.java)
         val externalSettlementService = mock(PaymentExternalSettlementService::class.java)
         val reconciliationClient = mock(PaymentReconciliationClient::class.java)
-        val projectionOrchestrator = mock(ExecutionPaymentRecoveryProjectionOrchestrator::class.java)
+        val projectionOrchestrator =
+            mock(ExecutionPaymentRecoveryProjectionOrchestrator::class.java)
         val service = PaymentSettlementRecoveryService(
             paymentService,
             stepService,
@@ -49,7 +56,8 @@ class PaymentSettlementRecoveryServiceTest {
         `when`(paymentService.find(attempt.id)).thenReturn(attempt)
         `when`(paymentService.findReconciliationRequiredAttempts()).thenReturn(emptyList())
         `when`(stepService.executionId(stepId)).thenReturn(executionId)
-        doThrow(IllegalStateException("local_projection_failed")).`when`(projectionOrchestrator).project(attempt.id)
+        doThrow(IllegalStateException("local_projection_failed")).`when`(projectionOrchestrator)
+            .project(attempt.id)
 
         service.recoverAll()
 
@@ -65,7 +73,8 @@ class PaymentSettlementRecoveryServiceTest {
         val lifecycleService = mock(ExecutionLifecycleService::class.java)
         val externalSettlementService = mock(PaymentExternalSettlementService::class.java)
         val reconciliationClient = mock(PaymentReconciliationClient::class.java)
-        val projectionOrchestrator = mock(ExecutionPaymentRecoveryProjectionOrchestrator::class.java)
+        val projectionOrchestrator =
+            mock(ExecutionPaymentRecoveryProjectionOrchestrator::class.java)
         val service = PaymentSettlementRecoveryService(
             paymentService,
             stepService,
@@ -87,8 +96,8 @@ class PaymentSettlementRecoveryServiceTest {
         `when`(paymentService.findSettledAttempts()).thenReturn(emptyList())
         `when`(paymentService.findReconciliationRequiredAttempts()).thenReturn(listOf(attempt))
         `when`(reconciliationClient.reconcile(attempt)).thenReturn(
-            com.agentstore.payment.dto.internal.BridgeReconciliationResult(
-                BridgeReconciliationStatus.UNKNOWN
+            PaymentReconciliationResultDto(
+                PaymentReconciliationStatus.UNKNOWN
             )
         )
 

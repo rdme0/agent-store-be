@@ -16,9 +16,16 @@ class PaymentRecoveryStartupServiceTest {
         val recovery = mock(ExecutionPaymentRecoveryOrchestrator::class.java)
         val executionRecovery = mock(ExecutionRecoveryService::class.java)
         val readiness = ExecutionMutationReadiness()
-        doThrow(IllegalStateException("database_unavailable")).`when`(recovery).reconcileSettledPayments()
+        doThrow(IllegalStateException("database_unavailable")).`when`(recovery)
+            .reconcileSettledPayments()
 
-        assertThatThrownBy { PaymentRecoveryStartupService(recovery, executionRecovery, readiness).reconcile() }
+        assertThatThrownBy {
+            PaymentRecoveryStartupService(
+                recovery,
+                executionRecovery,
+                readiness
+            ).reconcile()
+        }
             .isInstanceOf(IllegalStateException::class.java)
         assertThatThrownBy { readiness.requireReady() }.isInstanceOf(DomainClientException::class.java)
     }
