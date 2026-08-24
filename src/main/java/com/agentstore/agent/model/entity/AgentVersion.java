@@ -31,6 +31,8 @@ public class AgentVersion extends BaseEntity {
     @Column(nullable = false)
     private UUID agentId;
 
+    private UUID capabilityId;
+
     @Column(nullable = false, length = 32)
     private String semver;
 
@@ -60,6 +62,10 @@ public class AgentVersion extends BaseEntity {
     @Column(nullable = false, columnDefinition = "AgentResponseFormat")
     private AgentResponseFormat responseFormat = AgentResponseFormat.JSON;
 
+    private String manifestContent;
+
+    private String manifestSha256;
+
     public AgentVersion(UUID id, UUID agentId, String semver, String endpoint,
             BigInteger priceAtomic, String network, String asset, String payTo) {
         this(id, agentId, semver, endpoint, priceAtomic, network, asset, payTo,
@@ -69,8 +75,16 @@ public class AgentVersion extends BaseEntity {
     public AgentVersion(UUID id, UUID agentId, String semver, String endpoint,
             BigInteger priceAtomic, String network, String asset, String payTo,
             AgentResponseFormat responseFormat) {
+        this(id, agentId, null, semver, endpoint, priceAtomic, network, asset, payTo,
+                responseFormat);
+    }
+
+    public AgentVersion(UUID id, UUID agentId, UUID capabilityId, String semver, String endpoint,
+            BigInteger priceAtomic, String network, String asset, String payTo,
+            AgentResponseFormat responseFormat) {
         this.id = id;
         this.agentId = agentId;
+        this.capabilityId = capabilityId;
         this.semver = semver;
         this.endpoint = endpoint;
         this.priceAtomic = priceAtomic;
@@ -93,5 +107,13 @@ public class AgentVersion extends BaseEntity {
             throw new IllegalStateException("Only ACTIVE versions can be disabled");
         }
         status = AgentVersionStatus.DISABLED;
+    }
+
+    public void replaceManifest(String manifestContent, String manifestSha256) {
+        if (status != AgentVersionStatus.DRAFT) {
+            throw new IllegalStateException("Only DRAFT versions can replace manifest");
+        }
+        this.manifestContent = manifestContent;
+        this.manifestSha256 = manifestSha256;
     }
 }

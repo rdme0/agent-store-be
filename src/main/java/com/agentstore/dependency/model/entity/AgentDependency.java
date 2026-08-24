@@ -1,11 +1,14 @@
 package com.agentstore.dependency.model.entity;
 
 import com.agentstore.common.model.entity.BaseEntity;
+import com.agentstore.dependency.model.vo.ProviderScope;
+import com.agentstore.dependency.model.vo.ProviderSelectionStrategy;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.math.BigInteger;
 import java.util.UUID;
 import lombok.AccessLevel;
@@ -15,8 +18,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(name = "agent_dependencies", uniqueConstraints = @UniqueConstraint(columnNames = {
-        "source_version_id", "target_agent_id"}))
+@Table(name = "agent_dependencies")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AgentDependency extends BaseEntity {
@@ -27,8 +29,31 @@ public class AgentDependency extends BaseEntity {
     @Column(nullable = false)
     private UUID sourceVersionId;
 
-    @Column(nullable = false)
     private UUID targetAgentId;
+
+    private UUID functionContractId;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(columnDefinition = "ProviderScope")
+    private ProviderScope providerScope;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(columnDefinition = "ProviderSelectionStrategy")
+    private ProviderSelectionStrategy selectionStrategy;
+
+    private Integer minReliabilityPercent;
+
+    private Integer maxP95LatencyMillis;
+
+    private Integer explorationPercent;
+
+    private Integer reliabilityWeight;
+
+    private Integer priceWeight;
+
+    private Integer speedWeight;
 
     @Column(nullable = false)
     private String versionConstraint;
@@ -60,5 +85,20 @@ public class AgentDependency extends BaseEntity {
         this.required = required;
         this.maxPriceAtomic = maxPriceAtomic;
         this.maxCalls = maxCalls;
+    }
+
+    public void configureFunctionSelection(UUID functionContractId, ProviderScope providerScope,
+            ProviderSelectionStrategy selectionStrategy, Integer minReliabilityPercent,
+            Integer maxP95LatencyMillis, Integer explorationPercent, Integer reliabilityWeight,
+            Integer priceWeight, Integer speedWeight) {
+        this.functionContractId = functionContractId;
+        this.providerScope = providerScope;
+        this.selectionStrategy = selectionStrategy;
+        this.minReliabilityPercent = minReliabilityPercent;
+        this.maxP95LatencyMillis = maxP95LatencyMillis;
+        this.explorationPercent = explorationPercent;
+        this.reliabilityWeight = reliabilityWeight;
+        this.priceWeight = priceWeight;
+        this.speedWeight = speedWeight;
     }
 }
