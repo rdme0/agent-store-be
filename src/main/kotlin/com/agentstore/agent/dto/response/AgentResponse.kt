@@ -3,6 +3,7 @@ package com.agentstore.agent.dto.response
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentResponseFormat
+import com.agentstore.agent.model.vo.AgentUsageType
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
@@ -11,6 +12,7 @@ import java.util.UUID
 data class AgentVersionResponse(
     val id: UUID,
     val agentId: UUID,
+    @field:Schema(nullable = true) val functionContractId: UUID? = null,
     val semver: String,
     @field:Schema(allowableValues = ["DRAFT", "ACTIVE", "DISABLED"])
     val status: AgentVersionStatus,
@@ -31,6 +33,7 @@ data class AgentVersionResponse(
             return AgentVersionResponse(
                 id = version.id,
                 agentId = version.agentId,
+                functionContractId = version.capabilityId,
                 semver = version.semver,
                 status = version.status,
                 endpoint = version.endpoint,
@@ -53,6 +56,7 @@ data class AgentResponse(
     val slug: String,
     val name: String,
     val description: String,
+    val usageType: AgentUsageType,
     @field:Schema(minimum = "0")
     val dependencyCount: Int,
     val versions: List<AgentVersionResponse>,
@@ -73,6 +77,7 @@ data class AgentResponse(
                 slug = agent.slug,
                 name = agent.name,
                 description = agent.description,
+                usageType = agent.usageType,
                 dependencyCount = dependencyCount,
                 versions = versions.sortedBy { version -> version.createdAt }.map(AgentVersionResponse::from),
                 createdAt = agent.createdAt,

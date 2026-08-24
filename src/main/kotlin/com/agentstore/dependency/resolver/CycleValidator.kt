@@ -41,13 +41,15 @@ class CycleValidator(
         path += agent.slug
         val versions = agentService.draftOrActiveVersions(currentAgentId)
         val found = versions.any { version ->
-            dependencyRepository.findAllBySourceVersionId(version.id).any { dependency ->
-                dependency.targetAgentId == targetAgentId || reachable(
-                    currentAgentId = dependency.targetAgentId,
-                    targetAgentId = targetAgentId,
-                    visited = visited,
-                    path = path,
-                )
+            dependencyRepository.findAllBySourceVersionIdOrderByIdAsc(version.id).any { dependency ->
+                dependency.targetAgentId?.let { dependencyTargetAgentId ->
+                    dependencyTargetAgentId == targetAgentId || reachable(
+                        currentAgentId = dependencyTargetAgentId,
+                        targetAgentId = targetAgentId,
+                        visited = visited,
+                        path = path,
+                    )
+                } ?: false
             }
         }
         if (!found) {

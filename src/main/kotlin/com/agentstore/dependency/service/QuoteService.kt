@@ -8,13 +8,17 @@ import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.dto.response.QuoteResponse
 import com.agentstore.dependency.model.entity.ExecutionQuote
+import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
 import com.agentstore.dependency.model.vo.ResolvedNode
 import com.agentstore.dependency.repository.ExecutionQuoteRepository
 import com.agentstore.dependency.resolver.CostResolver
 import com.agentstore.dependency.resolver.DependencyResolver
+import com.agentstore.payment.dto.response.KrwEstimateResponse
+import com.agentstore.payment.service.KrwEstimateService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
+import java.math.BigInteger
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -28,6 +32,7 @@ class QuoteService(
     private val costResolver: CostResolver,
     private val endpointPolicy: AgentEndpointPolicy,
     private val objectMapper: ObjectMapper,
+    private val krwEstimateService: KrwEstimateService,
 ) {
     fun requireQuote(id: UUID): ExecutionQuote {
         return quoteRepository.findById(id).orElseThrow {
@@ -52,23 +57,27 @@ class QuoteService(
         if (candidates.isEmpty()) {
             throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
         }
-        val root = candidates.filter { candidate ->
-            matches(version = candidate.semver, constraint = constraint)
-        }
-            .maxByOrNull { versionKey(it.semver) }
+        val root = resolver.newest(
+            versions = candidates.filter { candidate ->
+                resolver.matches(version = candidate.semver, constraint = constraint)
+            },
+        )
             ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
+        val quoteId = UUID.randomUUID()
         val graph = resolver.resolve(
             rootVersionId = root.id,
+            selectionSeed = quoteId,
             allowUnresolvedRequired = false,
             allowPriceExceeded = false,
         )
         validateEndpoints(graph.root)
         val cost = costResolver.resolve(graph.root)
-        val snapshot = graph.root.snapshot()
+        val estimate = krwEstimateService.estimate(amountAtomic = cost.maxCostAtomic)
+        val snapshot = graph.root.snapshot().copy(krwEstimate = estimate)
         val expiresAt = Instant.now().plus(5, ChronoUnit.MINUTES)
         val quote = quoteRepository.save(
             ExecutionQuote(
-                UUID.randomUUID(),
+                quoteId,
                 root.id,
                 expiresAt,
                 cost.maxCostAtomic,
@@ -80,39 +89,53 @@ class QuoteService(
             rootVersionId = root.id,
             expiresAt = expiresAt,
             maxCostAtomic = cost.maxCostAtomic.toString(),
+            maxCostKrwEstimate = estimate?.let(KrwEstimateResponse::from),
             snapshot = snapshot,
             warnings = graph.warnings,
         )
     }
 
-    private fun matches(version: String, constraint: String): Boolean {
-        return when {
-            constraint == "*" -> true
-            constraint.startsWith("^") -> matchesCaret(version = version, constraint = constraint)
-            constraint.startsWith("~") -> matchesTilde(version = version, constraint = constraint)
-            else -> version == constraint
+    @Transactional
+    fun createFunction(
+        functionCode: String,
+        contractVersion: String,
+        strategy: ProviderSelectionStrategy,
+        maxTotalAtomic: BigInteger,
+    ): QuoteResponse {
+        val quoteId = UUID.randomUUID()
+        val graph = resolver.resolveFunctionRoot(
+            functionCode = functionCode,
+            contractVersion = contractVersion,
+            strategy = strategy,
+            maxPriceAtomic = maxTotalAtomic,
+            selectionSeed = quoteId,
+        )
+        validateEndpoints(node = graph.root)
+        val cost = costResolver.resolve(graph.root)
+        if (cost.maxCostAtomic > maxTotalAtomic) {
+            throw DomainClientException(ErrorCode.DEPENDENCY_PRICE_EXCEEDED)
         }
-    }
-
-    private fun matchesCaret(version: String, constraint: String): Boolean {
-        val minimumVersion = constraint.drop(1)
-        return versionKey(value = version) >= versionKey(value = minimumVersion) &&
-            version.substringBefore('.') == minimumVersion.substringBefore('.')
-    }
-
-    private fun matchesTilde(version: String, constraint: String): Boolean {
-        val minimumVersion = constraint.drop(1)
-        val versionMinor = version.substringBeforeLast('.').substringBeforeLast('.')
-        val minimumMinor = minimumVersion.substringBeforeLast('.').substringBeforeLast('.')
-
-        return versionKey(value = version) >= versionKey(value = minimumVersion) &&
-            versionMinor == minimumMinor
-    }
-
-    private fun versionKey(value: String): Long {
-        val parts = value.removePrefix("^").removePrefix("~").split(".")
-        return parts[0].toLong() * 1_000_000L + parts[1].toLong() * 1_000L + parts[2].takeWhile { it.isDigit() }
-            .toLong()
+        val estimate = krwEstimateService.estimate(amountAtomic = cost.maxCostAtomic)
+        val snapshot = graph.root.snapshot().copy(krwEstimate = estimate)
+        val expiresAt = Instant.now().plus(5, ChronoUnit.MINUTES)
+        val quote = quoteRepository.save(
+            ExecutionQuote(
+                quoteId,
+                graph.root.version.id,
+                expiresAt,
+                cost.maxCostAtomic,
+                objectMapper.valueToTree(snapshot),
+            )
+        )
+        return QuoteResponse(
+            id = quote.id,
+            rootVersionId = quote.rootVersionId,
+            expiresAt = expiresAt,
+            maxCostAtomic = cost.maxCostAtomic.toString(),
+            maxCostKrwEstimate = estimate?.let(KrwEstimateResponse::from),
+            snapshot = snapshot,
+            warnings = graph.warnings,
+        )
     }
 
     private fun validateEndpoints(node: ResolvedNode) {

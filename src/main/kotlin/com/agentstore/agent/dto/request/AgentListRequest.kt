@@ -1,6 +1,7 @@
 package com.agentstore.agent.dto.request
 
 import com.agentstore.agent.model.vo.AgentListSort
+import com.agentstore.agent.model.vo.AgentView
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.Parameter
 import jakarta.validation.constraints.Max
@@ -25,8 +26,14 @@ data class AgentListRequest(
     )
     @field:Pattern(regexp = "newest|name_asc")
     val sort: String = AgentListSort.NEWEST.value,
+    @field:Pattern(regexp = "easy|developer")
+    val view: String = AgentView.EASY.value,
 ) {
     fun sortType(): AgentListSort {
         return AgentListSort.from(value = sort)
+    }
+
+    fun viewType(): AgentView {
+        return AgentView.from(value = view)
     }
 }

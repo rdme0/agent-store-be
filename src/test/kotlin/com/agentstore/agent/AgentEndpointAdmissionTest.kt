@@ -11,6 +11,7 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
+import com.agentstore.agent.service.AgentCapabilityService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.model.entity.AgentDependency
@@ -22,6 +23,7 @@ import com.agentstore.dependency.repository.ExecutionQuoteRepository
 import com.agentstore.dependency.resolver.CostResolver
 import com.agentstore.dependency.resolver.DependencyResolver
 import com.agentstore.dependency.service.QuoteService
+import com.agentstore.payment.service.KrwEstimateService
 import com.agentstore.payment.client.PinnedAgentRestClientFactory
 import com.agentstore.payment.client.SimulatedPaymentClient
 import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
@@ -32,10 +34,13 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.UUID
+import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
 import org.springframework.mock.env.MockEnvironment
@@ -88,12 +93,15 @@ class AgentEndpointAdmissionTest {
             RECEIVER
         )
         `when`(versions.findWithAgentById(draft.id)).thenReturn(draft)
+        val agents = mock(AgentRepository::class.java)
+        `when`(agents.findById(draft.agentId)).thenReturn(Optional.of(Agent(draft.agentId, UUID.randomUUID(), "draft", "draft", "draft")))
         val service = AgentService(
-            mock(AgentRepository::class.java),
+            agents,
             versions,
             mock(DeveloperRepository::class.java),
             productionPolicy(),
             mock(AgentListCursorCodec::class.java),
+            mock(AgentCapabilityService::class.java),
         )
 
         assertUnsafe { service.publish(draft.id) }
@@ -131,11 +139,14 @@ class AgentEndpointAdmissionTest {
         val resolver = mock(DependencyResolver::class.java)
         `when`(agentService.findBySlug("root-agent")).thenReturn(rootAgent)
         `when`(agentService.activeVersions(rootAgent.id)).thenReturn(listOf(root))
+        `when`(resolver.matches(version = root.semver, constraint = "*")).thenReturn(true)
+        `when`(resolver.newest(listOf(root))).thenReturn(root)
         `when`(
             resolver.resolve(
-                rootVersionId = root.id,
-                allowUnresolvedRequired = false,
-                allowPriceExceeded = false,
+                rootVersionId = eq(root.id) ?: root.id,
+                selectionSeed = any(UUID::class.java) ?: UUID(0, 0),
+                allowUnresolvedRequired = eq(false),
+                allowPriceExceeded = eq(false),
             )
         ).thenReturn(graph)
         val quotePolicy = AgentEndpointPolicy(
@@ -152,7 +163,8 @@ class AgentEndpointAdmissionTest {
             resolver,
             CostResolver(),
             quotePolicy,
-            ObjectMapper()
+            ObjectMapper(),
+            mock(KrwEstimateService::class.java),
         )
 
         assertUnsafe { service.create("root-agent", QuoteRequest()) }
@@ -245,6 +257,7 @@ class AgentEndpointAdmissionTest {
             mock(DeveloperRepository::class.java),
             productionPolicy(),
             mock(AgentListCursorCodec::class.java),
+            mock(AgentCapabilityService::class.java),
         )
     }
 
@@ -281,15 +294,17 @@ class AgentEndpointAdmissionTest {
 
     private fun resolved(version: AgentVersion, slug: String): ResolvedVersion {
         return ResolvedVersion(
-            version.id,
-            version.agentId,
-            slug,
-            version.semver,
-            version.endpoint,
-            version.priceAtomic,
-            version.network,
-            version.asset,
-            version.payTo
+            id = version.id,
+            agentId = version.agentId,
+            agentSlug = slug,
+            agentName = slug,
+            agentDescription = "$slug Agent가 요청을 처리합니다.",
+            semver = version.semver,
+            endpoint = version.endpoint,
+            priceAtomic = version.priceAtomic,
+            network = version.network,
+            asset = version.asset,
+            payTo = version.payTo,
         )
     }
 

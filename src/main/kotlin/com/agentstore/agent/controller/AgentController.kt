@@ -4,6 +4,7 @@ import com.agentstore.agent.dto.request.AgentListRequest
 import com.agentstore.agent.dto.request.CreateAgentRequest
 import com.agentstore.agent.dto.request.CreateAgentVersionRequest
 import com.agentstore.agent.dto.request.UpdateAgentRequest
+import com.agentstore.agent.model.vo.AgentView
 import com.agentstore.agent.dto.response.AgentListResponse
 import com.agentstore.agent.dto.response.AgentResponse
 import com.agentstore.agent.dto.response.AgentVersionResponse
@@ -13,8 +14,10 @@ import com.agentstore.common.web.AgentStoreErrorResponses
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Pattern
 import java.util.UUID
 import org.springframework.http.HttpStatus
+import org.springdoc.core.annotations.ParameterObject
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.ModelAttribute
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
@@ -33,13 +37,14 @@ class AgentController(private val service: AgentService) {
     @GetMapping("/agents")
     @Operation(operationId = "getApiAgents", summary = "List agents")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun list(@Valid @ModelAttribute request: AgentListRequest): CommonResponse<AgentListResponse> {
+    fun list(@ParameterObject @Valid @ModelAttribute request: AgentListRequest): CommonResponse<AgentListResponse> {
         return CommonResponse.success(
             result = service.list(
                 limit = request.limit,
                 cursor = request.cursor,
                 query = request.q,
                 sort = request.sortType(),
+                view = request.viewType(),
             ),
         )
     }
@@ -47,8 +52,16 @@ class AgentController(private val service: AgentService) {
     @GetMapping("/agents/{slug}")
     @Operation(operationId = "getApiAgentsBySlug", summary = "Get agent by slug")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun getBySlug(@PathVariable slug: String): CommonResponse<AgentResponse> {
-        return CommonResponse.success(result = service.getBySlug(slug = slug))
+    fun getBySlug(
+        @PathVariable slug: String,
+        @RequestParam(defaultValue = "easy") @Pattern(regexp = "easy|developer") view: String,
+    ): CommonResponse<AgentResponse> {
+        return CommonResponse.success(
+            result = service.getBySlug(
+                slug = slug,
+                view = AgentView.from(value = view),
+            ),
+        )
     }
 
     @PostMapping("/agents")

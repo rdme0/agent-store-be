@@ -2,6 +2,7 @@ package com.agentstore.dependency.service
 
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentVersionStatus
+import com.agentstore.agent.service.AgentCapabilityService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -9,6 +10,10 @@ import com.agentstore.dependency.dto.request.CreateDependencyRequest
 import com.agentstore.dependency.dto.request.UpdateDependencyRequest
 import com.agentstore.dependency.dto.response.DependencyResponse
 import com.agentstore.dependency.model.entity.AgentDependency
+import com.agentstore.dependency.model.entity.AgentDependencyAllowedProvider
+import com.agentstore.dependency.model.vo.ProviderScope
+import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
+import com.agentstore.dependency.repository.AgentDependencyAllowedProviderRepository
 import com.agentstore.dependency.repository.AgentDependencyRepository
 import com.agentstore.dependency.resolver.CycleValidator
 import com.agentstore.dependency.resolver.DependencyResolver
@@ -24,42 +29,69 @@ class DependencyService(
     private val agentService: AgentService,
     private val resolver: DependencyResolver,
     private val cycleValidator: CycleValidator,
+    private val capabilityService: AgentCapabilityService,
+    private val allowedProviderRepository: AgentDependencyAllowedProviderRepository,
 ) {
     @Transactional
     fun list(sourceVersionId: UUID): List<DependencyResponse> {
         requireVersion(sourceVersionId)
-        return dependencyRepository.findAllBySourceVersionId(sourceVersionId).map { dependency ->
-            val target = agentService.requireAgent(dependency.targetAgentId)
-            DependencyResponse.from(dependency = dependency, targetAgentSlug = target.slug)
-        }
+        return dependencyRepository.findAllBySourceVersionIdOrderByIdAsc(sourceVersionId).map(::response)
     }
 
     @Transactional
     fun create(sourceVersionId: UUID, request: CreateDependencyRequest): DependencyResponse {
         val source = requireDraft(sourceVersionId)
-        val target = agentService.requireAgent(request.targetAgentId)
-        cycleValidator.validate(
-            sourceAgentId = source.agentId,
-            targetAgentId = target.id,
-            sourceSlug = sourceSlug(agentId = source.agentId),
-            targetSlug = target.slug,
-        )
+        val isFunctionDependency = isFunctionDependency(request = request)
+        if (isFunctionDependency) {
+            validateFunctionDependency(
+                request = request,
+            )
+        } else {
+            validateDirectDependency(request = request)
+        }
+        request.targetAgentId?.let { targetAgentId ->
+            val target = agentService.requireAgent(targetAgentId)
+            cycleValidator.validate(
+                sourceAgentId = source.agentId,
+                targetAgentId = target.id,
+                sourceSlug = sourceSlug(agentId = source.agentId),
+                targetSlug = target.slug,
+            )
+        }
+        val functionContractId = request.functionContractId
+        functionContractId?.let(capabilityService::requireCapability)
         resolver.validateConstraint(request.versionConstraint)
         validateLimits(maxPriceAtomic = request.maxPriceAtomic, maxCalls = request.maxCalls)
         val dependency = AgentDependency(
             UUID.randomUUID(),
             source.id,
-            target.id,
+            request.targetAgentId,
             request.versionConstraint,
             request.required,
             BigInteger(request.maxPriceAtomic),
-            request.maxCalls
+            request.maxCalls,
         )
-        return try {
-            DependencyResponse.from(
-                dependency = dependencyRepository.saveAndFlush(dependency),
-                targetAgentSlug = target.slug,
+        if (isFunctionDependency) {
+            dependency.configureFunctionSelection(
+                functionContractId,
+                request.providerScope,
+                request.selectionStrategy,
+                request.minReliabilityPercent,
+                request.maxP95LatencyMillis,
+                request.explorationPercent,
+                request.reliabilityWeight,
+                request.priceWeight,
+                request.speedWeight,
             )
+        }
+        return try {
+            val saved = dependencyRepository.saveAndFlush(dependency)
+            saveAllowedProviders(
+                dependencyId = saved.id,
+                providerScope = request.providerScope,
+                agentIds = request.allowedProviderAgentIds,
+            )
+            response(saved)
         } catch (exception: DataIntegrityViolationException) {
             throw DomainClientException(ErrorCode.DEPENDENCY_ALREADY_EXISTS)
         }
@@ -86,15 +118,32 @@ class DependencyService(
         val maxPrice = request.maxPriceAtomic?.let { BigInteger(it) } ?: dependency.maxPriceAtomic
         val maxCalls = request.maxCalls ?: dependency.maxCalls
         validateLimits(maxPriceAtomic = maxPrice.toString(), maxCalls = maxCalls)
-        val target = agentService.requireAgent(dependency.targetAgentId)
-        cycleValidator.validate(
-            sourceAgentId = source.agentId,
-            targetAgentId = target.id,
-            sourceSlug = sourceSlug(agentId = source.agentId),
-            targetSlug = target.slug,
+        dependency.targetAgentId?.let { targetAgentId ->
+            val target = agentService.requireAgent(targetAgentId)
+            cycleValidator.validate(
+                sourceAgentId = source.agentId,
+                targetAgentId = target.id,
+                sourceSlug = sourceSlug(agentId = source.agentId),
+                targetSlug = target.slug,
+            )
+        }
+        dependency.update(
+            constraint,
+            request.required ?: dependency.isRequired,
+            maxPrice,
+            maxCalls,
         )
-        dependency.update(constraint, request.required ?: dependency.isRequired, maxPrice, maxCalls)
-        return DependencyResponse.from(dependency = dependency, targetAgentSlug = target.slug)
+        if (dependency.functionContractId != null) {
+            updateFunctionSelection(dependency = dependency, request = request)
+            if (request.allowedProviderAgentIds != null) {
+                saveAllowedProviders(
+                    dependencyId = dependency.id,
+                    providerScope = dependency.providerScope,
+                    agentIds = request.allowedProviderAgentIds,
+                )
+            }
+        }
+        return response(dependency)
     }
 
     @Transactional
@@ -107,6 +156,114 @@ class DependencyService(
             )
                 ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
         dependencyRepository.delete(dependency)
+    }
+
+    private fun validateFunctionDependency(request: CreateDependencyRequest) {
+        val functionContractId = request.functionContractId
+            ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        val providerScope = request.providerScope
+            ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        capabilityService.requireCapability(id = functionContractId)
+        if (request.explorationPercent == null) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        when (providerScope) {
+            ProviderScope.PINNED -> {
+                if (request.targetAgentId == null) {
+                    throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+                }
+                if (request.selectionStrategy != null || !request.allowedProviderAgentIds.isNullOrEmpty()) {
+                    throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+                }
+            }
+            ProviderScope.ALLOWLIST -> {
+                if (request.targetAgentId != null || request.allowedProviderAgentIds.isNullOrEmpty()) {
+                    throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+                }
+                request.allowedProviderAgentIds.forEach(agentService::requireAgent)
+                validateStrategy(request = request)
+            }
+            ProviderScope.MARKETPLACE -> {
+                if (request.targetAgentId != null || !request.allowedProviderAgentIds.isNullOrEmpty()) {
+                    throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+                }
+                validateStrategy(request = request)
+            }
+        }
+    }
+
+    private fun validateStrategy(request: CreateDependencyRequest) {
+        val strategy = request.selectionStrategy ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        if (strategy == ProviderSelectionStrategy.BALANCED) {
+            val weights = listOf(request.reliabilityWeight, request.priceWeight, request.speedWeight)
+            if (weights.any { value -> value == null } || weights.filterNotNull().sum() != 100) {
+                throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+            }
+        } else if (
+            request.reliabilityWeight != null || request.priceWeight != null || request.speedWeight != null
+        ) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+    }
+
+    private fun updateFunctionSelection(dependency: AgentDependency, request: UpdateDependencyRequest) {
+        if (request.providerScope != null && request.providerScope != dependency.providerScope) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        val providerScope = request.providerScope ?: dependency.providerScope
+        val selectionStrategy = request.selectionStrategy ?: dependency.selectionStrategy
+        val explorationPercent = request.explorationPercent ?: dependency.explorationPercent
+        if (providerScope == null || explorationPercent == null) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        if (providerScope == ProviderScope.PINNED && selectionStrategy != null) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        if (providerScope != ProviderScope.PINNED && selectionStrategy == null) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        val reliabilityWeight = request.reliabilityWeight ?: dependency.reliabilityWeight
+        val priceWeight = request.priceWeight ?: dependency.priceWeight
+        val speedWeight = request.speedWeight ?: dependency.speedWeight
+        if (selectionStrategy == ProviderSelectionStrategy.BALANCED) {
+            val weights = listOf(reliabilityWeight, priceWeight, speedWeight)
+            if (weights.any { value -> value == null } || weights.filterNotNull().sum() != 100) {
+                throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+            }
+        } else if (
+            request.reliabilityWeight != null || request.priceWeight != null || request.speedWeight != null
+        ) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        dependency.configureFunctionSelection(
+            dependency.functionContractId,
+            providerScope,
+            selectionStrategy,
+            request.minReliabilityPercent ?: dependency.minReliabilityPercent,
+            request.maxP95LatencyMillis ?: dependency.maxP95LatencyMillis,
+            explorationPercent,
+            if (selectionStrategy == ProviderSelectionStrategy.BALANCED) reliabilityWeight else null,
+            if (selectionStrategy == ProviderSelectionStrategy.BALANCED) priceWeight else null,
+            if (selectionStrategy == ProviderSelectionStrategy.BALANCED) speedWeight else null,
+        )
+    }
+
+    private fun saveAllowedProviders(
+        dependencyId: UUID,
+        providerScope: ProviderScope?,
+        agentIds: Set<UUID>?,
+    ) {
+        if (providerScope == null || agentIds == null) {
+            return
+        }
+        allowedProviderRepository.deleteAllByIdDependencyId(dependencyId)
+        if (providerScope == ProviderScope.ALLOWLIST) {
+            allowedProviderRepository.saveAll(
+                agentIds.map { agentId ->
+                    AgentDependencyAllowedProvider(dependencyId, agentId)
+                },
+            )
+        }
     }
 
     private fun requireVersion(id: UUID): AgentVersion {
@@ -132,5 +289,30 @@ class DependencyService(
 
     private fun sourceSlug(agentId: UUID): String {
         return agentService.slugForAgent(agentId)
+    }
+
+    private fun validateDirectDependency(request: CreateDependencyRequest) {
+        if (request.targetAgentId == null) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+    }
+
+    private fun isFunctionDependency(request: CreateDependencyRequest): Boolean {
+        return request.functionContractId != null || request.providerScope != null ||
+            request.selectionStrategy != null || request.allowedProviderAgentIds != null ||
+            request.minReliabilityPercent != null || request.maxP95LatencyMillis != null ||
+            request.explorationPercent != null || request.reliabilityWeight != null ||
+            request.priceWeight != null || request.speedWeight != null
+    }
+
+    private fun response(dependency: AgentDependency): DependencyResponse {
+        val target = dependency.targetAgentId?.let(agentService::requireAgent)
+        val functionContract = dependency.functionContractId?.let(capabilityService::requireCapability)
+        return DependencyResponse.from(
+            dependency = dependency,
+            targetAgentSlug = target?.slug,
+            functionCode = functionContract?.key,
+            functionContractVersion = functionContract?.contractVersion,
+        )
     }
 }

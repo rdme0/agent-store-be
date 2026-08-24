@@ -13,12 +13,14 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
+import com.agentstore.agent.service.AgentCapabilityService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.math.BigInteger
 import java.net.InetAddress
 import java.time.Instant
+import java.time.Duration
 import java.util.Optional
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -36,7 +38,7 @@ class AgentMarketplaceListTest {
         val fixture = fixture()
         `when`(
             fixture.agentRepository.findMarketplaceAgentsByCreatedAtDesc(
-                "risk", AgentVersionStatus.ACTIVE, false, null, null, PageRequest.of(0, 3),
+                "risk", AgentVersionStatus.ACTIVE, null, false, null, null, PageRequest.of(0, 3),
             )
         ).thenReturn(fixture.newest.take(3))
         `when`(
@@ -51,6 +53,7 @@ class AgentMarketplaceListTest {
             fixture.agentRepository.findMarketplaceAgentsByCreatedAtDesc(
                 "risk",
                 AgentVersionStatus.ACTIVE,
+                null,
                 true,
                 lastVisible.createdAt,
                 lastVisible.id,
@@ -76,7 +79,7 @@ class AgentMarketplaceListTest {
         val fixture = fixture()
         `when`(
             fixture.agentRepository.findMarketplaceAgentsByCreatedAtDesc(
-                "risk", AgentVersionStatus.ACTIVE, false, null, null, PageRequest.of(0, 2),
+                "risk", AgentVersionStatus.ACTIVE, null, false, null, null, PageRequest.of(0, 2),
             )
         ).thenReturn(fixture.newest.take(2))
         `when`(fixture.agentRepository.countDistinctDependenciesByAgentIds(listOf(fixture.newest[0].id)))
@@ -109,7 +112,7 @@ class AgentMarketplaceListTest {
         `when`(count.dependencyCount).thenReturn(3)
         `when`(
             fixture.agentRepository.findMarketplaceAgentsByNameAsc(
-                null, AgentVersionStatus.ACTIVE, false, null, null, PageRequest.of(0, 21),
+                null, AgentVersionStatus.ACTIVE, null, false, null, null, PageRequest.of(0, 21),
             )
         ).thenReturn(listOf(agent))
         `when`(fixture.agentRepository.countDistinctDependenciesByAgentIds(listOf(agent.id))).thenReturn(
@@ -180,6 +183,10 @@ class AgentMarketplaceListTest {
                 corsOrigins = listOf("http://localhost:5173"),
                 runtimeTokenSecret = "test-cursor-secret",
                 paymentMode = "simulated",
+                bithumbApiUrl = "https://api.bithumb.com",
+                bithumbRequestTimeout = Duration.ofSeconds(2),
+                bithumbCacheTtl = Duration.ofSeconds(60),
+                bithumbStaleTtl = Duration.ofMinutes(15),
             ),
         )
         return Fixture(
@@ -188,7 +195,8 @@ class AgentMarketplaceListTest {
                 versionRepository,
                 developerRepository,
                 policy,
-                cursorCodec
+                cursorCodec,
+                mock(AgentCapabilityService::class.java),
             ),
             agentRepository,
             newest,

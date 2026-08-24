@@ -13,6 +13,9 @@ import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.entity.Developer
 import com.agentstore.agent.model.vo.AgentListSort
+import com.agentstore.agent.model.vo.AgentResponseFormat
+import com.agentstore.agent.model.vo.AgentUsageType
+import com.agentstore.agent.model.vo.AgentView
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
@@ -34,6 +37,7 @@ class AgentService(
     private val developerRepository: DeveloperRepository,
     private val endpointPolicy: AgentEndpointPolicy,
     private val cursorCodec: AgentListCursorCodec,
+    private val capabilityService: AgentCapabilityService,
 ) {
     companion object {
         private val SEMVER = Regex(
@@ -111,17 +115,24 @@ class AgentService(
     }
 
     @Transactional
-    fun list(limit: Int, cursor: String?, query: String?, sort: AgentListSort): AgentListResponse {
+    fun list(
+        limit: Int,
+        cursor: String?,
+        query: String?,
+        sort: AgentListSort,
+        view: AgentView = AgentView.DEVELOPER,
+    ): AgentListResponse {
         requireLimit(limit)
         val normalizedQuery = normalizeQuery(query)
         val decodedCursor = cursor?.let { value ->
-            cursorCodec.decode(cursor = value, query = normalizedQuery, sort = sort)
+            cursorCodec.decode(cursor = value, query = normalizedQuery, sort = sort, view = view)
         }
         val page = marketplaceAgents(
             query = normalizedQuery,
             sort = sort,
             cursor = decodedCursor,
             limit = limit,
+            view = view,
         )
         val visibleItems = page.take(limit)
         val dependencyCounts = dependencyCounts(visibleItems.map { agent -> agent.id })
@@ -136,14 +147,17 @@ class AgentService(
             nextCursor = visibleItems.lastOrNull()
                 ?.takeIf { page.size > limit }
                 ?.let { agent ->
-                    cursorCodec.encode(agent = agent, query = normalizedQuery, sort = sort)
+                    cursorCodec.encode(agent = agent, query = normalizedQuery, sort = sort, view = view)
                 },
         )
     }
 
     @Transactional
-    fun getBySlug(slug: String): AgentResponse {
+    fun getBySlug(slug: String, view: AgentView = AgentView.DEVELOPER): AgentResponse {
         return agentRepository.findBySlug(slug)?.let { agent ->
+            if (view == AgentView.EASY && agent.usageType != AgentUsageType.USER_FACING) {
+                throw AgentNotFoundException()
+            }
             response(
                 agent = agent,
                 dependencyCount = dependencyCounts(agentIds = listOf(agent.id))[agent.id] ?: 0,
@@ -161,15 +175,27 @@ class AgentService(
             asset = request.asset,
             payTo = request.payTo,
         )
+        validateCapability(
+            capabilityId = request.functionContractId,
+            responseFormat = request.responseFormat,
+        )
         val developer = requireDeveloper(request.developerId)
         val agent =
-            Agent(UUID.randomUUID(), developer.id, request.slug, request.name, request.description)
+            Agent(
+                UUID.randomUUID(),
+                developer.id,
+                request.slug,
+                request.name,
+                request.description,
+                request.usageType,
+            )
         return try {
             val saved = agentRepository.save(agent)
             agentVersionRepository.save(
                 AgentVersion(
                     UUID.randomUUID(),
                     saved.id,
+                    request.functionContractId,
                     request.semver,
                     request.endpoint,
                     BigInteger(request.priceAtomic),
@@ -196,7 +222,20 @@ class AgentService(
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
         val agent = requireAgent(id)
-        agent.updateMetadata(request.name ?: agent.name, request.description ?: agent.description)
+        val usageType = request.usageType ?: agent.usageType
+        val hasActiveJsonVersion = usageType == AgentUsageType.USER_FACING && versions(agent.id)
+            .any { version ->
+                version.status == AgentVersionStatus.ACTIVE &&
+                    version.responseFormat == AgentResponseFormat.JSON
+            }
+        if (hasActiveJsonVersion) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        agent.updateMetadata(
+            request.name ?: agent.name,
+            request.description ?: agent.description,
+            usageType,
+        )
         return response(
             agent = agent,
             dependencyCount = dependencyCounts(agentIds = listOf(agent.id))[agent.id] ?: 0,
@@ -213,6 +252,10 @@ class AgentService(
             asset = request.asset,
             payTo = request.payTo,
         )
+        validateCapability(
+            capabilityId = request.functionContractId,
+            responseFormat = request.responseFormat,
+        )
         val agent = requireAgent(agentId)
         if (versionBySemver(agentId = agentId, semver = request.semver) != null) {
             throw DomainClientException(ErrorCode.AGENT_VERSION_ALREADY_EXISTS)
@@ -221,6 +264,7 @@ class AgentService(
             AgentVersion(
                 UUID.randomUUID(),
                 agent.id,
+                request.functionContractId,
                 request.semver,
                 request.endpoint,
                 BigInteger(request.priceAtomic),
@@ -240,6 +284,15 @@ class AgentService(
         if (version.status != AgentVersionStatus.DRAFT) {
             throw DomainClientException(ErrorCode.INVALID_VERSION_TRANSITION)
         }
+        if (requireAgent(version.agentId).usageType == AgentUsageType.USER_FACING &&
+            version.responseFormat == AgentResponseFormat.JSON
+        ) {
+            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
+        }
+        validateCapability(
+            capabilityId = version.capabilityId,
+            responseFormat = version.responseFormat,
+        )
         endpointPolicy.validate(version.endpoint)
         version.publish()
         return AgentVersionResponse.from(version)
@@ -286,6 +339,39 @@ class AgentService(
         }
     }
 
+    @Transactional
+    fun attachDraftManifest(versionId: UUID, content: String, sha256: String) {
+        val version = requireVersion(versionId)
+        if (version.status != AgentVersionStatus.DRAFT) {
+            throw DomainClientException(ErrorCode.ACTIVE_VERSION_IMMUTABLE)
+        }
+        version.replaceManifest(content, sha256)
+    }
+
+    fun manifest(versionId: UUID): Pair<String, String>? {
+        val version = requireVersion(versionId)
+        val content = version.manifestContent ?: return null
+        val sha256 = version.manifestSha256 ?: return null
+        return content to sha256
+    }
+
+    fun activeVersionsForCapability(capabilityId: UUID): List<AgentVersion> {
+        return agentVersionRepository.findAllByCapabilityIdAndStatus(
+            capabilityId = capabilityId,
+            status = AgentVersionStatus.ACTIVE,
+        )
+    }
+
+    private fun validateCapability(capabilityId: UUID?, responseFormat: AgentResponseFormat) {
+        if (capabilityId == null) {
+            return
+        }
+        val capability = capabilityService.requireCapability(id = capabilityId)
+        if (capability.responseFormat != responseFormat) {
+            throw DomainClientException(ErrorCode.CAPABILITY_RESPONSE_FORMAT_MISMATCH)
+        }
+    }
+
     private fun requireLimit(limit: Int) {
         if (limit !in 1..50) {
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
@@ -297,6 +383,7 @@ class AgentService(
         sort: AgentListSort,
         cursor: AgentListCursorPayloadDto?,
         limit: Int,
+        view: AgentView,
     ): List<Agent> {
         val cursorId = cursor?.let { payload -> parseCursorId(payload.id) }
         val pageable = PageRequest.of(0, limit + 1)
@@ -304,6 +391,7 @@ class AgentService(
             AgentListSort.NEWEST -> agentRepository.findMarketplaceAgentsByCreatedAtDesc(
                 query = query,
                 status = AgentVersionStatus.ACTIVE,
+                usageType = if (view == AgentView.EASY) AgentUsageType.USER_FACING else null,
                 hasCursor = cursor != null,
                 cursorCreatedAt = cursor?.createdAt,
                 cursorId = cursorId,
@@ -313,6 +401,7 @@ class AgentService(
             AgentListSort.NAME_ASC -> agentRepository.findMarketplaceAgentsByNameAsc(
                 query = query,
                 status = AgentVersionStatus.ACTIVE,
+                usageType = if (view == AgentView.EASY) AgentUsageType.USER_FACING else null,
                 hasCursor = cursor != null,
                 cursorNameKey = cursor?.nameKey,
                 cursorId = cursorId,
