@@ -7,6 +7,7 @@ import com.agentstore.payment.config.PaymentClientConfiguration
 import com.agentstore.x402.registry.X402PaymentCorrelationRegistry
 import com.agentstore.x402.service.X402PaymentService
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Duration
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -21,6 +22,10 @@ class X402PaymentConfigurationTest {
         corsOrigins = listOf("http://localhost:*"),
         runtimeTokenSecret = "test-runtime-secret",
         paymentMode = "x402",
+        bithumbApiUrl = "https://api.bithumb.com",
+        bithumbRequestTimeout = Duration.ofSeconds(2),
+        bithumbCacheTtl = Duration.ofSeconds(60),
+        bithumbStaleTtl = Duration.ofMinutes(15),
     )
     private val endpointPolicy =
         AgentEndpointPolicy(MockEnvironment().apply { setActiveProfiles("test") }) {

@@ -25,6 +25,20 @@ enum class ErrorCode(
     AGENT_HAS_VERSIONS(Domain.AGENT, HttpStatus.CONFLICT, 2, "Version이 있는 Agent는 삭제할 수 없습니다."),
     AGENT_VERSION_ALREADY_EXISTS(Domain.AGENT, HttpStatus.CONFLICT, 3, "Agent version이 이미 존재합니다."),
     INVALID_VERSION_TRANSITION(Domain.AGENT, HttpStatus.CONFLICT, 4, "Agent version 상태 전환이 올바르지 않습니다."),
+    CAPABILITY_NOT_FOUND(Domain.AGENT, HttpStatus.NOT_FOUND, 4, "Agent capability를 찾을 수 없습니다."),
+    CAPABILITY_ALREADY_EXISTS(Domain.AGENT, HttpStatus.CONFLICT, 5, "Agent capability가 이미 존재합니다."),
+    INVALID_CAPABILITY_SCHEMA(
+        Domain.AGENT,
+        HttpStatus.BAD_REQUEST,
+        6,
+        "Agent capability Schema가 올바르지 않습니다.",
+    ),
+    CAPABILITY_RESPONSE_FORMAT_MISMATCH(
+        Domain.AGENT,
+        HttpStatus.CONFLICT,
+        6,
+        "Capability와 응답 형식이 일치하지 않습니다.",
+    ),
 
     DEPENDENCY_INVALID_PRICE(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 1, "Dependency maxPriceAtomic이 올바르지 않습니다."),
     INVALID_MAX_CALLS(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 2, "maxCalls는 1 이상 5 이하이어야 합니다."),
@@ -48,6 +62,24 @@ enum class ErrorCode(
         4,
         "Dependency graph의 실행 step 수가 최대값을 초과했습니다.",
     ),
+    PROVIDER_CANDIDATE_LIMIT_EXCEEDED(
+        Domain.DEPENDENCY,
+        HttpStatus.UNPROCESSABLE_CONTENT,
+        5,
+        "Capability 공급자 후보 수가 허용 범위를 초과했습니다.",
+    ),
+    PROVIDER_EXPLORATION_LIMIT_EXCEEDED(
+        Domain.DEPENDENCY,
+        HttpStatus.UNPROCESSABLE_CONTENT,
+        6,
+        "Capability 공급자 조합 탐색 한도를 초과했습니다.",
+    ),
+    PROVIDER_METRICS_INSUFFICIENT(
+        Domain.DEPENDENCY,
+        HttpStatus.UNPROCESSABLE_CONTENT,
+        7,
+        "성능 기반 공급자 선택에 필요한 관측 지표가 부족합니다.",
+    ),
 
     QUOTE_NOT_FOUND(Domain.QUOTE, HttpStatus.NOT_FOUND, 1, "Quote를 찾을 수 없습니다."),
     QUOTE_EXPIRED(Domain.QUOTE, HttpStatus.CONFLICT, 1, "Quote가 만료되었습니다."),
@@ -66,12 +98,31 @@ enum class ErrorCode(
     BUDGET_MISMATCH(Domain.EXECUTION, HttpStatus.UNPROCESSABLE_CONTENT, 1, "maxBudgetAtomic은 Quote 최대 비용과 같아야 합니다."),
     INVALID_BUDGET(Domain.EXECUTION, HttpStatus.UNPROCESSABLE_CONTENT, 2, "maxBudgetAtomic이 올바르지 않습니다."),
     DEPENDENCY_INVOCATION_FAILED(Domain.EXECUTION, HttpStatus.BAD_GATEWAY, 1, "Dependency Agent 호출에 실패했습니다."),
+    AGENT_INPUT_SCHEMA_INVALID(
+        Domain.EXECUTION,
+        HttpStatus.UNPROCESSABLE_CONTENT,
+        4,
+        "Agent 입력이 계약 Schema와 일치하지 않습니다.",
+    ),
+    AGENT_OUTPUT_SCHEMA_INVALID(Domain.EXECUTION, HttpStatus.BAD_GATEWAY, 2, "Agent 출력이 계약 Schema와 일치하지 않습니다."),
     EXECUTION_RECOVERY_IN_PROGRESS(Domain.EXECUTION, HttpStatus.SERVICE_UNAVAILABLE, 1, "Execution 복구가 진행 중입니다."),
 
     PAYMENT_PRICE_MISMATCH(Domain.PAYMENT, HttpStatus.CONFLICT, 1, "결제 가격 정보가 일치하지 않습니다."),
     FAILED_AFTER_PAYMENT(Domain.PAYMENT, HttpStatus.BAD_GATEWAY, 1, "결제 후 Agent 실행에 실패했습니다."),
     PAYMENT_FAILED(Domain.PAYMENT, HttpStatus.BAD_GATEWAY, 2, "결제에 실패했습니다."),
     PAYMENT_RECONCILIATION_REQUIRED(Domain.PAYMENT, HttpStatus.SERVICE_UNAVAILABLE, 1, "결제 결과 확인이 필요합니다."),
+
+    EXTERNAL_INVOCATION_NOT_FOUND(Domain.EXTERNAL, HttpStatus.NOT_FOUND, 1, "외부 호출을 찾을 수 없습니다."),
+    EXTERNAL_IDEMPOTENCY_CONFLICT(Domain.EXTERNAL, HttpStatus.CONFLICT, 1, "동일한 Idempotency-Key의 요청 내용이 다릅니다."),
+    EXTERNAL_MAX_TOTAL_EXCEEDED(Domain.EXTERNAL, HttpStatus.UNPROCESSABLE_CONTENT, 1, "호출 최대 비용을 초과했습니다."),
+    EXTERNAL_PAYMENT_REQUIRED(Domain.EXTERNAL, HttpStatus.PAYMENT_REQUIRED, 1, "x402 결제가 필요합니다."),
+    EXTERNAL_PAYMENT_RECONCILIATION_REQUIRED(
+        Domain.EXTERNAL,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        1,
+        "외부 결제 결과 확인이 필요합니다.",
+    ),
+    EXTERNAL_RATE_LIMITED(Domain.EXTERNAL, HttpStatus.TOO_MANY_REQUESTS, 1, "요청 횟수가 너무 많습니다."),
 
     INVALID_CURSOR(Domain.REVENUE, HttpStatus.BAD_REQUEST, 1, "cursor가 올바르지 않습니다."),
     DEVELOPER_NOT_FOUND(Domain.REVENUE, HttpStatus.NOT_FOUND, 1, "Developer를 찾을 수 없습니다."),

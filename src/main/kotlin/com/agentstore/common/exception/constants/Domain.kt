@@ -7,6 +7,7 @@ enum class Domain {
     QUOTE,
     EXECUTION,
     PAYMENT,
+    EXTERNAL,
     REVENUE,
     SYSTEM,
 }

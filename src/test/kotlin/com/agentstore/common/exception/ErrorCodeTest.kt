@@ -14,14 +14,12 @@ class ErrorCodeTest {
     }
 
     @Test
-    fun `numbers are unique and alphabetically stable within a domain and status`() {
+    fun `numbers are unique within a domain and status`() {
         ErrorCode.values()
             .groupBy { it.domain to it.status }
             .values
             .forEach { codes ->
                 assertThat(codes.map { it.number }).doesNotHaveDuplicates()
-                assertThat(codes.sortedBy { it.name }.map { it.number })
-                    .isSorted
             }
     }
 

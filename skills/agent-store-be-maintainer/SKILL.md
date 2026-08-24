@@ -85,9 +85,17 @@ PostgreSQL integration tests receive an explicit dedicated datasource and do not
 production integration-profile YAML.
 
 Never write `${ENV:default}` or `${ENV:-default}` in YAML, Compose, docs, or configuration code.
-Required deployment values use `${ENV}` and required `@ConfigurationProperties` fields have no
-defaults. Local values belong in root `.env`/`.env.example`, not hidden fallbacks. Internal protocol
-constants are allowed but are passed explicitly into injected constructors.
+Root `.env`/`.env.example` are secret-only for the Spring process: passwords, tokens, and private
+keys. Do not add a public URL, wallet address, port, timeout, TTL, fee, rate limit, payment mode, or
+other policy value merely because it can vary by environment; declare those values explicitly in the
+appropriate YAML configuration. Docker Compose interpolation is the sole exception: keep values it
+directly requires in `.env`, even when they are not secrets. Required secret values use `${ENV}` and
+required `@ConfigurationProperties` fields have no defaults. Internal protocol constants are allowed
+but are passed explicitly into injected constructors.
+
+- When three or more mutually exclusive conditions choose one value or state, prefer a `when` branch
+  over an `if`/`else if` chain. Keep independent validation guards and sequential side effects as
+  separate `if` statements; do not convert them mechanically.
 
 Omit convention-identical metadata: no `@Param("query") query`, and no
 `@Column(name = "created_at")` when the naming strategy already maps it. Keep annotation attributes

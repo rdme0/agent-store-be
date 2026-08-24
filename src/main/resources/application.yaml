@@ -1,6 +1,8 @@
 spring:
   application:
     name: agent-store-be
+  profiles:
+    default: dev
   threads:
     virtual:
       enabled: true
@@ -20,13 +22,13 @@ spring:
   jackson:
     default-property-inclusion: non_null
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
+    url: jdbc:postgresql://localhost:5432/agent_store?currentSchema=public
+    username: postgres
     password: ${SPRING_DATASOURCE_PASSWORD}
 
 server:
-  address: ${HOST}
-  port: ${PORT}
+  address: 0.0.0.0
+  port: 8080
   shutdown: graceful
 
 springdoc:
@@ -34,7 +36,7 @@ springdoc:
     path: /openapi.json
   info:
     title: AgentStore API
-    version: ${API_VERSION}
+    version: 0.1.0
 
 scalar:
   enabled: true
@@ -47,9 +49,24 @@ management:
         include: health,info
 
 agent-store:
-  service-name: ${SERVICE_NAME}
-  api-version: ${API_VERSION}
-  runtime-callback-base-url: ${RUNTIME_CALLBACK_BASE_URL}
-  cors-origins: ${CORS_ORIGINS}
+  service-name: agent-store-api
+  api-version: 0.1.0
+  runtime-callback-base-url: http://127.0.0.1:8080
+  cors-origins:
+    - http://localhost:*
   runtime-token-secret: ${RUNTIME_TOKEN_SECRET}
-  payment-mode: ${PAYMENT_MODE}
+  payment-mode: simulated
+  bithumb-api-url: https://api.bithumb.com
+  bithumb-request-timeout: PT2S
+  bithumb-cache-ttl: PT60S
+  bithumb-stale-ttl: PT15M
+  external-api:
+    public-base-url: https://api.example.com
+    pay-to: "0x0000000000000000000000000000000000000001"
+    facilitator-url: https://facilitator.example.com
+    facilitator-request-timeout: PT5S
+    authorization-timeout: PT60S
+    fee-basis-points: 250
+    intent-ttl: PT5M
+    receipt-ttl: PT15M
+    rate-limit-per-minute: 30

@@ -11,7 +11,13 @@ class CorsConfig(private val properties: AgentStoreProperties) : WebMvcConfigure
         registry.addMapping("/**")
             .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
             .allowedHeaders("*")
-            .exposedHeaders("X-Trace-Id", "Last-Event-ID")
+            .exposedHeaders(
+                "X-Trace-Id",
+                "Last-Event-ID",
+                "PAYMENT-REQUIRED",
+                "PAYMENT-RESPONSE",
+                "X-AgentStore-Invocation-Receipt",
+            )
             .allowCredentials(true)
             .allowedOriginPatterns(*properties.corsOrigins.toTypedArray())
     }

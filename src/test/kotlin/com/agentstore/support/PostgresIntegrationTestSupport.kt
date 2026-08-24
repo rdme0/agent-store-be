@@ -10,8 +10,8 @@ import org.springframework.test.context.ActiveProfiles
 
 @SpringBootTest(
     properties = [
-        "spring.datasource.url=\${INTEGRATION_DATASOURCE_URL}",
-        "spring.datasource.username=\${INTEGRATION_DATASOURCE_USERNAME}",
+        "spring.datasource.url=jdbc:postgresql://localhost:5432/agent_store_integration?currentSchema=public",
+        "spring.datasource.username=postgres",
         "spring.datasource.password=\${INTEGRATION_DATASOURCE_PASSWORD}",
         "agent-store.service-name=agent-store-api",
         "agent-store.api-version=0.1.0",
@@ -23,6 +23,10 @@ import org.springframework.test.context.ActiveProfiles
 )
 @ActiveProfiles("postgres-integration")
 abstract class PostgresIntegrationTestSupport {
+    companion object {
+        private const val INTEGRATION_DATABASE_NAME = "agent_store_integration"
+    }
+
     @Autowired
     private lateinit var environment: Environment
 
@@ -35,12 +39,11 @@ abstract class PostgresIntegrationTestSupport {
     @BeforeEach
     fun verifyIsolatedDatabaseAndCreateCleaner() {
         check(environment.matchesProfiles("postgres-integration"))
-        val expectedDatabase = checkNotNull(System.getenv("INTEGRATION_DATASOURCE_URL"))
-            .substringAfterLast('/')
-            .substringBefore('?')
         val actualDatabase =
             jdbcTemplate.queryForObject("select current_database()", String::class.java)
-        check(actualDatabase == expectedDatabase) { "Integration test connected to '$actualDatabase', expected '$expectedDatabase'" }
+        check(actualDatabase == INTEGRATION_DATABASE_NAME) {
+            "Integration test connected to '$actualDatabase', expected '$INTEGRATION_DATABASE_NAME'"
+        }
         check(actualDatabase != "agent_store") {
             "PostgreSQL integration tests must use the dedicated agent_store_integration database"
         }

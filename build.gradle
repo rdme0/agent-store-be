@@ -47,6 +47,8 @@ dependencies {
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     implementation 'me.paulschwarz:springboot4-dotenv:5.1.0'
     implementation 'org.semver4j:semver4j:6.0.0'
+    implementation 'com.networknt:json-schema-validator:2.0.4'
+    implementation 'org.yaml:snakeyaml'
     implementation 'org.web3j:core:6.0.0'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -167,6 +169,41 @@ tasks.register('verifyProjectStyle') {
                 if (line ==~ /.*\$\{[^}]+:(?:-|)[^}]+}.*/) {
                     violations << "${project.relativePath(sourceFile)}:${index + 1} environment fallback"
                 }
+            }
+        }
+
+        def allowedSpringEnvironmentKeys = [
+            'SPRING_DATASOURCE_PASSWORD',
+            'RUNTIME_TOKEN_SECRET',
+        ] as Set
+        fileTree('src/main/resources') {
+            include '**/*.yaml', '**/*.yml'
+        }.each { sourceFile ->
+            sourceFile.readLines('UTF-8').eachWithIndex { line, index ->
+                def matcher = (line =~ /\$\{([A-Z0-9_]+)}/)
+                matcher.each { match ->
+                    if (!allowedSpringEnvironmentKeys.contains(match[1])) {
+                        def location = "${project.relativePath(sourceFile)}:${index + 1}"
+                        violations << "$location public configuration must be YAML, not an environment variable"
+                    }
+                }
+            }
+        }
+
+        def allowedDotenvKeys = [
+            'SPRING_DATASOURCE_PASSWORD',
+            'RUNTIME_TOKEN_SECRET',
+            'X402_PRIVATE_KEY',
+            'INTEGRATION_DATASOURCE_PASSWORD',
+            'POSTGRES_USER',
+            'POSTGRES_PASSWORD',
+            'POSTGRES_DB',
+            'POSTGRES_PORT',
+        ] as Set
+        file('.env.example').readLines('UTF-8').eachWithIndex { line, index ->
+            def matcher = (line =~ /^([A-Z0-9_]+)=/)
+            if (matcher.matches() && !allowedDotenvKeys.contains(matcher.group(1))) {
+                violations << ".env.example:${index + 1} public configuration must be YAML, not .env"
             }
         }
 

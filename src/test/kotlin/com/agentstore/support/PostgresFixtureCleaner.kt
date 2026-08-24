@@ -10,6 +10,7 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
     private val developerIds = linkedSetOf<UUID>()
     private val agentIds = linkedSetOf<UUID>()
     private val agentVersionIds = linkedSetOf<UUID>()
+    private val capabilityIds = linkedSetOf<UUID>()
     private val dependencyIds = linkedSetOf<UUID>()
     private val quoteIds = linkedSetOf<UUID>()
     private val executionIds = linkedSetOf<UUID>()
@@ -40,6 +41,10 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
 
     fun trackAgentVersion(id: UUID): Boolean {
         return agentVersionIds.add(id)
+    }
+
+    fun trackCapability(id: UUID): Boolean {
+        return capabilityIds.add(id)
     }
 
     fun trackDependency(id: UUID): Boolean {
@@ -80,12 +85,20 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
         // tracked execution step and therefore safe to remove first.
         executionIds.reversed().forEach { executionId ->
             jdbcTemplate.update(
+                "delete from agent_invocation_observations where execution_step_id in (select id from execution_steps where execution_id = ?)",
+                executionId,
+            )
+            jdbcTemplate.update(
                 "delete from revenue_entries where execution_step_id in (select id from execution_steps where execution_id = ?)",
                 executionId,
             )
         }
         stepIds.reversed()
             .forEach { id ->
+                jdbcTemplate.update(
+                    "delete from agent_invocation_observations where execution_step_id = ?",
+                    id,
+                )
                 jdbcTemplate.update(
                     "delete from revenue_entries where execution_step_id = ?",
                     id
@@ -100,6 +113,7 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
         deleteTracked("execution_quotes", quoteIds)
         deleteTracked("agent_dependencies", dependencyIds)
         deleteTracked("agent_versions", agentVersionIds)
+        deleteTracked("agent_capabilities", capabilityIds)
         deleteTracked("agents", agentIds)
         deleteTracked("developers", developerIds)
         deleteTracked("users", userIds)
