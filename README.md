@@ -174,8 +174,8 @@ Agent output이 Version의 `responseFormat`과 맞지 않으면 결제 기록을
 
 ## 4. 결제, 장애, 복구
 
-- `PAYMENT_MODE=simulated`: 실제 chain 결제 없이 동일한 원장 흐름을 검사합니다.
-- `PAYMENT_MODE=x402`: Spring이 전용 hot-wallet private key로 Base Sepolia USDC EIP-3009 payload를 직접
+- `agent-store.payment-mode=simulated`: 실제 chain 결제 없이 동일한 원장 흐름을 검사합니다.
+- `agent-store.payment-mode=x402`: Spring이 전용 hot-wallet private key로 Base Sepolia USDC EIP-3009 payload를 직접
   서명합니다.
 
 네트워크 timeout은 실패를 뜻하지 않습니다. 외부 결제는 성공하고 응답만 유실될 수 있어 서버는 side effect 전에 payment intent와 budget
@@ -255,6 +255,79 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 
 runtime callback은 일반 사용자용 API가 아닙니다.
 
+## External x402 Invocation API
+
+외부 개발자는 AgentStore 계정이나 영구 API key 없이도 Agent를 호출할 수 있습니다. 호출자는 한 번의 실행 intent를 만들고,
+AgentStore가 제시한 Base Sepolia USDC x402 결제를 완료합니다. AgentStore는 받은 결제를 증명한 뒤에만 내부 Marketplace
+Quote와 Execution을 만들고, 그 뒤 공급자 Agent 결제와 정산을 기존 실행 원장 안에서 처리합니다.
+
+이 API는 AgentStore의 기본 공개 API이며, 서버가 기동되면 항상 노출됩니다. 아래 공개 설정은
+`src/main/resources/application.yaml`에 명시하며, 모든 URL은 HTTPS 기본 port만 허용합니다. `pay-to`는
+AgentStore가 받는 EVM 지갑입니다.
+
+| YAML 키 | 설명 |
+|---|---|
+| `agent-store.external-api.public-base-url` | 외부 클라이언트가 실제로 접근하는 AgentStore HTTPS base URL |
+| `agent-store.external-api.pay-to` | 외부 x402 USDC를 받는 AgentStore EVM 지갑 |
+| `agent-store.external-api.facilitator-url` | `/verify`, `/settle`을 제공하는 HTTPS facilitator base URL |
+| `agent-store.external-api.facilitator-request-timeout` | facilitator 요청 timeout (`PT5S` 형식) |
+| `agent-store.external-api.authorization-timeout` | EIP-3009 authorization 유효 시간 (`PT60S` 형식) |
+| `agent-store.external-api.fee-basis-points` | 공급자 Quote 비용에 더할 플랫폼 수수료 basis point |
+| `agent-store.external-api.intent-ttl` | 결제 전 intent 유효 시간 |
+| `agent-store.external-api.receipt-ttl` | 조회·SSE에 쓰는 1회 호출 receipt 유효 시간 |
+| `agent-store.external-api.rate-limit-per-minute` | source IP 기준 intent 생성 한도 |
+
+`POST /v1/invocation-intents`에는 길이 16~128의 `Idempotency-Key`를 보냅니다. 같은 key와 같은 본문은 같은 intent를
+반환하고, 본문이 다르면 `409`입니다. `agentSlug` + `versionConstraint`로 특정 Agent를 고르거나, `functionCode` +
+`contractVersion` + `selectionStrategy`로 Function Contract 공급자를 고릅니다. 둘을 함께 보낼 수 없습니다.
+
+```json
+{
+  "agentSlug": "weather-summary",
+  "versionConstraint": "*",
+  "maxTotalAtomic": "1250000",
+  "question": "서울 내일 날씨를 알려줘",
+  "input": { "city": "Seoul" }
+}
+```
+
+```json
+{
+  "functionCode": "weather.forecast-summary",
+  "contractVersion": "1.0.0",
+  "selectionStrategy": "lowest_price",
+  "maxTotalAtomic": "1250000",
+  "input": { "city": "Seoul" }
+}
+```
+
+성공 응답은 `201`이며 `result`에 공급자 비용, 플랫폼 수수료, 총 atomic USDC 비용과 만료 시각을 넣습니다. 조회에 필요한
+`X-AgentStore-Invocation-Receipt` header도 이때 한 번만 받습니다. 이 값은 bearer secret이므로 로그·브라우저 저장소·공개 URL에
+넣지 마세요. 서버는 원문이 아니라 hash만 저장합니다.
+
+다음으로 `POST /v1/invocation-intents/{intentId}/execute`에 receipt header를 넣어 보냅니다. 서명이 없으면 `402`와
+`PAYMENT-REQUIRED` header를 반환합니다. 외부 x402 client는 이 header의 v2 `exact` requirement와 완전히 일치하는
+Base Sepolia USDC EIP-3009 `PAYMENT-SIGNATURE`를 만들어 같은 요청에 다시 보냅니다. 서명 검증과 facilitator settlement가
+성공하면 `202`, `PAYMENT-RESPONSE`, 그리고 내부 `executionId`를 반환합니다. timeout·연결 손실·누락 receipt는 성공으로
+추정하지 않고 `reconciliation_required`가 되며 새 결제나 다른 공급자 fallback을 시작하지 않습니다.
+
+```powershell
+$headers = @{
+  'Idempotency-Key' = 'external-weather-request-0001'
+  'Content-Type' = 'application/json'
+}
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri 'https://api.example.com/v1/invocation-intents' `
+  -Headers $headers `
+  -Body '{"agentSlug":"weather-summary","versionConstraint":"*","maxTotalAtomic":"1250000","input":{"city":"Seoul"}}'
+```
+
+상태는 `GET /v1/invocation-intents/{intentId}`, 실시간 진행은 `GET /v1/invocation-intents/{intentId}/events`에서 같은
+receipt header로 조회합니다. SSE는 기존 `Last-Event-ID` replay 규칙을 그대로 따릅니다. 최종 결과는 항상
+`CommonResponse.result.output`에 들어가므로 외부 서비스는 실행 그래프가 아닌 Agent output만 간단히 소비할 수 있습니다.
+
 ## 8. 로컬 실행
 
 Spring 운영 준비물은 Java 25와 PostgreSQL입니다. 선택적인 demo-agent는 별도 Go 1.26 프로젝트로 실행합니다.
@@ -268,34 +341,29 @@ docker compose up -d postgres
 ```
 
 루트 `docker-compose.yml`은 Docker Compose의 기본 `.env` interpolation으로 `POSTGRES_*` 값만 읽어
-`pgvector/pgvector:pg17` PostgreSQL을 시작합니다. Spring의 private key 같은 다른 secret은 DB container에 전달하지
-않습니다. 최초 volume 생성 시 `agent_store`와 `agent_store_integration` DB를 준비합니다. API는
-`http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`입니다. 예시 DB는 `localhost:
-5432/agent_store`입니다. `POSTGRES_PORT`를 바꾸면 `.env`의 `SPRING_DATASOURCE_URL`과 `INTEGRATION_DATASOURCE_URL` port도
-맞추십시오. Spring 시작 시 Flyway migration을 적용하고 Hibernate가 schema를 validate합니다. 이미 적용한 migration을 수정하지 말고
-새 migration을 추가합니다.
+`pgvector/pgvector:pg17` PostgreSQL을 시작합니다. Spring은 `.env`에서 password·token·private key만 읽고,
+포트·endpoint·결제 정책 같은 공개 설정은 `application.yaml`이 소유합니다. 최초 volume 생성 시 `agent_store`와
+`agent_store_integration` DB를 준비합니다. API는 `http://localhost:8080`, OpenAPI는
+`http://localhost:8080/openapi.json`입니다. 예시 DB는 `localhost:5432/agent_store`입니다. `POSTGRES_PORT`를
+바꾸면 `application.yaml`의 datasource port도 함께 바꾸십시오. Spring 시작 시 Flyway migration을 적용하고 Hibernate가
+schema를 validate합니다. 이미 적용한 migration을 수정하지 말고 새 migration을 추가합니다.
 
-| 변수                                    | 예시                    | 설명                                          |
-|---------------------------------------|----------------------|---------------------------------------------|
-| `PORT`                                | `8080`               | API port                                    |
-| `SPRING_DATASOURCE_URL`               | JDBC PostgreSQL URL  | DB와 schema                                  |
-| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | `postgres` | Spring datasource 계정 |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` | `postgres`           | compose PostgreSQL 계정                       |
-| `POSTGRES_DB`                         | `agent_store`        | compose 기본 DB                               |
-| `POSTGRES_PORT`                       | `5432`               | compose host port                           |
-| `CORS_ORIGINS`                        | `http://localhost:*` | 쉼표 구분 origin pattern                        |
-| `RUNTIME_TOKEN_SECRET`                | 로컬 값 필요              | callback token과 cursor 서명                   |
-| `PAYMENT_MODE`                        | `simulated`          | `simulated` 또는 `x402`                       |
-| `X402_PRIVATE_KEY`                    | 없음                   | x402 mode 전용 저잔액 payer key, `0x` + 64자리 hex |
+| `.env` 값 | 용도 |
+|---|---|
+| `SPRING_DATASOURCE_PASSWORD` | Spring PostgreSQL 비밀번호 |
+| `RUNTIME_TOKEN_SECRET` | callback token과 cursor 서명 secret |
+| `X402_PRIVATE_KEY` | x402 mode 전용 저잔액 payer key, `0x` + 64자리 hex |
+| `INTEGRATION_DATASOURCE_PASSWORD` | PostgreSQL integration test 전용 DB 비밀번호 |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Docker Compose가 직접 읽는 PostgreSQL 설정 |
 
 credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
-운영에서는 정확한 HTTPS origin으로 제한합니다.
+운영에서는 `application.yaml` 또는 운영용 YAML의 `agent-store.cors-origins`를 정확한 HTTPS origin으로 제한합니다.
 
 Demo Agent는 `C:\Users\we661\GolandProjects\demo-agent`의 독립 Go 서비스입니다. 설정 예시, x402 facilitator 값,
 실행과 검증 명령은 해당 프로젝트의 README와 `.env.example`이 소유합니다. Spring의 `X402_PRIVATE_KEY`는 demo-agent에
 복사하지 않습니다.
 
-`PAYMENT_MODE=x402`에서 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
+`agent-store.payment-mode=x402`에서 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet
 자금이 준비돼야 하며 funded Base Sepolia 성공을 보장하지 않습니다.
 
@@ -321,7 +389,7 @@ git diff --check
 
 PostgreSQL integration test는 일반 개발 DB와 분리된 `agent_store_integration` DB를 사용합니다. 새 compose volume은 이
 DB를 자동 생성합니다. 기존 volume에 DB가 없다면 PostgreSQL 관리자 계정으로 한 번 생성합니다. 테스트 실행 전
-`INTEGRATION_DATASOURCE_URL`, `INTEGRATION_DATASOURCE_USERNAME`, `INTEGRATION_DATASOURCE_PASSWORD`를 모두 명시해야 합니다.
+`.env`에 `INTEGRATION_DATASOURCE_PASSWORD`를 명시해야 합니다.
 
 ```powershell
 docker compose exec postgres createdb -U postgres agent_store_integration
@@ -332,13 +400,45 @@ integration test가 실행됩니다. 일반 server boot용 안전장치가 아�
 `agent_store`에 연결되면 실패합니다. 독립 Go demo-agent는 해당 프로젝트에서 `go test ./...`, `go vet ./...`,
 `go build ./...`로 확인합니다.
 
+## Function Contract Marketplace
+
+개발자는 `/api/function-contracts`에서 공용 입출력 계약을 만든 뒤 Agent Version에 `functionContractId`를 연결할 수 있습니다. 계약은 생성 후
+수정하거나 삭제하지 않으며 변경이 필요하면 새 `contractVersion`을 등록합니다. dependency는 특정 Agent를 직접 지정하거나, function contract와
+공급자 범위(`pinned`, `allowlist`, `marketplace`)·선택 전략을 선언합니다.
+
+- `lowest_price`: 가격이 낮은 공급자부터 선택하고 같은 가격이면 최신 Version을 우선합니다.
+- `latest_version`: 최신 Version부터 선택하고 같은 Version이면 가격이 낮은 공급자를 우선합니다.
+- `highest_reliability`, `fastest`, `balanced`: 30일 실행 관측값을 쓰며, 관측이 부족한 공급자는 명시적인 exploration에서만 선택합니다.
+
+공급자 선택은 Quote 발급 중에만 일어납니다. 선택된 Agent, Version, endpoint, 가격, `payTo`, 계약 Schema와 후보 제외 사유는 snapshot에
+고정됩니다. 실행 중 호출 실패, 출력 계약 위반 또는 결제 불명 상태에서 다른 공급자로 자동 전환하거나 다시 결제하지 않습니다.
+
+독립 공급자 reference scenario는 `C:\Users\we661\GolandProjects\demo-agent`의 `docker-compose.yml`로 실행합니다. 같은 Go image가
+investment, financial, news-fast, news-deep, risk를 별도 endpoint와 registration으로 제공하며 x402 mode에서는 각 slug에 별도의
+price와 `payTo`를 사용합니다.
+
+Spring의 공급자 선택부터 developer별 정산까지는 전용 PostgreSQL opt-in E2E로 fresh DB에서 재현할 수 있습니다. fixture는 서로 다른
+developer·endpoint·`payTo`를 가진 investment, news-fast, news-deep, risk를 만들고 `lowest_price`로 news-fast를 선택합니다. Quote
+snapshot을 만든 뒤 더 저렴한 news-deep Version을 publish해도 기존 실행은 고정된 news-fast만 호출하며, root·선택된 뉴스·risk 개발자에게만
+각각 1000·900·1000 atomic 수익이 기록되는지 검증합니다. 생성한 행은 해당 테스트 ID만 추적해 종료 시 제거합니다.
+
+```powershell
+$env:RUN_POSTGRES_INTEGRATION_TESTS='true'
+$env:SPRING_EXCLUSIVE_MAINTENANCE='true'
+.\gradlew.bat test --tests "com.agentstore.execution.PostgresSimulatedRuntimeE2eIntegrationTest.capability reference selects one provider and settles distinct developer revenues"
+```
+
+화면을 이용한 수동 시연에서는 Go Compose를 먼저 띄우고 개발자 모드의 `기능 계약`, Agent Version, Dependency 화면에서 같은 계약과
+endpoint를 등록합니다. 시연용 실제 x402 지갑을 사용할 때는 Go 프로젝트 `.env`의 공급자별 `payTo`와 Spring에 등록한 Version의
+`payTo`가 정확히 일치해야 합니다.
+
 ## 11. 문제 해결
 
-- **CORS 403:** 요청 `Origin`이 `CORS_ORIGINS`와 맞는지 확인하고 Spring을 재시작합니다. query string은 origin에 포함되지
+- **CORS 403:** 요청 `Origin`이 `application.yaml`의 `agent-store.cors-origins`와 맞는지 확인하고 Spring을 재시작합니다. query string은 origin에 포함되지
   않습니다.
 - **Flyway checksum 오류:** 적용된 migration을 임의 수정한 상태입니다. 원본을 복구하거나 새 migration을 추가합니다. 공유 DB에서 성급히
   `repair`하면 drift를 숨길 수 있습니다.
-- **relation/column JDBC 오류:** 연결 DB/schema, Flyway 적용 상태, Docker host port와 `.env`를 확인합니다.
+- **relation/column JDBC 오류:** `application.yaml`의 연결 DB/schema, Flyway 적용 상태, Docker host port와 datasource password를 확인합니다.
 - **Quote 뒤 실행 거부:** Quote가 5분을 넘겼거나 예산이 정확히 같지 않거나 recovery readiness가 준비되지 않았을 수 있습니다. 새 Quote로 다시
   승인합니다.
 

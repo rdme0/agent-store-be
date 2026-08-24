@@ -17,6 +17,10 @@ Read the relevant skill before changing its scope. `AGENTS.md` is only the entry
 모든 작업 시작 전 루트의 [`HANDOFF.md`](./HANDOFF.md)를 읽는다. 이 문서는 현재 구현 상태, DB/Flyway 상태, 저장소 경계와 다음 작업 순서를
 기록한다. 문서 내용과 실제 `git status`가 다르면 `git status`와 코드를 우선하고, 인수인계서를 최신 상태로 갱신한다.
 
+기능 기획, 범위 결정, 구조 확장 전에는 루트의 [`ROADMAP.md`](./ROADMAP.md)를 읽는다. 이 문서는 AgentStore의 제품 방향과 구현
+우선순위를 정의하며, 투자 분석은 플랫폼을 검증하는 reference scenario이지 제품 자체가 아니다. 현재 구현 상태의 기준은 코드와
+`HANDOFF.md`이고, `ROADMAP.md`의 미구현 항목을 이미 제공되는 기능처럼 문서화하지 않는다.
+
 ## Repository contract
 
 This repository is the Kotlin/Spring AgentStore runtime. Preserve the existing REST/SSE paths and
