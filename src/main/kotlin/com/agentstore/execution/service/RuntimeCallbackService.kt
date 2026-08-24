@@ -1,6 +1,7 @@
 package com.agentstore.execution.service
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
+import com.agentstore.agent.service.AgentCapabilityService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
@@ -12,6 +13,7 @@ import com.agentstore.execution.guard.ExecutionMutationReadiness
 import com.agentstore.execution.guard.RuntimeCallbackAdmissionService
 import com.agentstore.execution.model.vo.ExecutionStatus
 import com.agentstore.execution.model.vo.ExecutionStepStatus
+import com.agentstore.execution.model.vo.AgentInvocationOutcome
 import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
@@ -38,7 +40,9 @@ class RuntimeCallbackService(
     private val paymentOrchestrator: ExecutionPaymentOrchestrator,
     private val eventService: ExecutionEventService,
     private val mutationReadiness: ExecutionMutationReadiness,
+    private val capabilityService: AgentCapabilityService,
     private val objectMapper: ObjectMapper,
+    private val providerMetricService: ProviderMetricService,
 ) {
     fun invoke(
         executionId: UUID,
@@ -107,6 +111,21 @@ class RuntimeCallbackService(
         if (requestedPath != expectedPath || requestedPath.size > 5) {
             throw DomainClientException(ErrorCode.INVALID_CALL_PATH)
         }
+        try {
+            validateInputSchema(
+                version = target,
+                input = request.input,
+            )
+        } catch (exception: DomainClientException) {
+            if (exception.errorCode == ErrorCode.AGENT_INPUT_SCHEMA_INVALID) {
+                executionLifecycleService.fail(
+                    executionId = executionId,
+                    stepId = parent.id,
+                    failureCode = ErrorCode.AGENT_INPUT_SCHEMA_INVALID.name,
+                )
+            }
+            throw exception
+        }
         val child =
             admissionService.admit(
                 executionId = executionId,
@@ -120,7 +139,7 @@ class RuntimeCallbackService(
                 target.path("priceAtomic").asText("0").toBigIntegerOrNull() ?: BigInteger.ZERO
             val maxPrice = dependency.path("maxPriceAtomic").asText().toBigIntegerOrNull()
                 ?: throw DomainClientException(ErrorCode.INVALID_DEPENDENCY_LIMIT)
-            val output = paymentOrchestrator.invoke(
+            val rawOutput = paymentOrchestrator.invoke(
                 executionId = executionId,
                 stepId = child.id,
                 endpoint = target.path("endpoint").asText(),
@@ -132,8 +151,17 @@ class RuntimeCallbackService(
                 revenueType = RevenueType.DEPENDENCY,
                 maxPriceAtomic = maxPrice,
             ).output
+            val format = responseFormat(version = target)
+            val output = outputForFormat(
+                rawOutput = rawOutput,
+                format = format,
+            )
             AgentOutputFormatValidator.validate(
-                format = responseFormat(version = target),
+                format = format,
+                output = output,
+            )
+            validateOutputSchema(
+                version = target,
                 output = output,
             )
             stepService.complete(stepId = child.id, output = output, costAtomic = cost)
@@ -146,6 +174,10 @@ class RuntimeCallbackService(
                     "costAtomic" to cost.toString(),
                 ),
             )
+            providerMetricService.finish(
+                stepId = child.id,
+                outcome = AgentInvocationOutcome.SUCCESS,
+            )
             RuntimeDependencyInvocationResponse(
                 stepId = child.id,
                 output = jsonValue(value = output),
@@ -153,20 +185,46 @@ class RuntimeCallbackService(
             )
         } catch (exception: PaymentExecutionException) {
             stepService.fail(stepId = child.id, failureCode = exception.failureCode)
+            providerMetricService.finish(
+                stepId = child.id,
+                outcome = AgentInvocationOutcome.PLATFORM_FAILURE,
+            )
             throw exception
         } catch (exception: AgentOutputFormatException) {
-            // A format mismatch is discovered after payment invocation. Terminalize the
-            // owning execution through the lifecycle service so both the dependency step
-            // and execution retain the explicit failure code while payment evidence stays
-            // untouched for reconciliation/audit.
             executionLifecycleService.fail(
                 executionId = executionId,
                 stepId = child.id,
                 failureCode = "AGENT_OUTPUT_FORMAT_INVALID",
             )
+            providerMetricService.finish(
+                stepId = child.id,
+                outcome = AgentInvocationOutcome.OUTPUT_FORMAT_INVALID,
+            )
+            throw DomainClientException(ErrorCode.DEPENDENCY_INVOCATION_FAILED)
+        } catch (exception: DomainClientException) {
+            if (exception.errorCode != ErrorCode.AGENT_OUTPUT_SCHEMA_INVALID) {
+                stepService.fail(
+                    stepId = child.id,
+                    failureCode = "DEPENDENCY_INVOCATION_FAILED",
+                )
+                throw DomainClientException(ErrorCode.DEPENDENCY_INVOCATION_FAILED)
+            }
+            executionLifecycleService.fail(
+                executionId = executionId,
+                stepId = child.id,
+                failureCode = ErrorCode.AGENT_OUTPUT_SCHEMA_INVALID.name,
+            )
+            providerMetricService.finish(
+                stepId = child.id,
+                outcome = AgentInvocationOutcome.OUTPUT_SCHEMA_INVALID,
+            )
             throw DomainClientException(ErrorCode.DEPENDENCY_INVOCATION_FAILED)
         } catch (exception: Exception) {
             stepService.fail(stepId = child.id, failureCode = "DEPENDENCY_INVOCATION_FAILED")
+            providerMetricService.finish(
+                stepId = child.id,
+                outcome = AgentInvocationOutcome.PLATFORM_FAILURE,
+            )
             throw DomainClientException(ErrorCode.DEPENDENCY_INVOCATION_FAILED)
         }
     }
@@ -174,6 +232,37 @@ class RuntimeCallbackService(
     private fun responseFormat(version: JsonNode): AgentResponseFormat {
         return runCatching { AgentResponseFormat.valueOf(version.path("responseFormat").asText()) }
             .getOrDefault(AgentResponseFormat.JSON)
+    }
+
+    private fun outputForFormat(rawOutput: JsonNode, format: AgentResponseFormat): JsonNode {
+        if (format == AgentResponseFormat.JSON) {
+            return rawOutput
+        }
+        return rawOutput.get("output") ?: rawOutput
+    }
+
+    private fun validateInputSchema(version: JsonNode, input: Any?) {
+        val schema = version.path("functionContract").path("inputSchema")
+        if (!schema.isObject) {
+            return
+        }
+        capabilityService.validateInstance(
+            schema = schema,
+            value = objectMapper.valueToTree(input),
+            errorCode = ErrorCode.AGENT_INPUT_SCHEMA_INVALID,
+        )
+    }
+
+    private fun validateOutputSchema(version: JsonNode, output: JsonNode) {
+        val schema = version.path("functionContract").path("outputSchema")
+        if (!schema.isObject) {
+            return
+        }
+        capabilityService.validateInstance(
+            schema = schema,
+            value = output,
+            errorCode = ErrorCode.AGENT_OUTPUT_SCHEMA_INVALID,
+        )
     }
 
     private fun jsonValue(value: JsonNode?): Any? {

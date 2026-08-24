@@ -3,6 +3,7 @@ package com.agentstore.execution
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.execution.token.InvocationTokenService
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Duration
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -16,7 +17,11 @@ class InvocationTokenServiceTest {
             runtimeCallbackBaseUrl = "http://127.0.0.1:8080",
             corsOrigins = listOf("*"),
             runtimeTokenSecret = "test-secret",
-            paymentMode = "simulated",
+                paymentMode = "simulated",
+                bithumbApiUrl = "https://api.bithumb.com",
+                bithumbRequestTimeout = Duration.ofSeconds(2),
+                bithumbCacheTtl = Duration.ofSeconds(60),
+                bithumbStaleTtl = Duration.ofMinutes(15),
         ),
         jacksonObjectMapper(),
     )

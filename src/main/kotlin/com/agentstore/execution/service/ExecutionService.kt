@@ -1,10 +1,13 @@
 package com.agentstore.execution.service
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
+import com.agentstore.agent.service.AgentCapabilityService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
+import com.agentstore.dependency.dto.internal.QuoteSnapshotDto
 import com.agentstore.execution.dto.request.CreateExecutionRequest
+import com.agentstore.execution.dto.internal.ExecutionStartDto
 import com.agentstore.execution.dto.response.ExecutionEventResponse
 import com.agentstore.execution.dto.response.ExecutionResponse
 import com.agentstore.execution.dto.response.ExecutionStepResponse
@@ -17,6 +20,9 @@ import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.runner.ExecutionRunner
 import com.agentstore.payment.service.PaymentService
+import com.agentstore.payment.dto.internal.KrwEstimateDto
+import com.agentstore.payment.dto.response.KrwEstimateResponse
+import com.agentstore.payment.service.KrwEstimateService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.transaction.Transactional
@@ -37,31 +43,51 @@ class ExecutionService(
     private val objectMapper: ObjectMapper,
     private val runner: ExecutionRunner,
     private val mutationReadiness: ExecutionMutationReadiness,
+    private val krwEstimateService: KrwEstimateService,
+    private val capabilityService: AgentCapabilityService,
 ) {
     @Transactional
     fun create(request: CreateExecutionRequest): ExecutionResponse {
-        mutationReadiness.requireReady()
-        val quote = quoteService.requireQuote(request.quoteId)
-        if (!quote.expiresAt.isAfter(Instant.now())) {
-            throw DomainClientException(ErrorCode.QUOTE_EXPIRED)
+        val input = request.input?.let { value ->
+            objectMapper.valueToTree<JsonNode>(value)
         }
         val budget = request.maxBudgetAtomic.toBigIntegerOrNull() ?: throw DomainClientException(
             ErrorCode.INVALID_BUDGET
         )
-        if (budget != quote.maxCostAtomic) {
+        return create(
+            start = ExecutionStartDto(
+                quoteId = request.quoteId,
+                maxBudgetAtomic = budget,
+                question = request.question,
+                input = input,
+                allowExpiredQuote = false,
+            ),
+        )
+    }
+
+    @Transactional
+    fun create(start: ExecutionStartDto): ExecutionResponse {
+        mutationReadiness.requireReady()
+        val quote = quoteService.requireQuote(start.quoteId)
+        val quoteExpired = !quote.expiresAt.isAfter(Instant.now())
+        if (quoteExpired && !start.allowExpiredQuote) {
+            throw DomainClientException(ErrorCode.QUOTE_EXPIRED)
+        }
+        if (start.maxBudgetAtomic != quote.maxCostAtomic) {
             throw DomainClientException(ErrorCode.BUDGET_MISMATCH)
         }
-        val input = request.input?.let {
-            objectMapper.valueToTree<JsonNode>(it)
-        }
+        validateRootInput(
+            snapshot = quote.snapshot,
+            input = invocationInput(input = start.input, question = start.question),
+        )
         val execution =
             executionRepository.save(
                 Execution(
                     UUID.randomUUID(),
                     quote.id,
-                    budget,
-                    request.question,
-                    input
+                    start.maxBudgetAtomic,
+                    start.question,
+                    start.input,
                 )
             )
         val rootVersionId =
@@ -84,7 +110,7 @@ class ExecutionService(
         eventService.append(
             executionId = execution.id,
             type = "EXECUTION_CREATED",
-            payload = mapOf("quoteId" to quote.id, "maxBudgetAtomic" to budget.toString()),
+            payload = mapOf("quoteId" to quote.id, "maxBudgetAtomic" to start.maxBudgetAtomic.toString()),
         )
         val executionId = execution.id
         TransactionSynchronizationManager.registerSynchronization(object :
@@ -132,14 +158,26 @@ class ExecutionService(
     }
 
     private fun toResponse(execution: Execution, steps: List<ExecutionStep>): ExecutionResponse {
-        val responseFormats = responseFormats(quoteService.snapshot(execution.quoteId))
+        val snapshot = quoteService.snapshot(execution.quoteId)
+        val stepPresentation = stepPresentation(snapshot)
+        val quoteEstimate = runCatching {
+            objectMapper.treeToValue(snapshot.path("krwEstimate"), KrwEstimateDto::class.java)
+        }.getOrNull()
+        val typedSnapshot = objectMapper.treeToValue(snapshot, QuoteSnapshotDto::class.java)
         return ExecutionResponse(
             id = execution.id,
             quoteId = execution.quoteId,
+            quoteSnapshot = typedSnapshot,
             status = execution.status.name,
             maxBudgetAtomic = execution.maxBudgetAtomic.toString(),
+            maxBudgetKrwEstimate = quoteEstimate
+                ?.let { estimate -> krwEstimateService.estimateAtRate(execution.maxBudgetAtomic, estimate) }
+                ?.let(KrwEstimateResponse::from),
             reservedCostAtomic = execution.reservedCostAtomic.toString(),
             actualCostAtomic = execution.actualCostAtomic.toString(),
+            actualCostKrwEstimate = quoteEstimate
+                ?.let { estimate -> krwEstimateService.estimateAtRate(execution.actualCostAtomic, estimate) }
+                ?.let(KrwEstimateResponse::from),
             question = execution.question,
             input = jsonValue(value = execution.input),
             failureCode = execution.failureCode,
@@ -148,7 +186,9 @@ class ExecutionService(
                     step = step,
                     payments = paymentService.findAllByStepId(step.id),
                     output = jsonValue(value = step.output),
-                    responseFormat = responseFormats[step.agentVersionId] ?: AgentResponseFormat.JSON,
+                    responseFormat = stepPresentation[step.agentVersionId]?.responseFormat ?: AgentResponseFormat.JSON,
+                    agentSlug = stepPresentation[step.agentVersionId]?.agentSlug,
+                    agentName = stepPresentation[step.agentVersionId]?.agentName,
                 )
             },
             createdAt = execution.createdAt,
@@ -156,20 +196,21 @@ class ExecutionService(
         )
     }
 
-    private fun responseFormats(snapshot: JsonNode): Map<UUID, AgentResponseFormat> {
-        val result = mutableMapOf<UUID, AgentResponseFormat>()
+    private fun stepPresentation(snapshot: JsonNode): Map<UUID, StepPresentation> {
+        val result = mutableMapOf<UUID, StepPresentation>()
 
         fun visit(node: JsonNode) {
             val version = node.path("version")
             val id = version.path("id").asText().takeIf { it.isNotBlank() }
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
             if (id != null) {
-                result[id] = runCatching {
-                    AgentResponseFormat.valueOf(
-                        version.path("responseFormat").asText()
-                    )
-                }
-                    .getOrDefault(AgentResponseFormat.JSON)
+                result[id] = StepPresentation(
+                    responseFormat = runCatching {
+                        AgentResponseFormat.valueOf(version.path("responseFormat").asText())
+                    }.getOrDefault(AgentResponseFormat.JSON),
+                    agentSlug = version.path("agentSlug").asText().takeIf { value -> value.isNotBlank() },
+                    agentName = version.path("agentName").asText().takeIf { value -> value.isNotBlank() },
+                )
             }
             node.path("dependencies").forEach { dependency ->
                 val resolved = dependency.path("resolved")
@@ -180,4 +221,29 @@ class ExecutionService(
         visit(snapshot)
         return result
     }
+
+    private fun invocationInput(input: JsonNode?, question: String?): JsonNode {
+        val context = objectMapper.createObjectNode()
+        context.set<JsonNode>("input", input ?: objectMapper.nullNode())
+        question?.let { value -> context.put("question", value) }
+        return context
+    }
+
+    private fun validateRootInput(snapshot: JsonNode, input: JsonNode) {
+        val schema = snapshot.path("version").path("functionContract").path("inputSchema")
+        if (!schema.isObject) {
+            return
+        }
+        capabilityService.validateInstance(
+            schema = schema,
+            value = input,
+            errorCode = ErrorCode.AGENT_INPUT_SCHEMA_INVALID,
+        )
+    }
+
+    private data class StepPresentation(
+        val responseFormat: AgentResponseFormat,
+        val agentSlug: String?,
+        val agentName: String?,
+    )
 }

@@ -1,13 +1,18 @@
 package com.agentstore.execution.runner
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
+import com.agentstore.agent.service.AgentCapabilityService
 import com.agentstore.common.config.AgentStoreProperties
+import com.agentstore.common.exception.client.DomainClientException
+import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.service.ExecutionLifecycleService
 import com.agentstore.execution.service.ExecutionRunService
+import com.agentstore.execution.service.ProviderMetricService
+import com.agentstore.execution.model.vo.AgentInvocationOutcome
 import com.agentstore.execution.validation.AgentOutputFormatException
 import com.agentstore.execution.validation.AgentOutputFormatValidator
 import com.agentstore.payment.exception.PaymentExecutionException
@@ -28,6 +33,8 @@ class ExecutionRunner(
     private val executionRunService: ExecutionRunService,
     private val executionLifecycleService: ExecutionLifecycleService,
     private val properties: AgentStoreProperties,
+    private val capabilityService: AgentCapabilityService,
+    private val providerMetricService: ProviderMetricService,
 ) {
     private val logger = LoggerFactory.getLogger(ExecutionRunner::class.java)
 
@@ -61,6 +68,12 @@ class ExecutionRunner(
         val endpoint = version.path("endpoint").asText()
         val cost = version.path("priceAtomic").asText("0").toBigIntegerOrNull() ?: BigInteger.ZERO
         try {
+            val agentInput = buildMap<String, Any?> {
+                put(key = "input", value = initialExecution.input)
+                initialExecution.question?.let { question ->
+                    put(key = "question", value = question)
+                }
+            }
             val runtimeDependencies =
                 snapshot.path("dependencies").filter { it.path("resolved").isObject }
                     .map { dependency ->
@@ -70,7 +83,7 @@ class ExecutionRunner(
                             "callPath" to (step.callPath.map { it.asText() } + resolved.path("version")
                                 .path("agentSlug")
                                 .asText()),
-                            "input" to emptyMap<String, Any>(),
+                            "input" to agentInput,
                         )
                     }
             val runtime = mapOf(
@@ -81,13 +94,10 @@ class ExecutionRunner(
                 "dependencies" to runtimeDependencies,
             )
             val body = buildMap<String, Any?> {
-                put(key = "input", value = initialExecution.input)
+                put(key = "input", value = agentInput)
                 put(key = "runtime", value = runtime)
-                initialExecution.question?.let { question ->
-                    put(key = "question", value = question)
-                }
             }
-            val output = paymentOrchestrator.invoke(
+            val rawOutput = paymentOrchestrator.invoke(
                 executionId = executionId,
                 stepId = step.id,
                 endpoint = endpoint,
@@ -99,15 +109,25 @@ class ExecutionRunner(
                 revenueType = RevenueType.DIRECT,
                 maxPriceAtomic = cost,
             ).output
+            val format = responseFormat(version = version)
+            val output = outputForFormat(
+                rawOutput = rawOutput,
+                format = format,
+            )
             AgentOutputFormatValidator.validate(
-                format = responseFormat(version = version),
+                format = format,
                 output = output,
             )
+            validateOutputSchema(version = version, output = output)
             executionLifecycleService.complete(
                 executionId = executionId,
                 stepId = step.id,
                 output = output,
                 costAtomic = cost,
+            )
+            providerMetricService.finish(
+                stepId = step.id,
+                outcome = AgentInvocationOutcome.SUCCESS,
             )
         } catch (exception: Exception) {
             logger.error(
@@ -119,6 +139,7 @@ class ExecutionRunner(
             val failureCode = when (exception) {
                 is PaymentExecutionException -> exception.failureCode
                 is AgentOutputFormatException -> "AGENT_OUTPUT_FORMAT_INVALID"
+                is DomainClientException -> exception.errorCode.name
                 else -> "AGENT_INVOCATION_FAILED"
             }
             executionLifecycleService.fail(
@@ -126,11 +147,50 @@ class ExecutionRunner(
                 stepId = step.id,
                 failureCode = failureCode,
             )
+            providerMetricService.finish(
+                stepId = step.id,
+                outcome = metricOutcome(exception = exception),
+            )
+        }
+    }
+
+    private fun metricOutcome(exception: Exception): AgentInvocationOutcome {
+        return when (exception) {
+            is AgentOutputFormatException -> AgentInvocationOutcome.OUTPUT_FORMAT_INVALID
+            is DomainClientException -> {
+                if (exception.errorCode == ErrorCode.AGENT_OUTPUT_SCHEMA_INVALID) {
+                    AgentInvocationOutcome.OUTPUT_SCHEMA_INVALID
+                } else {
+                    AgentInvocationOutcome.PLATFORM_FAILURE
+                }
+            }
+            is PaymentExecutionException -> AgentInvocationOutcome.PLATFORM_FAILURE
+            else -> AgentInvocationOutcome.PLATFORM_FAILURE
         }
     }
 
     private fun responseFormat(version: JsonNode): AgentResponseFormat {
         return runCatching { AgentResponseFormat.valueOf(version.path("responseFormat").asText()) }
             .getOrDefault(AgentResponseFormat.JSON)
+    }
+
+    private fun outputForFormat(rawOutput: JsonNode, format: AgentResponseFormat): JsonNode {
+        if (format == AgentResponseFormat.JSON) {
+            return rawOutput
+        }
+
+        return rawOutput.get("output") ?: rawOutput
+    }
+
+    private fun validateOutputSchema(version: JsonNode, output: JsonNode) {
+        val schema = version.path("functionContract").path("outputSchema")
+        if (!schema.isObject) {
+            return
+        }
+        capabilityService.validateInstance(
+            schema = schema,
+            value = output,
+            errorCode = ErrorCode.AGENT_OUTPUT_SCHEMA_INVALID,
+        )
     }
 }

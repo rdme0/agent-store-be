@@ -2,7 +2,9 @@ package com.agentstore.execution.orchestrator
 
 import com.agentstore.execution.guard.BudgetGuard
 import com.agentstore.execution.service.ExecutionStepService
+import com.agentstore.execution.service.ProviderMetricService
 import com.agentstore.execution.token.InvocationTokenService
+import com.agentstore.execution.model.vo.AgentInvocationOutcome
 import com.agentstore.payment.client.PaymentClient
 import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
 import com.agentstore.payment.dto.internal.PaymentInvocationResultDto
@@ -23,6 +25,7 @@ class ExecutionPaymentOrchestrator(
     private val paymentClient: PaymentClient,
     private val settlementService: ExecutionPaymentSettlementService,
     private val invocationTokenService: InvocationTokenService,
+    private val providerMetricService: ProviderMetricService,
 ) {
     fun invoke(
         executionId: UUID,
@@ -56,6 +59,7 @@ class ExecutionPaymentOrchestrator(
                 agentVersionId = agentVersionId,
                 callPath = stepService.callPath(stepId = stepId),
             )
+            providerMetricService.start(stepId = stepId, agentVersionId = agentVersionId)
             val result = paymentClient.invoke(
                 PaymentInvocationRequestDto(
                     paymentAttemptId = attemptId.toString(),
@@ -89,6 +93,10 @@ class ExecutionPaymentOrchestrator(
                 )
             }
             if (result.agentStatus !in 200..299) {
+                providerMetricService.finish(
+                    stepId = stepId,
+                    outcome = AgentInvocationOutcome.AGENT_HTTP_FAILURE,
+                )
                 stepService.fail(stepId = stepId, failureCode = "FAILED_AFTER_PAYMENT")
                 throw PaymentExecutionException(
                     failureCode = "FAILED_AFTER_PAYMENT",
@@ -98,12 +106,20 @@ class ExecutionPaymentOrchestrator(
             result
         } catch (exception: Exception) {
             if (exception is PaymentOutcomeUnknownException) {
+                providerMetricService.finish(
+                    stepId = stepId,
+                    outcome = AgentInvocationOutcome.PAYMENT_RECONCILIATION_REQUIRED,
+                )
                 paymentService.markReconciliationRequired(
                     attemptId = attemptId,
                     failureCode = exception.failureCode,
                 )
                 stepService.fail(stepId = stepId, failureCode = exception.failureCode)
             } else if (externalPaymentObserved) {
+                providerMetricService.finish(
+                    stepId = stepId,
+                    outcome = AgentInvocationOutcome.PLATFORM_FAILURE,
+                )
                 if (exception !is PaymentExecutionException || exception.failureCode != "FAILED_AFTER_PAYMENT") {
                     paymentService.markSettlementRecoveryRequired(
                         attemptId = attemptId,
@@ -112,6 +128,10 @@ class ExecutionPaymentOrchestrator(
                     stepService.fail(stepId = stepId, failureCode = "FAILED_AFTER_PAYMENT")
                 }
             } else {
+                providerMetricService.finish(
+                    stepId = stepId,
+                    outcome = AgentInvocationOutcome.PAYMENT_FAILURE,
+                )
                 paymentService.fail(attemptId = attemptId, failureCode = "PAYMENT_FAILED")
                 budgetGuard.release(executionId = executionId, amount = amount)
                 stepService.fail(stepId = stepId, failureCode = "PAYMENT_FAILED")

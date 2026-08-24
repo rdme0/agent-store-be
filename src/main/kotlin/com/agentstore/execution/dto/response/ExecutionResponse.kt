@@ -1,8 +1,10 @@
 package com.agentstore.execution.dto.response
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
+import com.agentstore.dependency.dto.internal.QuoteSnapshotDto
 import com.agentstore.execution.model.entity.ExecutionEvent
 import com.agentstore.execution.model.entity.ExecutionStep
+import com.agentstore.payment.dto.response.KrwEstimateResponse
 import com.agentstore.payment.model.entity.PaymentAttempt
 import com.fasterxml.jackson.databind.JsonNode
 import io.swagger.v3.oas.annotations.media.Schema
@@ -26,6 +28,8 @@ data class ExecutionStepResponse(
     val id: UUID,
     val parentStepId: UUID?,
     val agentVersionId: UUID,
+    val agentSlug: String? = null,
+    val agentName: String? = null,
     @field:Schema(
         allowableValues = ["CREATED", "PAYMENT_REQUIRED", "PAYMENT_SETTLED", "RUNNING", "COMPLETED", "FAILED"],
     )
@@ -45,11 +49,15 @@ data class ExecutionStepResponse(
             payments: List<PaymentAttempt>,
             output: Any? = step.output,
             responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
+            agentSlug: String? = null,
+            agentName: String? = null,
         ): ExecutionStepResponse {
             return ExecutionStepResponse(
                 id = step.id,
                 parentStepId = step.parentStepId,
                 agentVersionId = step.agentVersionId,
+                agentSlug = agentSlug,
+                agentName = agentName,
                 status = step.status.name,
                 costAtomic = step.costAtomic.toString(),
                 responseFormat = responseFormat,
@@ -76,10 +84,13 @@ data class ExecutionStepResponse(
 data class ExecutionResponse(
     val id: UUID,
     val quoteId: UUID,
+    val quoteSnapshot: QuoteSnapshotDto,
     @field:Schema(allowableValues = ["PENDING", "RUNNING", "COMPLETED", "FAILED"]) val status: String,
     @field:Schema(pattern = "^[0-9]+$") val maxBudgetAtomic: String,
+    val maxBudgetKrwEstimate: KrwEstimateResponse? = null,
     @field:Schema(pattern = "^[0-9]+$") val reservedCostAtomic: String,
     @field:Schema(pattern = "^[0-9]+$") val actualCostAtomic: String,
+    val actualCostKrwEstimate: KrwEstimateResponse? = null,
     @field:Schema(nullable = false) val question: String? = null,
     @field:Schema(implementation = JsonNode::class, nullable = false) val input: Any? = null,
     @field:Schema(nullable = false) val failureCode: String? = null,
