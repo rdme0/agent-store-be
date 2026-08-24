@@ -13,6 +13,7 @@ interface AgentVersionRepository : JpaRepository<AgentVersion, UUID> {
     fun findByAgentIdAndSemver(agentId: UUID, semver: String): AgentVersion?
     fun findAllByAgentId(agentId: UUID): List<AgentVersion>
     fun findAllByAgentIdAndStatus(agentId: UUID, status: AgentVersionStatus): List<AgentVersion>
+    fun findAllByCapabilityIdAndStatus(capabilityId: UUID, status: AgentVersionStatus): List<AgentVersion>
 
     fun findByIdAndStatus(id: UUID, status: AgentVersionStatus): AgentVersion?
 

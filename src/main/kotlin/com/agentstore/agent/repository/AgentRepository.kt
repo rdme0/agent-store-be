@@ -2,6 +2,7 @@ package com.agentstore.agent.repository
 
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.vo.AgentVersionStatus
+import com.agentstore.agent.model.vo.AgentUsageType
 import java.time.Instant
 import java.util.UUID
 import org.springframework.data.domain.Pageable
@@ -21,6 +22,7 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
             where version.agentId = agent.id
               and version.status = :status
         )
+          and (cast(:usageType as string) is null or agent.usageType = :usageType)
           and (
             coalesce(:query, '') = ''
             or lower(agent.name) like lower(concat('%', coalesce(:query, ''), '%'))
@@ -40,6 +42,7 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
     fun findMarketplaceAgentsByCreatedAtDesc(
         query: String?,
         status: AgentVersionStatus,
+        usageType: AgentUsageType?,
         hasCursor: Boolean,
         cursorCreatedAt: Instant?,
         cursorId: UUID?,
@@ -56,6 +59,7 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
             where version.agentId = agent.id
               and version.status = :status
         )
+          and (cast(:usageType as string) is null or agent.usageType = :usageType)
           and (
             coalesce(:query, '') = ''
             or lower(agent.name) like lower(concat('%', coalesce(:query, ''), '%'))
@@ -75,6 +79,7 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
     fun findMarketplaceAgentsByNameAsc(
         query: String?,
         status: AgentVersionStatus,
+        usageType: AgentUsageType?,
         hasCursor: Boolean,
         cursorNameKey: String?,
         cursorId: UUID?,
