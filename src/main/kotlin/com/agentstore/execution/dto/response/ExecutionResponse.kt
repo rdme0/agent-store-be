@@ -28,7 +28,7 @@ data class ExecutionStepResponse(
     val id: UUID,
     val parentStepId: UUID?,
     val agentVersionId: UUID,
-    val agentSlug: String? = null,
+    val agentCode: String? = null,
     val agentName: String? = null,
     @field:Schema(
         allowableValues = ["CREATED", "PAYMENT_REQUIRED", "PAYMENT_SETTLED", "RUNNING", "COMPLETED", "FAILED"],
@@ -49,14 +49,14 @@ data class ExecutionStepResponse(
             payments: List<PaymentAttempt>,
             output: Any? = step.output,
             responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
-            agentSlug: String? = null,
+            agentCode: String? = null,
             agentName: String? = null,
         ): ExecutionStepResponse {
             return ExecutionStepResponse(
                 id = step.id,
                 parentStepId = step.parentStepId,
                 agentVersionId = step.agentVersionId,
-                agentSlug = agentSlug,
+                agentCode = agentCode,
                 agentName = agentName,
                 status = step.status.name,
                 costAtomic = step.costAtomic.toString(),

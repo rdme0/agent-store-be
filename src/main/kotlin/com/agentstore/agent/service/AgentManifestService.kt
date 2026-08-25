@@ -51,7 +51,7 @@ class AgentManifestService(
     @Transactional
     fun import(request: AgentManifestRequest): AgentManifestImportResponse {
         val manifest = parse(content = request.content)
-        if (agentService.findBySlug(manifest.agentCode) != null) {
+        if (agentService.findByCode(manifest.agentCode) != null) {
             throw DomainClientException(ErrorCode.AGENT_ALREADY_EXISTS)
         }
         val contract = functionContractService.requireByCode(
@@ -61,7 +61,7 @@ class AgentManifestService(
         val created = agentService.create(
             request = CreateAgentRequest(
                 developerId = manifest.developerId,
-                slug = manifest.agentCode,
+                code = manifest.agentCode,
                 name = manifest.agentName,
                 description = manifest.agentDescription,
                 semver = manifest.agentVersion,
@@ -88,7 +88,7 @@ class AgentManifestService(
         return AgentManifestImportResponse(
             agentId = created.id,
             versionId = version.id,
-            agentCode = created.slug,
+            agentCode = created.code,
             sha256 = manifest.sha256,
         )
     }
@@ -146,14 +146,14 @@ class AgentManifestService(
                 sourceVersionId = sourceVersionId,
                 request = CreateDependencyRequest(
                     targetAgentId = dependency.pinnedAgentCode?.let { code ->
-                        agentService.findBySlug(code)?.id
+                        agentService.findByCode(code)?.id
                             ?: throw DomainClientException(ErrorCode.AGENT_NOT_FOUND)
                     },
                     functionContractId = dependencyContract.id,
                     providerScope = dependency.providerScope,
                     selectionStrategy = dependency.selectionStrategy,
                     allowedProviderAgentIds = dependency.allowedAgentCodes.map { code ->
-                        agentService.findBySlug(code)?.id
+                        agentService.findByCode(code)?.id
                             ?: throw DomainClientException(ErrorCode.AGENT_NOT_FOUND)
                     }.toSet(),
                     minReliabilityPercent = dependency.minReliabilityPercent,
@@ -188,7 +188,7 @@ class AgentManifestService(
         contract: AgentCapability,
     ) {
         val unchanged = manifest.developerId == agent.developerId &&
-            manifest.agentCode == agent.slug &&
+            manifest.agentCode == agent.code &&
             manifest.agentName == agent.name &&
             manifest.agentDescription == agent.description &&
             manifest.usageType == agent.usageType &&

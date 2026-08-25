@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 
 interface AgentRepository : JpaRepository<Agent, UUID> {
-    fun findBySlug(slug: String): Agent?
+    fun findByCode(code: String): Agent?
 
     @Query(
         """

@@ -49,16 +49,16 @@ class AgentController(private val service: AgentService) {
         )
     }
 
-    @GetMapping("/agents/{slug}")
-    @Operation(operationId = "getApiAgentsBySlug", summary = "Get agent by slug")
+    @GetMapping("/agents/{code}")
+    @Operation(operationId = "getApiAgentsByCode", summary = "Get agent by code")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun getBySlug(
-        @PathVariable slug: String,
+    fun getByCode(
+        @PathVariable code: String,
         @RequestParam(defaultValue = "easy") @Pattern(regexp = "easy|developer") view: String,
     ): CommonResponse<AgentResponse> {
         return CommonResponse.success(
-            result = service.getBySlug(
-                slug = slug,
+            result = service.getByCode(
+                code = code,
                 view = AgentView.from(value = view),
             ),
         )

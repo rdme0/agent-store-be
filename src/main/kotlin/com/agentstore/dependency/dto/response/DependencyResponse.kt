@@ -13,7 +13,7 @@ data class DependencyResponse(
     val id: UUID,
     val sourceVersionId: UUID,
     @field:Schema(nullable = true) val targetAgentId: UUID? = null,
-    @field:Schema(nullable = true) val targetAgentSlug: String? = null,
+    @field:Schema(nullable = true) val targetAgentCode: String? = null,
     @field:Schema(nullable = true) val functionContractId: UUID? = null,
     @field:Schema(nullable = true) val functionCode: String? = null,
     @field:Schema(nullable = true) val functionContractVersion: String? = null,
@@ -35,7 +35,7 @@ data class DependencyResponse(
     companion object {
         fun from(
             dependency: AgentDependency,
-            targetAgentSlug: String?,
+            targetAgentCode: String?,
             functionCode: String?,
             functionContractVersion: String?,
         ): DependencyResponse {
@@ -43,7 +43,7 @@ data class DependencyResponse(
                 id = dependency.id,
                 sourceVersionId = dependency.sourceVersionId,
                 targetAgentId = dependency.targetAgentId,
-                targetAgentSlug = targetAgentSlug,
+                targetAgentCode = targetAgentCode,
                 functionContractId = dependency.functionContractId,
                 functionCode = functionCode,
                 functionContractVersion = functionContractVersion,
@@ -70,7 +70,7 @@ data class QuoteWarning(
     val code: String,
     val dependencyId: UUID,
     val targetAgentId: UUID? = null,
-    val targetAgentSlug: String? = null,
+    val targetAgentCode: String? = null,
     val functionContractId: UUID? = null,
     val functionCode: String? = null,
     val versionConstraint: String

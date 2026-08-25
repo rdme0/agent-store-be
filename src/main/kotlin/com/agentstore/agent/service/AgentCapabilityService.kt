@@ -61,10 +61,15 @@ class AgentCapabilityService(
     }
 
     fun requireByCode(code: String, contractVersion: String): AgentCapability {
+        return findByCode(code = code, contractVersion = contractVersion)
+            ?: throw DomainClientException(ErrorCode.CAPABILITY_NOT_FOUND)
+    }
+
+    fun findByCode(code: String, contractVersion: String): AgentCapability? {
         return capabilityRepository.findByKeyAndContractVersion(
             key = code,
             contractVersion = contractVersion,
-        ) ?: throw DomainClientException(ErrorCode.CAPABILITY_NOT_FOUND)
+        )
     }
 
     fun providers(id: UUID): List<FunctionProviderDto> {
@@ -78,7 +83,7 @@ class AgentCapabilityService(
             }
             FunctionProviderDto(
                 agentId = version.agentId,
-                agentCode = agent.slug,
+                agentCode = agent.code,
                 agentName = agent.name,
                 versionId = version.id,
                 semver = version.semver,

@@ -9,7 +9,7 @@ import java.util.UUID
 
 data class CreateAgentRequest(
     val developerId: UUID,
-    @field:NotBlank @field:Size(max = 80) @field:Pattern(regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$") val slug: String,
+    @field:NotBlank @field:Size(max = 80) @field:Pattern(regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$") val code: String,
     @field:NotBlank @field:Size(max = 120) val name: String,
     @field:NotBlank @field:Size(max = 2000) val description: String,
     @field:NotBlank @field:Size(max = 32) val semver: String,

@@ -8,7 +8,7 @@ import java.util.UUID
 data class ResolvedVersion(
     val id: UUID,
     val agentId: UUID,
-    val agentSlug: String,
+    val agentCode: String,
     val agentName: String,
     val agentDescription: String,
     val semver: String,

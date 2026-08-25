@@ -20,16 +20,16 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/agents")
 @AgentStoreErrorResponses
 class QuoteController(private val service: QuoteService) {
-    @PostMapping("/{slug}/quotes")
-    @Operation(operationId = "postApiAgentsBySlugQuotes", summary = "Create quote")
+    @PostMapping("/{code}/quotes")
+    @Operation(operationId = "postApiAgentsByCodeQuotes", summary = "Create quote")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
     fun create(
-        @PathVariable slug: String,
+        @PathVariable code: String,
         @Valid @RequestBody(required = false) request: QuoteRequest?
     ): CommonResponse<QuoteResponse> {
         return CommonResponse.success(
-            result = service.create(slug = slug, request = request ?: QuoteRequest()),
+            result = service.create(code = code, request = request ?: QuoteRequest()),
         )
     }
 }

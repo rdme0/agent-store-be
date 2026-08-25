@@ -13,7 +13,7 @@ data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<Res
             version = ResolvedVersionSnapshotDto(
                 id = version.id,
                 agentId = version.agentId,
-                agentSlug = version.agentSlug,
+                agentCode = version.agentCode,
                 agentName = version.agentName,
                 agentDescription = version.agentDescription,
                 semver = version.semver,
@@ -37,7 +37,7 @@ data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<Res
                 DependencySnapshotDto(
                     dependencyId = edge.dependency.id,
                     targetAgentId = edge.dependency.targetAgentId,
-                    targetAgentSlug = edge.targetAgentSlug,
+                    targetAgentCode = edge.targetAgentCode,
                     versionConstraint = edge.dependency.versionConstraint,
                     required = edge.dependency.isRequired,
                     maxPriceAtomic = edge.dependency.maxPriceAtomic.toString(),
@@ -52,7 +52,7 @@ data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<Res
                             candidates = selection.candidates.map { candidate ->
                                 ProviderCandidateSnapshotDto(
                                     agentId = candidate.agentId,
-                                    agentSlug = candidate.agentSlug,
+                                    agentCode = candidate.agentCode,
                                     versionId = candidate.versionId,
                                     semver = candidate.semver,
                                     priceAtomic = candidate.priceAtomic.toString(),

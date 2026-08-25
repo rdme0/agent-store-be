@@ -54,8 +54,8 @@ class DependencyService(
             cycleValidator.validate(
                 sourceAgentId = source.agentId,
                 targetAgentId = target.id,
-                sourceSlug = sourceSlug(agentId = source.agentId),
-                targetSlug = target.slug,
+                sourceCode = sourceCode(agentId = source.agentId),
+                targetCode = target.code,
             )
         }
         val functionContractId = request.functionContractId
@@ -123,8 +123,8 @@ class DependencyService(
             cycleValidator.validate(
                 sourceAgentId = source.agentId,
                 targetAgentId = target.id,
-                sourceSlug = sourceSlug(agentId = source.agentId),
-                targetSlug = target.slug,
+                sourceCode = sourceCode(agentId = source.agentId),
+                targetCode = target.code,
             )
         }
         dependency.update(
@@ -287,8 +287,8 @@ class DependencyService(
         }
     }
 
-    private fun sourceSlug(agentId: UUID): String {
-        return agentService.slugForAgent(agentId)
+    private fun sourceCode(agentId: UUID): String {
+        return agentService.codeForAgent(agentId)
     }
 
     private fun validateDirectDependency(request: CreateDependencyRequest) {
@@ -310,7 +310,7 @@ class DependencyService(
         val functionContract = dependency.functionContractId?.let(capabilityService::requireCapability)
         return DependencyResponse.from(
             dependency = dependency,
-            targetAgentSlug = target?.slug,
+            targetAgentCode = target?.code,
             functionCode = functionContract?.key,
             functionContractVersion = functionContract?.contractVersion,
         )

@@ -137,7 +137,7 @@ class AgentEndpointAdmissionTest {
         )
         val agentService = mock(AgentService::class.java)
         val resolver = mock(DependencyResolver::class.java)
-        `when`(agentService.findBySlug("root-agent")).thenReturn(rootAgent)
+        `when`(agentService.findByCode("root-agent")).thenReturn(rootAgent)
         `when`(agentService.activeVersions(rootAgent.id)).thenReturn(listOf(root))
         `when`(resolver.matches(version = root.semver, constraint = "*")).thenReturn(true)
         `when`(resolver.newest(listOf(root))).thenReturn(root)
@@ -292,13 +292,13 @@ class AgentEndpointAdmissionTest {
         ).also { it.publish() }
     }
 
-    private fun resolved(version: AgentVersion, slug: String): ResolvedVersion {
+    private fun resolved(version: AgentVersion, code: String): ResolvedVersion {
         return ResolvedVersion(
             id = version.id,
             agentId = version.agentId,
-            agentSlug = slug,
-            agentName = slug,
-            agentDescription = "$slug Agent가 요청을 처리합니다.",
+            agentCode = code,
+            agentName = code,
+            agentDescription = "$code Agent가 요청을 처리합니다.",
             semver = version.semver,
             endpoint = version.endpoint,
             priceAtomic = version.priceAtomic,

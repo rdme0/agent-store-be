@@ -28,7 +28,7 @@ public class Agent extends BaseEntity {
     private UUID developerId;
 
     @Column(nullable = false, unique = true)
-    private String slug;
+    private String code;
 
     @Column(nullable = false)
     private String name;
@@ -41,17 +41,17 @@ public class Agent extends BaseEntity {
     @Column(nullable = false, columnDefinition = "AgentUsageType")
     private AgentUsageType usageType;
 
-    public Agent(UUID id, UUID developerId, String slug, String name, String description, AgentUsageType usageType) {
+    public Agent(UUID id, UUID developerId, String code, String name, String description, AgentUsageType usageType) {
         this.id = id;
         this.developerId = developerId;
-        this.slug = slug;
+        this.code = code;
         this.name = name;
         this.description = description;
         this.usageType = usageType;
     }
 
-    public Agent(UUID id, UUID developerId, String slug, String name, String description) {
-        this(id, developerId, slug, name, description, AgentUsageType.INTERNAL_COMPONENT);
+    public Agent(UUID id, UUID developerId, String code, String name, String description) {
+        this(id, developerId, code, name, description, AgentUsageType.INTERNAL_COMPONENT);
     }
 
     public void updateMetadata(String name, String description, AgentUsageType usageType) {

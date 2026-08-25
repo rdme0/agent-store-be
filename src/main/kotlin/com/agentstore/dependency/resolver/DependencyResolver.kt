@@ -162,7 +162,7 @@ class DependencyResolver(
         if (stepBudget < 1) {
             throw DomainClientException(ErrorCode.EXECUTION_STEPS_EXCEEDED)
         }
-        val currentPath = path + agent.slug
+        val currentPath = path + agent.code
         val dependencies = dependencyRepository.findAllBySourceVersionIdOrderByIdAsc(version.id)
         val edges = resolveEdges(
             dependencies = dependencies,
@@ -179,7 +179,7 @@ class DependencyResolver(
         return ResolvedNode(
             version = toResolvedVersion(
                 version = version,
-                slug = agent.slug,
+                code = agent.code,
                 name = agent.name,
                 description = agent.description,
             ),
@@ -312,7 +312,7 @@ class DependencyResolver(
             val performance = metrics[candidate.id]
             val rejection = staticRejection(
                 candidate = candidate,
-                candidateSlug = candidateAgent.slug,
+                candidateCode = candidateAgent.code,
                 dependency = dependency,
                 currentPath = currentPath,
                 allowPriceExceeded = allowPriceExceeded,
@@ -320,7 +320,7 @@ class DependencyResolver(
             if (rejection != null) {
                 summaries += summary(
                     version = candidate,
-                    slug = candidateAgent.slug,
+                    code = candidateAgent.code,
                     status = rejection,
                     performance = performance,
                 )
@@ -342,7 +342,7 @@ class DependencyResolver(
                 if (expandedStepCount(node = selectedNode) > stepBudget) {
                     summaries += summary(
                         version = candidate,
-                        slug = candidateAgent.slug,
+                        code = candidateAgent.code,
                         status = "step_limit_exceeded",
                         performance = performance,
                     )
@@ -352,7 +352,7 @@ class DependencyResolver(
                 val tail = resolveTail(remainingSteps - consumedSteps, candidateWarnings)
                 summaries += summary(
                     version = candidate,
-                    slug = candidateAgent.slug,
+                    code = candidateAgent.code,
                     status = "selected",
                     performance = performance,
                 )
@@ -360,7 +360,7 @@ class DependencyResolver(
                     val remainingAgent = agentService.requireAgent(remaining.agentId)
                     summaries += summary(
                         version = remaining,
-                        slug = remainingAgent.slug,
+                        code = remainingAgent.code,
                         status = "not_selected",
                         performance = metrics[remaining.id],
                     )
@@ -369,7 +369,7 @@ class DependencyResolver(
                 return listOf(
                     ResolvedEdge(
                         dependency = dependency,
-                        targetAgentSlug = candidateAgent.slug,
+                        targetAgentCode = candidateAgent.code,
                         resolved = selectedNode,
                         selection = ProviderSelection(
                             strategy = strategy,
@@ -398,7 +398,7 @@ class DependencyResolver(
                 }
                 summaries += summary(
                     version = candidate,
-                    slug = candidateAgent.slug,
+                    code = candidateAgent.code,
                     status = candidateFailureStatus(errorCode = exception.errorCode),
                     performance = performance,
                 )
@@ -417,7 +417,7 @@ class DependencyResolver(
         return listOf(
             ResolvedEdge(
                 dependency = dependency,
-                targetAgentSlug = null,
+                targetAgentCode = null,
                 resolved = null,
                 selection = ProviderSelection(
                     strategy = strategy,
@@ -459,12 +459,12 @@ class DependencyResolver(
         if (selected == null) {
             return unresolvedEdge(
                 dependency = dependency,
-                targetAgentSlug = target.slug,
+                targetAgentCode = target.code,
                 warnings = warnings,
                 allowUnresolvedRequired = allowUnresolvedRequired,
             )
         }
-        requireNoCycle(targetSlug = target.slug, currentPath = currentPath)
+        requireNoCycle(targetCode = target.code, currentPath = currentPath)
         requirePrice(
             selected = selected,
             dependency = dependency,
@@ -472,7 +472,7 @@ class DependencyResolver(
         )
         return ResolvedEdge(
             dependency = dependency,
-            targetAgentSlug = target.slug,
+            targetAgentCode = target.code,
             resolved = resolveNode(
                 version = selected,
                 path = currentPath,
@@ -489,7 +489,7 @@ class DependencyResolver(
 
     private fun unresolvedEdge(
         dependency: AgentDependency,
-        targetAgentSlug: String,
+        targetAgentCode: String,
         warnings: MutableList<QuoteWarning>,
         allowUnresolvedRequired: Boolean,
     ): ResolvedEdge {
@@ -500,19 +500,19 @@ class DependencyResolver(
             code = "OPTIONAL_DEPENDENCY_NOT_RESOLVED",
             dependencyId = dependency.id,
             targetAgentId = dependency.targetAgentId,
-            targetAgentSlug = targetAgentSlug,
+            targetAgentCode = targetAgentCode,
             versionConstraint = dependency.versionConstraint,
         )
         return ResolvedEdge(
             dependency = dependency,
-            targetAgentSlug = targetAgentSlug,
+            targetAgentCode = targetAgentCode,
             resolved = null,
         )
     }
 
     private fun staticRejection(
         candidate: AgentVersion,
-        candidateSlug: String,
+        candidateCode: String,
         dependency: AgentDependency,
         currentPath: List<String>,
         allowPriceExceeded: Boolean,
@@ -523,7 +523,7 @@ class DependencyResolver(
         if (!allowPriceExceeded && candidate.priceAtomic > dependency.maxPriceAtomic) {
             return "price_exceeded"
         }
-        if (candidateSlug in currentPath) {
+        if (candidateCode in currentPath) {
             return "cycle"
         }
         return null
@@ -786,9 +786,9 @@ class DependencyResolver(
         val speed: Int,
     )
 
-    private fun requireNoCycle(targetSlug: String, currentPath: List<String>) {
-        if (targetSlug in currentPath) {
-            val cycle = currentPath.dropWhile { slug -> slug != targetSlug } + targetSlug
+    private fun requireNoCycle(targetCode: String, currentPath: List<String>) {
+        if (targetCode in currentPath) {
+            val cycle = currentPath.dropWhile { code -> code != targetCode } + targetCode
             throw DependencyCycleDetectedException(cycle.joinToString(" -> "))
         }
     }
@@ -829,13 +829,13 @@ class DependencyResolver(
 
     private fun summary(
         version: AgentVersion,
-        slug: String,
+        code: String,
         status: String,
         performance: ProviderPerformanceDto? = null,
     ): ProviderCandidate {
         return ProviderCandidate(
             agentId = version.agentId,
-            agentSlug = slug,
+            agentCode = code,
             versionId = version.id,
             semver = version.semver,
             priceAtomic = version.priceAtomic,
@@ -849,7 +849,7 @@ class DependencyResolver(
 
     private fun toResolvedVersion(
         version: AgentVersion,
-        slug: String,
+        code: String,
         name: String,
         description: String,
     ): ResolvedVersion {
@@ -866,7 +866,7 @@ class DependencyResolver(
         return ResolvedVersion(
             id = version.id,
             agentId = version.agentId,
-            agentSlug = slug,
+            agentCode = code,
             agentName = name,
             agentDescription = description,
             semver = version.semver,

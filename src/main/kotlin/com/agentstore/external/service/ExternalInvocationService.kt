@@ -211,22 +211,22 @@ class ExternalInvocationService(
         request: CreateExternalInvocationIntentRequest,
         maximum: BigInteger,
     ): QuoteResponse {
-        val agentSlug = request.agentSlug?.trim()?.takeIf(String::isNotBlank)
+        val agentCode = request.agentCode?.trim()?.takeIf(String::isNotBlank)
         val functionCode = request.functionCode?.trim()?.takeIf(String::isNotBlank)
 
         return when {
-            agentSlug != null && functionCode == null -> {
+            agentCode != null && functionCode == null -> {
                 val constraint = request.versionConstraint?.trim()?.takeIf(String::isNotBlank)
                     ?: throw DomainClientException(ErrorCode.INVALID_VERSION_CONSTRAINT)
                 if (request.contractVersion != null || request.selectionStrategy != null) {
                     throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
                 }
                 quoteService.create(
-                    slug = agentSlug,
+                    code = agentCode,
                     request = QuoteRequest(versionConstraint = constraint),
                 )
             }
-            agentSlug == null && functionCode != null -> {
+            agentCode == null && functionCode != null -> {
                 if (request.versionConstraint != null) {
                     throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
                 }

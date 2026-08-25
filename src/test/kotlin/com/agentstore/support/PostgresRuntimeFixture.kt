@@ -14,14 +14,14 @@ data class RuntimeFixture(
 
 data class DependencyRuntimeFixture(
     val root: RuntimeFixture,
-    val rootSlug: String,
-    val childSlug: String,
+    val rootCode: String,
+    val childCode: String,
     val childVersionId: UUID,
 )
 
 data class CapabilityMarketplaceRegistryFixture(
     val capabilityId: UUID,
-    val rootSlug: String,
+    val rootCode: String,
     val rootVersionId: UUID,
     val selectedProviderVersionId: UUID,
     val excludedProviderVersionId: UUID,
@@ -42,28 +42,28 @@ class PostgresRuntimeFixture(
     fun createCapabilityMarketplaceRegistry(): CapabilityMarketplaceRegistryFixture {
         val capabilityId = UUID.randomUUID()
         val root = createRegistryVersion(
-            slug = "reference-investment-${UUID.randomUUID()}",
+            code = "reference-investment-${UUID.randomUUID()}",
             endpoint = "http://127.0.0.1:8090/agents/investment/invoke",
             priceAtomic = 1_000,
             payTo = "0x0000000000000000000000000000000000000001",
             capabilityId = null,
         )
         val newsFast = createRegistryVersion(
-            slug = "reference-news-fast-${UUID.randomUUID()}",
+            code = "reference-news-fast-${UUID.randomUUID()}",
             endpoint = "http://127.0.0.1:8092/agents/news-fast/invoke",
             priceAtomic = 900,
             payTo = "0x0000000000000000000000000000000000000004",
             capabilityId = null,
         )
         val newsDeep = createRegistryVersion(
-            slug = "reference-news-deep-${UUID.randomUUID()}",
+            code = "reference-news-deep-${UUID.randomUUID()}",
             endpoint = "http://127.0.0.1:8093/agents/news-deep/invoke",
             priceAtomic = 1_500,
             payTo = "0x0000000000000000000000000000000000000005",
             capabilityId = null,
         )
         val risk = createRegistryVersion(
-            slug = "reference-risk-${UUID.randomUUID()}",
+            code = "reference-risk-${UUID.randomUUID()}",
             endpoint = "http://127.0.0.1:8094/agents/risk/invoke",
             priceAtomic = 1_000,
             payTo = "0x0000000000000000000000000000000000000006",
@@ -101,7 +101,7 @@ class PostgresRuntimeFixture(
 
         return CapabilityMarketplaceRegistryFixture(
             capabilityId = capabilityId,
-            rootSlug = root.slug,
+            rootCode = root.code,
             rootVersionId = root.versionId,
             selectedProviderVersionId = newsFast.versionId,
             excludedProviderVersionId = newsDeep.versionId,
@@ -129,7 +129,7 @@ class PostgresRuntimeFixture(
 
     fun createExecutionFromSnapshot(
         rootVersionId: UUID,
-        rootSlug: String,
+        rootCode: String,
         maxBudget: BigInteger,
         snapshot: String,
     ): RuntimeFixture {
@@ -167,7 +167,7 @@ class PostgresRuntimeFixture(
             rootStepId,
             executionId,
             rootVersionId,
-            "[\"$rootSlug\"]",
+            "[\"$rootCode\"]",
         )
         cleaner.trackStep(rootStepId)
 
@@ -250,7 +250,7 @@ class PostgresRuntimeFixture(
         )
         cleaner.trackDeveloper(developerId)
         jdbcTemplate.update(
-            "insert into agents (id, developer_id, slug, name, description, usage_type, created_at, updated_at) values (?, ?, ?, ?, ?, 'INTERNAL_COMPONENT'::\"AgentUsageType\", current_timestamp, current_timestamp)",
+            "insert into agents (id, developer_id, code, name, description, usage_type, created_at, updated_at) values (?, ?, ?, ?, ?, 'INTERNAL_COMPONENT'::\"AgentUsageType\", current_timestamp, current_timestamp)",
             agentId,
             developerId,
             "postgres-integration-$agentId",
@@ -298,12 +298,12 @@ class PostgresRuntimeFixture(
     ): DependencyRuntimeFixture {
         require(dependencyCount >= 1) { "dependencyCount must be at least one" }
         val root = create(maxBudget, responseFormat = rootResponseFormat)
-        val rootSlug = "root-${root.agentVersionId}"
+        val rootCode = "root-${root.agentVersionId}"
         val receiver = "0x0000000000000000000000000000000000000001"
 
         jdbcTemplate.update(
-            "update agents set slug = ? where id = (select agent_id from agent_versions where id = ?)",
-            rootSlug,
+            "update agents set code = ? where id = (select agent_id from agent_versions where id = ?)",
+            rootCode,
             root.agentVersionId
         )
         jdbcTemplate.update(
@@ -312,18 +312,18 @@ class PostgresRuntimeFixture(
         )
         jdbcTemplate.update(
             "update execution_steps set call_path = ?::jsonb where id = ?",
-            "[\"$rootSlug\"]",
+            "[\"$rootCode\"]",
             root.rootStepId
         )
         val children = (1..dependencyCount).map { index ->
-            val childSlug = "child-${UUID.randomUUID()}"
+            val childCode = "child-${UUID.randomUUID()}"
             val childAgentId = UUID.randomUUID()
             val childVersionId = UUID.randomUUID()
             jdbcTemplate.update(
-                "insert into agents (id, developer_id, slug, name, description, usage_type, created_at, updated_at) values (?, ?, ?, ?, ?, 'INTERNAL_COMPONENT'::\"AgentUsageType\", current_timestamp, current_timestamp)",
+                "insert into agents (id, developer_id, code, name, description, usage_type, created_at, updated_at) values (?, ?, ?, ?, ?, 'INTERNAL_COMPONENT'::\"AgentUsageType\", current_timestamp, current_timestamp)",
                 childAgentId,
                 root.developerId,
-                childSlug,
+                childCode,
                 "fixture child $index",
                 "fixture child $index",
             )
@@ -336,15 +336,15 @@ class PostgresRuntimeFixture(
                 childResponseFormat,
             )
             cleaner.trackAgentVersion(childVersionId)
-            childSlug to childVersionId
+            childCode to childVersionId
         }
-        val childSlug = children.first().first
+        val childCode = children.first().first
         val childVersionId = children.first().second
-        val dependencies = children.joinToString(separator = ",") { (slug, versionId) ->
-            """{"maxPriceAtomic":"1","resolved":{"version":{"id":"$versionId","agentSlug":"$slug","endpoint":"http://fixture/child","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver","responseFormat":"$childResponseFormat"},"dependencies":[]}}"""
+        val dependencies = children.joinToString(separator = ",") { (code, versionId) ->
+            """{"maxPriceAtomic":"1","resolved":{"version":{"id":"$versionId","agentCode":"$code","endpoint":"http://fixture/child","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver","responseFormat":"$childResponseFormat"},"dependencies":[]}}"""
         }
         val snapshot = """
-            {"version":{"id":"${root.agentVersionId}","agentSlug":"$rootSlug","endpoint":"http://fixture/root","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver","responseFormat":"$rootResponseFormat"},"dependencies":[$dependencies]}
+            {"version":{"id":"${root.agentVersionId}","agentCode":"$rootCode","endpoint":"http://fixture/root","priceAtomic":"1","network":"eip155:84532","asset":"USDC","payTo":"$receiver","responseFormat":"$rootResponseFormat"},"dependencies":[$dependencies]}
         """.trimIndent()
         jdbcTemplate.update(
             "update execution_quotes set snapshot = ?::jsonb, max_cost_atomic = ? where id = ?",
@@ -357,11 +357,11 @@ class PostgresRuntimeFixture(
             BigInteger.valueOf((dependencyCount + 1).toLong()),
             root.executionId
         )
-        return DependencyRuntimeFixture(root, rootSlug, childSlug, childVersionId)
+        return DependencyRuntimeFixture(root, rootCode, childCode, childVersionId)
     }
 
     private fun createRegistryVersion(
-        slug: String,
+        code: String,
         endpoint: String,
         priceAtomic: Long,
         payTo: String,
@@ -379,11 +379,11 @@ class PostgresRuntimeFixture(
         )
         cleaner.trackDeveloper(developerId)
         jdbcTemplate.update(
-            "insert into agents (id, developer_id, slug, name, description, usage_type, created_at, updated_at) values (?, ?, ?, ?, ?, 'INTERNAL_COMPONENT'::\"AgentUsageType\", current_timestamp, current_timestamp)",
+            "insert into agents (id, developer_id, code, name, description, usage_type, created_at, updated_at) values (?, ?, ?, ?, ?, 'INTERNAL_COMPONENT'::\"AgentUsageType\", current_timestamp, current_timestamp)",
             agentId,
             developerId,
-            slug,
-            slug,
+            code,
+            code,
             "Capability marketplace reference provider",
         )
         cleaner.trackAgent(agentId)
@@ -402,7 +402,7 @@ class PostgresRuntimeFixture(
             developerId = developerId,
             agentId = agentId,
             versionId = versionId,
-            slug = slug,
+            code = code,
             payTo = payTo,
         )
     }
@@ -433,7 +433,7 @@ class PostgresRuntimeFixture(
         val developerId: UUID,
         val agentId: UUID,
         val versionId: UUID,
-        val slug: String,
+        val code: String,
         val payTo: String,
     )
 }

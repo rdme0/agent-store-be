@@ -66,11 +66,11 @@ class AgentMarketplaceListTest {
         val secondResult =
             fixture.service.list(2, firstResult.nextCursor, "risk", AgentListSort.NEWEST)
 
-        assertEquals(listOf("newest-a", "newest-b"), firstResult.items.map { it.slug })
+        assertEquals(listOf("newest-a", "newest-b"), firstResult.items.map { it.code })
         assertEquals(
             listOf(AgentVersionStatus.ACTIVE),
             firstResult.items.first().versions.map { it.status })
-        assertEquals(listOf("newest-c"), secondResult.items.map { it.slug })
+        assertEquals(listOf("newest-c"), secondResult.items.map { it.code })
         assertEquals(null, secondResult.nextCursor)
     }
 
@@ -203,8 +203,8 @@ class AgentMarketplaceListTest {
         )
     }
 
-    private fun agent(developerId: UUID, slug: String, name: String, createdAt: String): Agent {
-        return Agent(UUID.randomUUID(), developerId, slug, name, "$name 설명").also {
+    private fun agent(developerId: UUID, code: String, name: String, createdAt: String): Agent {
+        return Agent(UUID.randomUUID(), developerId, code, name, "$name 설명").also {
             timestamps(it, createdAt)
         }
     }

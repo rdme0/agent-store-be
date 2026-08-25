@@ -54,8 +54,8 @@ class AgentService(
         }
     }
 
-    fun findBySlug(slug: String): Agent? {
-        return agentRepository.findBySlug(slug)
+    fun findByCode(code: String): Agent? {
+        return agentRepository.findByCode(code)
     }
 
     fun findByIdOrNull(id: UUID): Agent? {
@@ -102,8 +102,8 @@ class AgentService(
         return developerRepository.existsById(id)
     }
 
-    fun slugForAgent(id: UUID): String {
-        return requireAgent(id).slug
+    fun codeForAgent(id: UUID): String {
+        return requireAgent(id).code
     }
 
     fun developerIdForAgent(id: UUID): UUID {
@@ -153,8 +153,8 @@ class AgentService(
     }
 
     @Transactional
-    fun getBySlug(slug: String, view: AgentView = AgentView.DEVELOPER): AgentResponse {
-        return agentRepository.findBySlug(slug)?.let { agent ->
+    fun getByCode(code: String, view: AgentView = AgentView.DEVELOPER): AgentResponse {
+        return agentRepository.findByCode(code)?.let { agent ->
             if (view == AgentView.EASY && agent.usageType != AgentUsageType.USER_FACING) {
                 throw AgentNotFoundException()
             }
@@ -184,7 +184,7 @@ class AgentService(
             Agent(
                 UUID.randomUUID(),
                 developer.id,
-                request.slug,
+                request.code,
                 request.name,
                 request.description,
                 request.usageType,

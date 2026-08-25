@@ -6,7 +6,7 @@ import java.util.UUID
 
 data class ResolvedEdge(
     val dependency: AgentDependency,
-    val targetAgentSlug: String?,
+    val targetAgentCode: String?,
     val resolved: ResolvedNode?,
     val selection: ProviderSelection? = null,
 )
@@ -26,7 +26,7 @@ data class ProviderSelection(
 
 data class ProviderCandidate(
     val agentId: UUID,
-    val agentSlug: String,
+    val agentCode: String,
     val versionId: UUID,
     val semver: String,
     val priceAtomic: BigInteger,

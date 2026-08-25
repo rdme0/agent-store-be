@@ -11,11 +11,11 @@ class CycleValidator(
     private val agentService: AgentService,
     private val dependencyRepository: AgentDependencyRepository,
 ) {
-    fun validate(sourceAgentId: UUID, targetAgentId: UUID, sourceSlug: String, targetSlug: String) {
+    fun validate(sourceAgentId: UUID, targetAgentId: UUID, sourceCode: String, targetCode: String) {
         if (sourceAgentId == targetAgentId) {
-            throw cycle(listOf(sourceSlug, targetSlug))
+            throw cycle(listOf(sourceCode, targetCode))
         }
-        val path = mutableListOf(sourceSlug)
+        val path = mutableListOf(sourceCode)
         if (
             reachable(
                 currentAgentId = targetAgentId,
@@ -24,7 +24,7 @@ class CycleValidator(
                 path = path,
             )
         ) {
-            throw cycle(path + sourceSlug)
+            throw cycle(path + sourceCode)
         }
     }
 
@@ -38,7 +38,7 @@ class CycleValidator(
             return false
         }
         val agent = agentService.findByIdOrNull(currentAgentId) ?: return false
-        path += agent.slug
+        path += agent.code
         val versions = agentService.draftOrActiveVersions(currentAgentId)
         val found = versions.any { version ->
             dependencyRepository.findAllBySourceVersionIdOrderByIdAsc(version.id).any { dependency ->

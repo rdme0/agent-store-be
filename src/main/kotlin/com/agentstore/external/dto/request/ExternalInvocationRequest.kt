@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 
 data class CreateExternalInvocationIntentRequest(
-    @field:Size(max = 120) val agentSlug: String? = null,
+    @field:Size(max = 120) val agentCode: String? = null,
     @field:Size(max = 120) val functionCode: String? = null,
     @field:Size(max = 32) val contractVersion: String? = null,
     val selectionStrategy: ProviderSelectionStrategy? = null,
