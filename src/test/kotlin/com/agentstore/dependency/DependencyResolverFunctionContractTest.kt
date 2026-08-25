@@ -97,6 +97,24 @@ class DependencyResolverFunctionContractTest {
     }
 
     @Test
+    fun `Python comparator range excludes incompatible function provider versions`() {
+        val fixture = fixture()
+
+        val resolved = fixture.resolve(
+            providerScope = ProviderScope.MARKETPLACE,
+            strategy = ProviderSelectionStrategy.LATEST_VERSION,
+            explorationPercent = 0,
+            metrics = emptyMap(),
+            allowedAgentIds = emptySet(),
+            versionConstraint = ">=1.0.0,<2.0.0",
+        )
+
+        val selection = resolved.root.dependencies.single().selection
+        assertEquals(fixture.cheap.id, selection?.selectedVersionId)
+        assertEquals("version_mismatch", selection?.candidates?.single { it.versionId == fixture.newest.id }?.status)
+    }
+
+    @Test
     fun `more than fifty marketplace candidates are rejected`() {
         val fixture = fixture()
         val providers = (1..51).map { index ->
@@ -204,7 +222,7 @@ class DependencyResolverFunctionContractTest {
             agent.id,
             functionContractId,
             semver,
-            "https://${agent.slug}.example.com/invoke",
+            "https://${agent.code}.example.com/invoke",
             BigInteger.valueOf(priceAtomic),
             "eip155:84532",
             "USDC",
@@ -234,12 +252,13 @@ class DependencyResolverFunctionContractTest {
             explorationPercent: Int,
             metrics: Map<UUID, ProviderPerformanceDto>,
             allowedAgentIds: Set<UUID>,
+            versionConstraint: String = "*",
         ): ResolvedGraph {
             val dependency = AgentDependency(
                 UUID.randomUUID(),
                 root.id,
                 null,
-                "*",
+                versionConstraint,
                 true,
                 BigInteger.valueOf(2_000),
                 1,

@@ -60,7 +60,7 @@ class ExternalInvocationServiceTest {
             fixture.service.createIntent(
                 idempotencyKey = "external-invalid-request-0001",
                 request = CreateExternalInvocationIntentRequest(
-                    agentSlug = "weather",
+                    agentCode = "weather",
                     functionCode = "weather.forecast-summary",
                     maxTotalAtomic = "1000",
                 ),
@@ -80,7 +80,7 @@ class ExternalInvocationServiceTest {
             idempotencyKey = key,
             requestHash = fixture.requestHash(
                 CreateExternalInvocationIntentRequest(
-                    agentSlug = "weather",
+                    agentCode = "weather",
                     versionConstraint = "*",
                     maxTotalAtomic = "125",
                 ),
@@ -91,7 +91,7 @@ class ExternalInvocationServiceTest {
         val created = fixture.service.createIntent(
             idempotencyKey = key,
             request = CreateExternalInvocationIntentRequest(
-                agentSlug = "weather",
+                agentCode = "weather",
                 versionConstraint = "*",
                 maxTotalAtomic = "125",
             ),
@@ -110,16 +110,16 @@ class ExternalInvocationServiceTest {
         `when`(fixture.intentRepository.findByIdempotencyKey(key)).thenReturn(null)
         `when`(
             fixture.quoteService.create(
-                slug = "weather",
-                request = QuoteRequest(versionConstraint = "*"),
+                code = "weather",
+                request = QuoteRequest(versionConstraint = ">=1.0.0,<2.0.0"),
             ),
         ).thenReturn(fixture.quote())
 
         val created = fixture.service.createIntent(
             idempotencyKey = key,
             request = CreateExternalInvocationIntentRequest(
-                agentSlug = "weather",
-                versionConstraint = "*",
+                agentCode = "weather",
+                versionConstraint = ">=1.0.0,<2.0.0",
                 maxTotalAtomic = "125",
             ),
         )
@@ -406,7 +406,7 @@ class ExternalInvocationServiceTest {
                     version = ResolvedVersionSnapshotDto(
                         id = UUID.randomUUID(),
                         agentId = UUID.randomUUID(),
-                        agentSlug = "weather",
+                        agentCode = "weather",
                         semver = "1.0.0",
                         endpoint = "https://weather.example.com/invoke",
                         priceAtomic = "100",

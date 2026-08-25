@@ -60,13 +60,13 @@ class DependencyService(
         }
         val functionContractId = request.functionContractId
         functionContractId?.let(capabilityService::requireCapability)
-        resolver.validateConstraint(request.versionConstraint)
+        val constraint = resolver.normalizeConstraint(constraint = request.versionConstraint)
         validateLimits(maxPriceAtomic = request.maxPriceAtomic, maxCalls = request.maxCalls)
         val dependency = AgentDependency(
             UUID.randomUUID(),
             source.id,
             request.targetAgentId,
-            request.versionConstraint,
+            constraint,
             request.required,
             BigInteger(request.maxPriceAtomic),
             request.maxCalls,
@@ -113,8 +113,9 @@ class DependencyService(
                 sourceVersionId = sourceVersionId,
             )
                 ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_FOUND)
-        val constraint = request.versionConstraint ?: dependency.versionConstraint
-        resolver.validateConstraint(constraint)
+        val constraint = resolver.normalizeConstraint(
+            constraint = request.versionConstraint ?: dependency.versionConstraint,
+        )
         val maxPrice = request.maxPriceAtomic?.let { BigInteger(it) } ?: dependency.maxPriceAtomic
         val maxCalls = request.maxCalls ?: dependency.maxCalls
         validateLimits(maxPriceAtomic = maxPrice.toString(), maxCalls = maxCalls)

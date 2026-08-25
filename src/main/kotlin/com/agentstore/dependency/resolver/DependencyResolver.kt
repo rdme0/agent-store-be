@@ -40,8 +40,10 @@ class DependencyResolver(
     companion object {
         private const val MAX_PROVIDER_CANDIDATES = 50
         private const val MAX_PROVIDER_EXPLORATIONS = 500
-        private val SUPPORTED_CONSTRAINT = Regex(
-            "^(?:\\*|(?:\\^|~)?(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))$",
+        private const val SEMVER_COMPONENT = "(?:0|[1-9]\\d*)"
+        private const val CONSTRAINT_VERSION = "$SEMVER_COMPONENT\\.$SEMVER_COMPONENT\\.$SEMVER_COMPONENT"
+        private val CONSTRAINT_PREDICATE = Regex(
+            "^\\s*(==|>=|>|<=|<)\\s*($CONSTRAINT_VERSION)\\s*$",
         )
         private val SKIPPABLE_CANDIDATE_ERRORS = setOf(
             ErrorCode.DEPENDENCY_NOT_RESOLVED,
@@ -128,21 +130,52 @@ class DependencyResolver(
         return ResolvedGraph(root = root, warnings = warnings)
     }
 
-    fun validateConstraint(constraint: String) {
-        if (!SUPPORTED_CONSTRAINT.matches(constraint)) {
+    fun normalizeConstraint(constraint: String): String {
+        val normalized = constraint.trim()
+        if (normalized == "*") {
+            return normalized
+        }
+        val predicates = normalized.split(',').map { predicate ->
+            val match = CONSTRAINT_PREDICATE.matchEntire(predicate)
+                ?: throw DomainClientException(ErrorCode.INVALID_VERSION_CONSTRAINT)
+            VersionPredicate(operator = match.groupValues[1], version = match.groupValues[2])
+        }
+        if (predicates.isEmpty()) {
             throw DomainClientException(ErrorCode.INVALID_VERSION_CONSTRAINT)
+        }
+        return predicates.joinToString(separator = ",") { predicate ->
+            "${predicate.operator}${predicate.version}"
         }
     }
 
+    fun validateConstraint(constraint: String) {
+        normalizeConstraint(constraint = constraint)
+    }
+
     fun matches(version: String, constraint: String): Boolean {
-        validateConstraint(constraint = constraint)
-        return constraint == "*" || runCatching { Semver(version).satisfies(constraint) }
-            .getOrDefault(false)
+        val normalized = normalizeConstraint(constraint = constraint)
+        if (normalized == "*") {
+            return true
+        }
+        val candidate = runCatching { Semver(version) }.getOrNull() ?: return false
+        return normalized.split(',').all { predicate ->
+            val match = requireNotNull(CONSTRAINT_PREDICATE.matchEntire(predicate))
+            when (match.groupValues[1]) {
+                "==" -> candidate.isEqualTo(match.groupValues[2])
+                ">=" -> candidate.isGreaterThanOrEqualTo(match.groupValues[2])
+                ">" -> candidate.isGreaterThan(match.groupValues[2])
+                "<=" -> candidate.isLowerThanOrEqualTo(match.groupValues[2])
+                "<" -> candidate.isLowerThan(match.groupValues[2])
+                else -> error("validated version comparator is missing")
+            }
+        }
     }
 
     fun newest(versions: List<AgentVersion>): AgentVersion? {
         return versions.maxWithOrNull { left, right -> compareSemver(left.semver, right.semver) }
     }
+
+    private data class VersionPredicate(val operator: String, val version: String)
 
     private fun resolveNode(
         version: AgentVersion,
