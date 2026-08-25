@@ -342,8 +342,8 @@ docker compose --env-file ../agent-store-be/.env up --build -d
 ```
 
 Compose는 `pgvector/pgvector:pg17` PostgreSQL을 시작하고, 최초 volume 생성 시 `agent_store`와
-`agent_store_integration` DB를 준비합니다. API는 Docker 전용 `docker` profile에서 Compose의 PostgreSQL에 연결하며,
-개발 profile을 함께 활성화해 기존 loopback demo Agent endpoint를 유지합니다. API는
+`agent_store_integration` DB를 준비합니다. API는 Compose가 주입하는 표준 datasource 환경변수로 PostgreSQL에
+연결하며, 개발 profile을 활성화해 기존 loopback demo Agent endpoint를 유지합니다. API는
 `http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`, demo-agent는
 `http://localhost:8090`에서 확인할 수 있습니다. Spring 시작 시 Flyway migration을 적용하고 Hibernate가 schema를
 validate합니다. 이미 적용한 migration을 수정하지 말고 새 migration을 추가합니다.
@@ -380,9 +380,10 @@ Invoke-WebRequest http://localhost:8080/openapi.json -OutFile openapi\openapi.js
 ## 10. 검증
 
 ```powershell
-.\gradlew.bat classes
-.\gradlew.bat test
-.\gradlew.bat bootJar
+Set-Location ../agent-store-infra
+docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle classes
+docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle test
+docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle bootJar
 git diff --check
 ```
 
@@ -423,9 +424,11 @@ snapshot을 만든 뒤 더 저렴한 news-deep Version을 publish해도 기존 �
 각각 1000·900·1000 atomic 수익이 기록되는지 검증합니다. 생성한 행은 해당 테스트 ID만 추적해 종료 시 제거합니다.
 
 ```powershell
-$env:RUN_POSTGRES_INTEGRATION_TESTS='true'
-$env:SPRING_EXCLUSIVE_MAINTENANCE='true'
-.\gradlew.bat test --tests "com.agentstore.execution.PostgresSimulatedRuntimeE2eIntegrationTest.capability reference selects one provider and settles distinct developer revenues"
+Set-Location ../agent-store-infra
+docker compose --profile tools --env-file ../agent-store-be/.env run --rm `
+  -e RUN_POSTGRES_INTEGRATION_TESTS=true `
+  -e SPRING_EXCLUSIVE_MAINTENANCE=true `
+  gradle test --tests "com.agentstore.execution.PostgresSimulatedRuntimeE2eIntegrationTest.capability reference selects one provider and settles distinct developer revenues"
 ```
 
 화면을 이용한 수동 시연에서는 Go Compose를 먼저 띄우고 개발자 모드의 `기능 계약`, Agent Version, Dependency 화면에서 같은 계약과
