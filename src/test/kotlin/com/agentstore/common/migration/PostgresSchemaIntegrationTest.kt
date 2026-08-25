@@ -33,7 +33,28 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
             String::class.java,
         )
-        assertEquals("20", version)
+        assertEquals("22", version)
+        assertEquals(
+            1,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'agents' and column_name = 'code'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'agents' and column_name = 'slug'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            1,
+            jdbcTemplate.queryForObject(
+                "select count(*) from pg_indexes where schemaname = 'public' and tablename = 'agents' and indexname = 'agents_code_key'",
+                Int::class.java,
+            ),
+        )
         val timestampColumns = jdbcTemplate.queryForObject(
             "select count(*) from information_schema.columns where table_schema = 'public' and table_name in ('execution_quotes', 'revenue_entries', 'execution_events') and column_name = 'updated_at'",
             Int::class.java,
@@ -80,6 +101,99 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
                 Int::class.java,
             ),
         )
+    }
+
+    @Test
+    fun `V21 preserves existing agent code data while renaming the unique index`() {
+        val schema = "v21_agent_code_${UUID.randomUUID().toString().replace("-", "")}"
+        val migration = requireNotNull(
+            javaClass.classLoader.getResource("db/migration/V21__20260825000000_rename_agent_slug_to_code.sql"),
+        ).readText()
+        jdbcTemplate.execute("create schema $schema")
+        val dataSource = requireNotNull(jdbcTemplate.dataSource)
+        try {
+            dataSource.connection.use { connection ->
+                connection.createStatement().use { statement ->
+                    try {
+                        statement.execute("create table $schema.agents (id uuid primary key, slug varchar(120) not null)")
+                        statement.execute("create unique index agents_slug_key on $schema.agents (slug)")
+                        statement.execute("insert into $schema.agents (id, slug) values ('${UUID.randomUUID()}', 'legacy-agent')")
+                        statement.execute("set search_path to $schema")
+                        statement.execute(migration)
+                        statement.executeQuery("select code from agents where code = 'legacy-agent'").use { result ->
+                            check(result.next())
+                            assertEquals("legacy-agent", result.getString("code"))
+                        }
+                        statement.executeQuery(
+                            "select indexname from pg_indexes where schemaname = '$schema' and tablename = 'agents'",
+                        ).use { result ->
+                            val indexNames = generateSequence {
+                                if (result.next()) result.getString("indexname") else null
+                            }.toSet()
+                            assertEquals(true, indexNames.contains("agents_code_key"))
+                            assertEquals(false, indexNames.contains("agents_slug_key"))
+                        }
+                    } finally {
+                        statement.execute("set search_path to public")
+                    }
+                }
+            }
+        } finally {
+            jdbcTemplate.execute("drop schema if exists $schema cascade")
+        }
+    }
+
+    @Test
+    fun `V22 converts every legacy constraint without changing its SemVer range`() {
+        val schema = "v22_version_constraint_${UUID.randomUUID().toString().replace("-", "")}"
+        val migration = requireNotNull(
+            javaClass.classLoader.getResource(
+                "db/migration/V22__20260825010000_convert_version_constraints_to_comparators.sql",
+            ),
+        ).readText()
+        jdbcTemplate.execute("create schema $schema")
+        val dataSource = requireNotNull(jdbcTemplate.dataSource)
+        try {
+            dataSource.connection.use { connection ->
+                connection.createStatement().use { statement ->
+                    try {
+                        statement.execute(
+                            "create table $schema.agent_dependencies (id integer primary key, version_constraint text not null)",
+                        )
+                        statement.execute(
+                            "insert into $schema.agent_dependencies (id, version_constraint) values " +
+                                "(1, '*'), (2, '1.2.3'), (3, '^1.2.3'), (4, '^0.2.3'), " +
+                                "(5, '^0.0.3'), (6, '~1.2.3')",
+                        )
+                        statement.execute("set search_path to $schema")
+                        statement.execute(migration)
+                        statement.executeQuery(
+                            "select id, version_constraint from agent_dependencies order by id",
+                        ).use { result ->
+                            val constraints = mutableMapOf<Int, String>()
+                            while (result.next()) {
+                                constraints[result.getInt("id")] = result.getString("version_constraint")
+                            }
+                            assertEquals(
+                                mapOf(
+                                    1 to "*",
+                                    2 to "==1.2.3",
+                                    3 to ">=1.2.3,<2.0.0",
+                                    4 to ">=0.2.3,<0.3.0",
+                                    5 to ">=0.0.3,<0.0.4",
+                                    6 to ">=1.2.3,<1.3.0",
+                                ),
+                                constraints,
+                            )
+                        }
+                    } finally {
+                        statement.execute("set search_path to public")
+                    }
+                }
+            }
+        } finally {
+            jdbcTemplate.execute("drop schema if exists $schema cascade")
+        }
     }
 
     @Test
@@ -239,7 +353,7 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
         assertEquals(
             0,
             jdbcTemplate.queryForObject(
-                "select count(*) from agents where slug = ?",
+                "select count(*) from agents where code = ?",
                 Int::class.java,
                 agentCode,
             ),
