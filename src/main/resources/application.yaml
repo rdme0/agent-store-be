@@ -25,6 +25,8 @@ spring:
     url: jdbc:postgresql://localhost:5432/agent_store?currentSchema=public
     username: postgres
     password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
 
 server:
   address: 0.0.0.0

@@ -1,9 +1,0 @@
-spring:
-  config:
-    activate:
-      on-profile: test
-  flyway:
-    enabled: false
-  jpa:
-    hibernate:
-      ddl-auto: none
