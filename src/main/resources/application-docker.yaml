@@ -1,0 +1,6 @@
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/agent_store?currentSchema=public
