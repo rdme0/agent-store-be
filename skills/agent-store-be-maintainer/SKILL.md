@@ -78,6 +78,11 @@ deliberate, named enums remain named, and timestamps are UTC `Instant`.
 Flyway SQL owns schema changes. Never edit an applied migration; add the next version. Hibernate
 remains `ddl-auto=validate`. Preserve schema/data/index/FK/check invariants.
 
+Before changing migration or configuration files, inspect their complete `git diff`. Existing Flyway
+migrations are immutable even though Gradle no longer hashes them: restore an accidental edit and add a
+new migration instead. Do not reintroduce `common/migration`, `application-postgres-integration.yaml`,
+or `DatabaseUrlParser.kt`; they are retired configuration debt.
+
 Use Spring Boot standard datasource properties. Do not parse a deployment database URL in
 application code. Flyway SQL is the only production migration mechanism: no schema fingerprint
 validator, compatibility baseliner, maintenance flag, or `common/migration` production package.
@@ -92,6 +97,10 @@ appropriate YAML configuration. Docker Compose interpolation is the sole excepti
 directly requires in `.env`, even when they are not secrets. Required secret values use `${ENV}` and
 required `@ConfigurationProperties` fields have no defaults. Internal protocol constants are allowed
 but are passed explicitly into injected constructors.
+
+For this repository, `.env.example` may contain Spring datasource password, runtime token secret,
+x402 private key, integration-test datasource password, and Docker Compose PostgreSQL password/port.
+Treat every other proposed `.env` key as public configuration and keep it in YAML instead.
 
 - When three or more mutually exclusive conditions choose one value or state, prefer a `when` branch
   over an `if`/`else if` chain. Keep independent validation guards and sequential side effects as
@@ -125,7 +134,7 @@ For HIGH_RISK work, maintain a failure matrix covering side-effect boundaries, t
 loss, journal/recovery, duplicates, callback/terminal races, readiness, and SSE replay/live races,
 with one test mapping per row. Use deferred clients/barriers and PostgreSQL row-lock fixtures.
 
-Run `gradlew.bat verifyProjectStyle`, then `classes`, `test`, `bootJar`, migration/schema validation,
+Run `gradlew.bat detektMain`, then `classes`, `test`, `bootJar`, migration/schema validation,
 OpenAPI parity, and `git diff --check`. Before handoff, search the complete owned diff for expression
 bodies, late companions, positional multi-argument Kotlin calls, wildcard/FQ imports, environment
 fallbacks, redundant metadata, DTO suffix violations, dense formatting, and unused parameters.

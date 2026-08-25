@@ -20,7 +20,8 @@ Review in three passes:
    windows, recovery, callback/terminal races, and SSE replay/live lifecycle.
 2. Map matrix rows to diff/tests; inspect package roles, controller thinness, cross-domain repository
    access, transaction ownership, JPA/Flyway, OpenAPI, stale paths, and dirty-path preservation.
-3. Run `gradlew.bat verifyProjectStyle`, then independently inspect what a text gate cannot prove.
+3. Run `gradlew.bat detektMain`, then independently inspect the complete owned diff. Gradle no longer
+   contains repository-specific regex or migration-hash gates, so verify the maintainer rules directly.
    Named arguments are required; only convention-identical annotations are redundant.
 
 ## Blocking structural and style rules
@@ -39,6 +40,12 @@ Review in three passes:
 - Required configuration has no constructor default and no `${ENV:default}` or `${ENV:-default}`.
   Standard datasource properties replace custom URL parsers. Only Flyway SQL belongs to production
   migration support; no production `common/migration` package or integration-profile YAML remains.
+- Existing Flyway migrations are immutable: reject any edit to an existing migration and require a new
+  migration. Reject reintroduced `common/migration`, `application-postgres-integration.yaml`, and
+  `DatabaseUrlParser.kt` paths.
+- `.env.example` contains only Spring datasource/runtime/x402/integration secrets plus Docker Compose
+  PostgreSQL password and port. Public URL, wallet, policy, timeout, or payment-mode values belong in
+  YAML, not `.env`.
 - Common responses, exceptions, error codes, and the global exception handler are Kotlin. Internal
   DTOs end in `Dto`; HTTP types end in `Request` or `Response`.
 - Remove redundant repository `@Param` and convention-identical entity `@Column(name)` metadata.
