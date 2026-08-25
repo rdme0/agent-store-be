@@ -24,8 +24,8 @@ Agent가 이해할 수 있는 가격·계약·결제 프로토콜로 바꾸는 �
 결과 조합 + 공급자별 정산 + 실행 증명
 ```
 
-투자 분석은 이 플랫폼의 reference scenario다. Investment Agent가 서로 독립적인 Financial, News, Risk Agent의 서비스를 구매하고
-결과를 조합하는 과정으로 Agent 간 거래를 증명한다. 특정 투자 분석 서비스에 플랫폼의 구조와 계약을 종속시키지 않는다.
+투자·쇼핑·여행은 이 플랫폼의 reference scenario다. 각 Root Agent가 세 전문 Agent의 서비스를 구매하고 결과를 조합하는 과정으로
+Agent 간 거래를 증명한다. 특정 도메인 서비스에 플랫폼의 구조와 계약을 종속시키지 않는다.
 
 ## 제품 원칙
 
@@ -49,7 +49,7 @@ Agent가 이해할 수 있는 가격·계약·결제 프로토콜로 바꾸는 �
 - 중복 실행 방지, unknown 결제 reconciliation과 recovery
 - runtime callback 인증, SSE 실행 관찰과 output format 검증
 - 쉬운 사용 모드와 개발자 모드
-- 투자 분석 reference scenario와 독립 Go demo-agent
+- 투자·쇼핑·여행 catalog와 단일 Go demo-agent
 - immutable function contract와 Version별 계약 구현 선언
 - function contract dependency의 `lowest_price`·`latest_version` Quote-time 공급자 선택
 - 선택 후보·제외 사유·선택 이유와 입출력 Schema를 고정하는 quote snapshot

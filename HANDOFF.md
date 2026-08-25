@@ -1,6 +1,29 @@
 # AgentStore BE 인수인계서
 
-최종 갱신: 2026-08-24
+최종 갱신: 2026-08-25
+
+## 2026-08-25 catalog 전환
+
+- Flyway V21이 `agents.slug`를 `agents.code`로 rename한다. 공개 API, OpenAPI, quote snapshot, FE와 Go runtime은 모두
+  `agentCode`/`targetAgentCode`를 사용한다. 기존 snapshot의 `agentSlug`/`targetAgentSlug`는 `@JsonAlias`로 읽기만 지원한다.
+- Flyway V22는 저장된 legacy `*`/exact/`^`/`~` Version constraint를 동등한 Python식 비교 조건으로 변환한다. 새 입력은
+  `*`, `==1.0.0`, `>=1.0.0,<2.0.0`만 허용하며, 과거 Quote snapshot은 실행 계약으로 보존한다.
+- `demo-agent/internal/catalog`은 투자·쇼핑·여행 13개 Agent의 runtime prompt, Schema와 fixture 정의를 가진다. Spring의
+  `DemoCatalogInitializer`는 같은 catalog의 Marketplace 등록용 projection을 개발 DB에 생성한다. Root 3개는 user-facing
+  Markdown, 나머지는 internal-component JSON이다.
+- `dev` profile의 `DemoCatalogInitializer`가 `agents` count가 0일 때만 catalog를 직접 생성한다. 기존 registry는 변경하지 않는다.
+
+### AgentCode/catalog HIGH_RISK failure matrix
+
+| ID | 실패 경계·불변식 | 회귀 검증 |
+|---|---|---|
+| AC-BE-01 | V21은 기존 `agents.slug` 값·unique index를 `code`로 보존하며 적용된 migration을 바꾸지 않는다. | `PostgresSchemaIntegrationTest`의 V21 scratch-schema data/index 검증과 current Flyway schema 검증 |
+| AC-BE-02 | 과거 quote JSONB의 `agentSlug`/`targetAgentSlug`는 읽을 때 canonical `agentCode`/`targetAgentCode`가 되어 root 실행·callback path에서 빈 값이 되지 않는다. | `QuoteSnapshotCompatibilityTest`, `ExecutionCapabilitySchemaTest`, `PostgresSimulatedRuntimeE2eIntegrationTest` |
+| AC-BE-03 | runtime JSON 결과의 business `output` 필드는 보존하고, bundled demo-agent의 `agent`·`dependencyResults` transport envelope만 unwrap한다. | `RuntimeOutputEnvelopeTest`, `PostgresSimulatedRuntimeE2eIntegrationTest` |
+| AC-BE-04 | dev initializer는 registry가 비었을 때만 고정 demo catalog를 생성하고, 기존 Agent가 있으면 변경하지 않는다. | `DemoCatalogInitializerTest` |
+| AC-BE-05 | catalog 생성은 기존 Agent/Version/Dependency service 경계를 통해 하나의 transaction으로 처리되고, empty registry에서만 시작된다. | `DemoCatalogInitializerTest` |
+| AC-BE-06 | public API/OpenAPI는 `{code}` 계약과 `CommonResponse`만 노출하며 demo catalog용 HTTP endpoint는 없다. | Spring `/openapi.json` 재생성 뒤 `openapi/openapi.json` parity 검사와 FE `npm run api:generate` |
+| AC-BE-07 | Dependency·Quote·외부 invocation은 같은 Python식 comparator parser를 사용하고, V22는 legacy 범위를 의미 보존 변환한다. | `DependencyResolverVersionConstraintTest`, `PostgresSchemaIntegrationTest` V22 scratch-schema 검증 |
 
 ## 저장소와 역할
 

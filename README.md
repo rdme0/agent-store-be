@@ -62,11 +62,11 @@ Spring API는 `8080`, 선택적인 Go demo-agent는 `8090`입니다. 운영 결�
 
 ### Agent와 Version
 
-- `Agent`는 이름, 설명, URL용 `slug`, 소유 개발자를 가집니다.
+- `Agent`는 이름, 설명, URL용 `code`, 소유 개발자를 가집니다.
 - 실제 endpoint, 가격, 결제 계약은 `AgentVersion`에 있습니다.
 - Version 상태는 `DRAFT → ACTIVE → DISABLED`입니다.
 - Marketplace와 Quote resolver는 `ACTIVE` Version만 사용합니다.
-- `slug`는 소문자 영숫자와 하이픈 조합이며 최대 80자입니다.
+- `code`는 소문자 영숫자와 하이픈 조합이며 최대 80자입니다.
 - `priceAtomic`은 숫자로만 된 문자열입니다. 부동소수점 반올림을 피하려고 JSON number를 쓰지 않습니다.
 - `responseFormat`은 Version이 반환할 결과 표현을 선언합니다. `TEXT`, `MARKDOWN`, `STRUCTURED`, `JSON` 중 하나이며, 생략된
   기존 Version은 `JSON`으로 취급합니다.
@@ -86,10 +86,13 @@ stateDiagram-v2
 | 필드                  | 의미                              |
 |---------------------|---------------------------------|
 | `targetAgentId`     | 호출할 대상 Agent                    |
-| `versionConstraint` | exact, `^`, `~`, `*` Version 범위 |
+| `versionConstraint` | Python식 비교 조건으로 지정하는 Version 범위 |
 | `required`          | 해석 실패 시 Quote 전체를 실패시킬지 여부      |
 | `maxPriceAtomic`    | 선택할 dependency 가격 상한            |
 | `maxCalls`          | 이 edge의 최대 호출 수, 1~5            |
+
+Version constraint는 `*`, 정확 버전의 `==1.0.0`, 또는 쉼표로 연결한 비교식
+`>=1.0.0,<2.0.0`을 사용합니다. 비교식의 모든 조건을 만족해야 하며 `^`, `~`, 연산자 없는 Version은 허용하지 않습니다.
 
 필수 dependency의 Version을 찾지 못하면 Quote가 실패합니다. 선택 dependency의 Version을 찾지 못한 경우에만 warning
 `OPTIONAL_DEPENDENCY_NOT_RESOLVED`를 남깁니다. Version은 찾았지만 `maxPriceAtomic`을 넘으면 required 여부와 관계없이
@@ -103,7 +106,7 @@ Version이 publish되어도 이미 발급된 Quote의 의미는 바뀌지 않습
 
 ```mermaid
 flowchart TD
-    Start["slug와 Version constraint"] --> Root["가장 높은 ACTIVE root Version"]
+    Start["code와 Version constraint"] --> Root["가장 높은 ACTIVE root Version"]
     Root --> Resolve["dependency별 가장 높은 ACTIVE Version 탐색"]
     Resolve --> Found{"Version을 찾았나?"}
     Found -->|아니오, required| Reject["Quote 거부"]
@@ -241,14 +244,14 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 |----------------|--------------------------------------------------------|--------------------|
 | GET            | `/health`                                              | 상태 확인              |
 | GET / POST     | `/api/agents`                                          | 목록 / 등록            |
-| GET            | `/api/agents/{slug}`                                   | 상세                 |
+| GET            | `/api/agents/{code}`                                   | 상세                 |
 | PATCH / DELETE | `/api/agents/{id}`                                     | 수정 / 삭제            |
 | POST           | `/api/agents/{id}/versions`                            | Version 생성         |
 | POST           | `/api/agent-versions/{id}/publish`                     | 활성화                |
 | POST           | `/api/agent-versions/{id}/disable`                     | 비활성화               |
 | GET / POST     | `/api/agent-versions/{id}/dependencies`                | dependency 조회 / 추가 |
 | PATCH / DELETE | `/api/agent-versions/{id}/dependencies/{dependencyId}` | 수정 / 삭제            |
-| POST           | `/api/agents/{slug}/quotes`                            | Quote 발급           |
+| POST           | `/api/agents/{code}/quotes`                            | Quote 발급           |
 | POST / GET     | `/api/executions`, `/api/executions/{id}`              | 시작 / snapshot      |
 | GET            | `/api/executions/{id}/events`                          | SSE                |
 | GET            | `/api/developers/{id}/revenue`                         | 수익                 |
@@ -278,12 +281,12 @@ AgentStore가 받는 EVM 지갑입니다.
 | `agent-store.external-api.rate-limit-per-minute` | source IP 기준 intent 생성 한도 |
 
 `POST /v1/invocation-intents`에는 길이 16~128의 `Idempotency-Key`를 보냅니다. 같은 key와 같은 본문은 같은 intent를
-반환하고, 본문이 다르면 `409`입니다. `agentSlug` + `versionConstraint`로 특정 Agent를 고르거나, `functionCode` +
+반환하고, 본문이 다르면 `409`입니다. `agentCode` + `versionConstraint`로 특정 Agent를 고르거나, `functionCode` +
 `contractVersion` + `selectionStrategy`로 Function Contract 공급자를 고릅니다. 둘을 함께 보낼 수 없습니다.
 
 ```json
 {
-  "agentSlug": "weather-summary",
+  "agentCode": "weather-summary",
   "versionConstraint": "*",
   "maxTotalAtomic": "1250000",
   "question": "서울 내일 날씨를 알려줘",
@@ -321,7 +324,7 @@ Invoke-RestMethod `
   -Method Post `
   -Uri 'https://api.example.com/v1/invocation-intents' `
   -Headers $headers `
-  -Body '{"agentSlug":"weather-summary","versionConstraint":"*","maxTotalAtomic":"1250000","input":{"city":"Seoul"}}'
+  -Body '{"agentCode":"weather-summary","versionConstraint":"*","maxTotalAtomic":"1250000","input":{"city":"Seoul"}}'
 ```
 
 상태는 `GET /v1/invocation-intents/{intentId}`, 실시간 진행은 `GET /v1/invocation-intents/{intentId}/events`에서 같은
@@ -341,8 +344,7 @@ Copy-Item ../demo-agent/.env.example ../demo-agent/.env
 docker compose --env-file ../agent-store-be/.env up --build -d
 ```
 
-Compose는 `pgvector/pgvector:pg17` PostgreSQL을 시작하고, 최초 volume 생성 시 `agent_store`와
-`agent_store_integration` DB를 준비합니다. API는 Compose가 주입하는 표준 datasource 환경변수로 PostgreSQL에
+Compose는 `pgvector/pgvector:pg17` PostgreSQL을 시작하고, 최초 volume 생성 시 `agent_store` DB를 준비합니다. API는 Compose가 주입하는 표준 datasource 환경변수로 PostgreSQL에
 연결하며, 개발 profile을 활성화해 기존 loopback demo Agent endpoint를 유지합니다. API는
 `http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`, demo-agent는
 `http://localhost:8090`에서 확인할 수 있습니다. Spring 시작 시 Flyway migration을 적용하고 Hibernate가 schema를
@@ -361,6 +363,8 @@ credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니
 Demo Agent는 독립 Go 서비스이지만 개발 Compose에서는 API 컨테이너의 네트워크 네임스페이스를 공유합니다. 따라서
 `127.0.0.1:8090` endpoint와 `127.0.0.1:8080` runtime callback은 컨테이너 안에서도 그대로 동작합니다. demo-agent의
 설정 예시와 검증 명령은 해당 프로젝트 README가 소유하며, Spring의 `X402_PRIVATE_KEY`는 demo-agent에 복사하지 않습니다.
+`dev` profile Spring은 `agents`가 0개일 때만 demo catalog를 직접 생성합니다. 기존 Agent가 하나라도 있으면 아무것도 바꾸지 않으며,
+신규 volume에서는 user, developer, Function Contract, Agent Version, dependency가 함께 생성됩니다.
 
 `agent-store.payment-mode=x402`에서 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet
@@ -387,19 +391,8 @@ docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle
 git diff --check
 ```
 
-PostgreSQL integration test는 일반 개발 DB와 분리된 `agent_store_integration` DB를 사용합니다. 새 compose volume은 이
-DB를 자동 생성합니다. 기존 volume에 DB가 없다면 PostgreSQL 관리자 계정으로 한 번 생성합니다. 테스트 실행 전
-`.env`에 `INTEGRATION_DATASOURCE_PASSWORD`를 명시해야 합니다.
-
-```powershell
-Set-Location ../agent-store-infra
-docker compose --env-file ../agent-store-be/.env exec postgres createdb -U postgres agent_store_integration
-```
-
-그 뒤 `RUN_POSTGRES_INTEGRATION_TESTS=true`와 `SPRING_EXCLUSIVE_MAINTENANCE=true`를 모두 명시해야 실제
-integration test가 실행됩니다. 일반 server boot용 안전장치가 아니라 파괴적 fixture 정리를 허용하는 test opt-in이며, 테스트 지원 코드도
-`agent_store`에 연결되면 실패합니다. 독립 Go demo-agent는 해당 프로젝트에서 `go test ./...`, `go vet ./...`,
-`go build ./...`로 확인합니다.
+기본 Compose tools 검증은 unit test만 실행합니다. PostgreSQL을 직접 변경하는 opt-in integration suite는 기본 개발 환경에서
+제공하지 않습니다. 독립 Go demo-agent는 해당 프로젝트에서 `go test ./...`, `go vet ./...`, `go build ./...`로 확인합니다.
 
 ## Function Contract Marketplace
 
@@ -414,22 +407,9 @@ integration test가 실행됩니다. 일반 server boot용 안전장치가 아�
 공급자 선택은 Quote 발급 중에만 일어납니다. 선택된 Agent, Version, endpoint, 가격, `payTo`, 계약 Schema와 후보 제외 사유는 snapshot에
 고정됩니다. 실행 중 호출 실패, 출력 계약 위반 또는 결제 불명 상태에서 다른 공급자로 자동 전환하거나 다시 결제하지 않습니다.
 
-독립 공급자 reference scenario는 `agent-store-infra` Compose의 demo-agent 서비스로 실행합니다. 같은 Go image가
-investment, financial, news-fast, news-deep, risk endpoint를 제공하며 x402 mode에서는 각 slug에 별도의 price와
-`payTo`를 사용합니다.
-
-Spring의 공급자 선택부터 developer별 정산까지는 전용 PostgreSQL opt-in E2E로 fresh DB에서 재현할 수 있습니다. fixture는 서로 다른
-developer·endpoint·`payTo`를 가진 investment, news-fast, news-deep, risk를 만들고 `lowest_price`로 news-fast를 선택합니다. Quote
-snapshot을 만든 뒤 더 저렴한 news-deep Version을 publish해도 기존 실행은 고정된 news-fast만 호출하며, root·선택된 뉴스·risk 개발자에게만
-각각 1000·900·1000 atomic 수익이 기록되는지 검증합니다. 생성한 행은 해당 테스트 ID만 추적해 종료 시 제거합니다.
-
-```powershell
-Set-Location ../agent-store-infra
-docker compose --profile tools --env-file ../agent-store-be/.env run --rm `
-  -e RUN_POSTGRES_INTEGRATION_TESTS=true `
-  -e SPRING_EXCLUSIVE_MAINTENANCE=true `
-  gradle test --tests "com.agentstore.execution.PostgresSimulatedRuntimeE2eIntegrationTest.capability reference selects one provider and settles distinct developer revenues"
-```
+독립 공급자 reference scenario는 `agent-store-infra` Compose의 단일 demo-agent 서비스로 실행합니다. 같은 Go image가 투자,
+쇼핑, 여행의 13개 code endpoint를 제공하며 x402 mode에서는 각 Agent가 고유 price와 `payTo`를 사용합니다. `dev` profile은 빈 DB에
+Root 세 개와 전문 Agent catalog를 직접 등록합니다.
 
 화면을 이용한 수동 시연에서는 Go Compose를 먼저 띄우고 개발자 모드의 `기능 계약`, Agent Version, Dependency 화면에서 같은 계약과
 endpoint를 등록합니다. 시연용 실제 x402 지갑을 사용할 때는 Go 프로젝트 `.env`의 공급자별 `payTo`와 Spring에 등록한 Version의
