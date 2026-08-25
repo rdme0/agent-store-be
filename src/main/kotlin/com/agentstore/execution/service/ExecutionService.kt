@@ -76,8 +76,9 @@ class ExecutionService(
         if (start.maxBudgetAtomic != quote.maxCostAtomic) {
             throw DomainClientException(ErrorCode.BUDGET_MISMATCH)
         }
+        val snapshot = quoteService.snapshot(quote)
         validateRootInput(
-            snapshot = quote.snapshot,
+            snapshot = snapshot,
             input = invocationInput(input = start.input, question = start.question),
         )
         val execution =
@@ -89,9 +90,9 @@ class ExecutionService(
                     start.question,
                     start.input,
                 )
-            )
+        )
         val rootVersionId =
-            quote.snapshot.path("version").path("id").asText().takeIf { it.isNotBlank() }
+            snapshot.path("version").path("id").asText().takeIf { it.isNotBlank() }
                 ?.let(UUID::fromString)
                 ?: quote.rootVersionId
         val rootStep = executionStepRepository.save(
@@ -102,7 +103,7 @@ class ExecutionService(
                 rootVersionId,
                 objectMapper.valueToTree(
                     listOf(
-                        quote.snapshot.path("version").path("agentSlug").asText()
+                        snapshot.path("version").path("agentCode").asText()
                     )
                 )
             )
@@ -187,7 +188,7 @@ class ExecutionService(
                     payments = paymentService.findAllByStepId(step.id),
                     output = jsonValue(value = step.output),
                     responseFormat = stepPresentation[step.agentVersionId]?.responseFormat ?: AgentResponseFormat.JSON,
-                    agentSlug = stepPresentation[step.agentVersionId]?.agentSlug,
+                    agentCode = stepPresentation[step.agentVersionId]?.agentCode,
                     agentName = stepPresentation[step.agentVersionId]?.agentName,
                 )
             },
@@ -208,7 +209,7 @@ class ExecutionService(
                     responseFormat = runCatching {
                         AgentResponseFormat.valueOf(version.path("responseFormat").asText())
                     }.getOrDefault(AgentResponseFormat.JSON),
-                    agentSlug = version.path("agentSlug").asText().takeIf { value -> value.isNotBlank() },
+                    agentCode = version.path("agentCode").asText().takeIf { value -> value.isNotBlank() },
                     agentName = version.path("agentName").asText().takeIf { value -> value.isNotBlank() },
                 )
             }
@@ -243,7 +244,7 @@ class ExecutionService(
 
     private data class StepPresentation(
         val responseFormat: AgentResponseFormat,
-        val agentSlug: String?,
+        val agentCode: String?,
         val agentName: String?,
     )
 }

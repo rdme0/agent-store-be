@@ -4,6 +4,7 @@ import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.dependency.model.vo.ProviderScope
 import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
 import com.agentstore.payment.dto.internal.KrwEstimateDto
+import com.fasterxml.jackson.annotation.JsonAlias
 import com.fasterxml.jackson.databind.JsonNode
 import io.swagger.v3.oas.annotations.media.Schema
 import java.util.UUID
@@ -11,7 +12,7 @@ import java.util.UUID
 data class ResolvedVersionSnapshotDto(
     val id: UUID,
     val agentId: UUID,
-    val agentSlug: String,
+    @field:JsonAlias("agentSlug") val agentCode: String,
     @field:Schema(nullable = true) val agentName: String? = null,
     @field:Schema(nullable = true) val agentDescription: String? = null,
     val semver: String,
@@ -35,7 +36,7 @@ data class FunctionContractSnapshotDto(
 
 data class ProviderCandidateSnapshotDto(
     val agentId: UUID,
-    val agentSlug: String,
+    @field:JsonAlias("agentSlug") val agentCode: String,
     val versionId: UUID,
     val semver: String,
     @field:Schema(pattern = "^[0-9]+$") val priceAtomic: String,
@@ -62,7 +63,9 @@ data class ProviderSelectionSnapshotDto(
 data class DependencySnapshotDto(
     val dependencyId: UUID,
     @field:Schema(nullable = true) val targetAgentId: UUID? = null,
-    @field:Schema(nullable = true) val targetAgentSlug: String? = null,
+    @field:Schema(nullable = true)
+    @field:JsonAlias("targetAgentSlug")
+    val targetAgentCode: String? = null,
     @field:Schema(nullable = true) val selection: ProviderSelectionSnapshotDto? = null,
     val versionConstraint: String,
     val required: Boolean,

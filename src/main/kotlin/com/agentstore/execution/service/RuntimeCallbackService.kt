@@ -15,6 +15,7 @@ import com.agentstore.execution.model.vo.ExecutionStatus
 import com.agentstore.execution.model.vo.ExecutionStepStatus
 import com.agentstore.execution.model.vo.AgentInvocationOutcome
 import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
+import com.agentstore.execution.codec.RuntimeOutputEnvelope
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.token.InvocationTokenService
@@ -107,7 +108,7 @@ class RuntimeCallbackService(
         )
             ?: throw DomainClientException(ErrorCode.UNDECLARED_DEPENDENCY)
         val target = dependency.path("resolved").path("version")
-        val expectedPath = parent.callPath.map { it.asText() } + target.path("agentSlug").asText()
+        val expectedPath = parent.callPath.map { it.asText() } + target.path("agentCode").asText()
         if (requestedPath != expectedPath || requestedPath.size > 5) {
             throw DomainClientException(ErrorCode.INVALID_CALL_PATH)
         }
@@ -152,10 +153,7 @@ class RuntimeCallbackService(
                 maxPriceAtomic = maxPrice,
             ).output
             val format = responseFormat(version = target)
-            val output = outputForFormat(
-                rawOutput = rawOutput,
-                format = format,
-            )
+            val output = RuntimeOutputEnvelope.extract(rawOutput)
             AgentOutputFormatValidator.validate(
                 format = format,
                 output = output,
@@ -234,13 +232,6 @@ class RuntimeCallbackService(
             .getOrDefault(AgentResponseFormat.JSON)
     }
 
-    private fun outputForFormat(rawOutput: JsonNode, format: AgentResponseFormat): JsonNode {
-        if (format == AgentResponseFormat.JSON) {
-            return rawOutput
-        }
-        return rawOutput.get("output") ?: rawOutput
-    }
-
     private fun validateInputSchema(version: JsonNode, input: Any?) {
         val schema = version.path("functionContract").path("inputSchema")
         if (!schema.isObject) {
@@ -291,14 +282,14 @@ class RuntimeCallbackService(
                 } else {
                     visit(
                         node = resolved,
-                        path = path + resolved.path("version").path("agentSlug").asText(),
+                        path = path + resolved.path("version").path("agentCode").asText(),
                     )
                 }
             }
         }
         return visit(
             node = root,
-            path = listOf(root.path("version").path("agentSlug").asText()),
+            path = listOf(root.path("version").path("agentCode").asText()),
         )
     }
 }

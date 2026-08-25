@@ -55,9 +55,9 @@ class ExecutionCapabilitySchemaTest {
             }
             """.trimIndent(),
         )
-        `when`(quoteService.requireQuote(quoteId)).thenReturn(
-            ExecutionQuote(quoteId, UUID.randomUUID(), Instant.now().plusSeconds(60), BigInteger.ONE, snapshot),
-        )
+        val quote = ExecutionQuote(quoteId, UUID.randomUUID(), Instant.now().plusSeconds(60), BigInteger.ONE, snapshot)
+        `when`(quoteService.requireQuote(quoteId)).thenReturn(quote)
+        `when`(quoteService.snapshot(quote)).thenReturn(snapshot)
         val service = ExecutionService(
             executionRepository,
             mock(ExecutionStepRepository::class.java),
@@ -103,7 +103,7 @@ class ExecutionCapabilitySchemaTest {
               "version": {
                 "id": "${UUID.randomUUID()}",
                 "agentId": "${UUID.randomUUID()}",
-                "agentSlug": "root",
+                "agentCode": "root",
                 "semver": "1.0.0",
                 "endpoint": "https://root.example.com/invoke",
                 "priceAtomic": "1",

@@ -7,6 +7,7 @@ import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
+import com.agentstore.execution.codec.RuntimeOutputEnvelope
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.service.ExecutionLifecycleService
@@ -63,7 +64,7 @@ class ExecutionRunner(
             )
             return
         }
-        val snapshot = quote.snapshot
+        val snapshot = quoteService.snapshot(quote)
         val version = snapshot.path("version")
         val endpoint = version.path("endpoint").asText()
         val cost = version.path("priceAtomic").asText("0").toBigIntegerOrNull() ?: BigInteger.ZERO
@@ -81,7 +82,7 @@ class ExecutionRunner(
                         mapOf(
                             "agentVersionId" to resolved.path("version").path("id").asText(),
                             "callPath" to (step.callPath.map { it.asText() } + resolved.path("version")
-                                .path("agentSlug")
+                                .path("agentCode")
                                 .asText()),
                             "input" to agentInput,
                         )
@@ -110,10 +111,7 @@ class ExecutionRunner(
                 maxPriceAtomic = cost,
             ).output
             val format = responseFormat(version = version)
-            val output = outputForFormat(
-                rawOutput = rawOutput,
-                format = format,
-            )
+            val output = RuntimeOutputEnvelope.extract(rawOutput)
             AgentOutputFormatValidator.validate(
                 format = format,
                 output = output,
@@ -172,14 +170,6 @@ class ExecutionRunner(
     private fun responseFormat(version: JsonNode): AgentResponseFormat {
         return runCatching { AgentResponseFormat.valueOf(version.path("responseFormat").asText()) }
             .getOrDefault(AgentResponseFormat.JSON)
-    }
-
-    private fun outputForFormat(rawOutput: JsonNode, format: AgentResponseFormat): JsonNode {
-        if (format == AgentResponseFormat.JSON) {
-            return rawOutput
-        }
-
-        return rawOutput.get("output") ?: rawOutput
     }
 
     private fun validateOutputSchema(version: JsonNode, output: JsonNode) {

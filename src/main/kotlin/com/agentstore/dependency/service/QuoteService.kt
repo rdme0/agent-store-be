@@ -17,6 +17,7 @@ import com.agentstore.payment.dto.response.KrwEstimateResponse
 import com.agentstore.payment.service.KrwEstimateService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ObjectNode
 import jakarta.transaction.Transactional
 import java.math.BigInteger
 import java.time.Instant
@@ -45,14 +46,20 @@ class QuoteService(
     }
 
     fun snapshot(id: UUID): JsonNode {
-        return requireQuote(id).snapshot
+        return snapshot(requireQuote(id))
+    }
+
+    fun snapshot(quote: ExecutionQuote): JsonNode {
+        val normalized = quote.snapshot.deepCopy<JsonNode>()
+        normalizeSnapshotNode(normalized)
+        return normalized
     }
 
     @Transactional
-    fun create(slug: String, request: QuoteRequest): QuoteResponse {
+    fun create(code: String, request: QuoteRequest): QuoteResponse {
         val constraint = request.versionConstraint ?: "*"
         resolver.validateConstraint(constraint)
-        val agent = agentService.findBySlug(slug) ?: throw AgentNotFoundException()
+        val agent = agentService.findByCode(code) ?: throw AgentNotFoundException()
         val candidates = agentService.activeVersions(agent.id)
         if (candidates.isEmpty()) {
             throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
@@ -141,5 +148,42 @@ class QuoteService(
     private fun validateEndpoints(node: ResolvedNode) {
         endpointPolicy.validate(node.version.endpoint)
         node.dependencies.mapNotNull { it.resolved }.forEach(::validateEndpoints)
+    }
+
+    private fun normalizeSnapshotNode(node: JsonNode) {
+        renameLegacyField(
+            node = node.path("version") as? ObjectNode,
+            legacyField = "agentSlug",
+            canonicalField = "agentCode",
+        )
+        node.path("dependencies").forEach { dependency ->
+            val dependencyObject = dependency as? ObjectNode
+            renameLegacyField(
+                node = dependencyObject,
+                legacyField = "targetAgentSlug",
+                canonicalField = "targetAgentCode",
+            )
+            dependency.path("selection").path("candidates").forEach { candidate ->
+                renameLegacyField(
+                    node = candidate as? ObjectNode,
+                    legacyField = "agentSlug",
+                    canonicalField = "agentCode",
+                )
+            }
+            val resolved = dependency.path("resolved")
+            if (resolved.isObject) {
+                normalizeSnapshotNode(resolved)
+            }
+        }
+    }
+
+    private fun renameLegacyField(node: ObjectNode?, legacyField: String, canonicalField: String) {
+        if (node == null || !node.has(legacyField)) {
+            return
+        }
+        if (!node.hasNonNull(canonicalField)) {
+            node.set<JsonNode>(canonicalField, node.path(legacyField))
+        }
+        node.remove(legacyField)
     }
 }

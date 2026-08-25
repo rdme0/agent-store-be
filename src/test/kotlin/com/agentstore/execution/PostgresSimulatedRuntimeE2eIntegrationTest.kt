@@ -148,14 +148,14 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
 
         val root = runtimeFixture.createExecutionFromSnapshot(
             rootVersionId = registry.rootVersionId,
-            rootSlug = registry.rootSlug,
+            rootCode = registry.rootCode,
             maxBudget = cost.maxCostAtomic,
             snapshot = frozenSnapshot,
         )
         val scenario = DependencyRuntimeFixture(
             root = root,
-            rootSlug = registry.rootSlug,
-            childSlug = capabilityEdge.resolved?.version?.agentSlug ?: error("Selected provider slug is missing"),
+            rootCode = registry.rootCode,
+            childCode = capabilityEdge.resolved?.version?.agentCode ?: error("Selected provider code is missing"),
             childVersionId = registry.selectedProviderVersionId,
         )
         paymentClient.arm(fixture = scenario)
@@ -525,15 +525,30 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
         }
 
         fun returnRootMarkdown(markdown: String) {
-            rootOutput = objectMapper.createObjectNode().put("output", markdown)
+            rootOutput = demoAgentEnvelope(
+                agentCode = "root",
+                output = objectMapper.nodeFactory.textNode(markdown),
+            )
         }
 
         fun returnChildText(text: String) {
-            childOutput = objectMapper.createObjectNode().put("output", text)
+            childOutput = demoAgentEnvelope(
+                agentCode = "child",
+                output = objectMapper.nodeFactory.textNode(text),
+            )
         }
 
         fun callbackInputs(): List<JsonNode> {
             return callbackInputs.toList()
+        }
+
+        private fun demoAgentEnvelope(agentCode: String, output: JsonNode): JsonNode {
+            val envelope = objectMapper.createObjectNode()
+            envelope.put("transport", "agentstore-demo/v1")
+            envelope.put("agent", agentCode)
+            envelope.set<JsonNode>("output", output)
+            envelope.set<JsonNode>("dependencyResults", objectMapper.createObjectNode())
+            return envelope
         }
 
         override fun invoke(request: PaymentInvocationRequestDto): PaymentInvocationResultDto {
