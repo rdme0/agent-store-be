@@ -3,7 +3,7 @@ package com.agentstore.agent.service
 import com.agentstore.agent.dto.request.CreateAgentRequest
 import com.agentstore.agent.dto.request.CreateFunctionContractRequest
 import com.agentstore.agent.dto.request.DemoCatalogAgentRequest
-import com.agentstore.agent.dto.request.DemoCatalogBootstrapRequest
+import com.agentstore.agent.dto.request.DemoCatalogDefinition
 import com.agentstore.agent.dto.request.DemoCatalogDependencyRequest
 import com.agentstore.agent.dto.request.DemoFunctionContractRequest
 import com.agentstore.agent.model.entity.AgentCapability
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
-class DemoCatalogBootstrapService(
+class DemoCatalogRegistrationService(
     private val objectMapper: ObjectMapper,
     private val userRepository: UserRepository,
     private val developerRepository: DeveloperRepository,
@@ -45,7 +45,7 @@ class DemoCatalogBootstrapService(
     )
 
     @Transactional
-    fun register(request: DemoCatalogBootstrapRequest) {
+    fun register(request: DemoCatalogDefinition) {
         requireCatalogShape(request)
 
         val developer = ensureDeveloper()
@@ -68,7 +68,7 @@ class DemoCatalogBootstrapService(
         }
     }
 
-    private fun requireCatalogShape(request: DemoCatalogBootstrapRequest) {
+    private fun requireCatalogShape(request: DemoCatalogDefinition) {
         if (request.agents.isEmpty() || request.agents.map { it.code }.toSet().size != request.agents.size) {
             conflict()
         }

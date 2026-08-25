@@ -1,8 +1,8 @@
 package com.agentstore.agent.config
 
-import com.agentstore.agent.dto.request.DemoCatalogBootstrapRequest
+import com.agentstore.agent.dto.request.DemoCatalogDefinition
 import com.agentstore.agent.repository.AgentRepository
-import com.agentstore.agent.service.DemoCatalogBootstrapService
+import com.agentstore.agent.service.DemoCatalogRegistrationService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
@@ -15,11 +15,11 @@ class DemoCatalogInitializerTest {
     @Test
     fun `dev initializer registers the complete catalog only for an empty registry`() {
         val repository = mock(AgentRepository::class.java)
-        val registeredCatalogs = mutableListOf<DemoCatalogBootstrapRequest>()
+        val registeredCatalogs = mutableListOf<DemoCatalogDefinition>()
         val service = mock(
-            DemoCatalogBootstrapService::class.java,
+            DemoCatalogRegistrationService::class.java,
             Answer { invocation ->
-                registeredCatalogs += invocation.getArgument<DemoCatalogBootstrapRequest>(0)
+                registeredCatalogs += invocation.getArgument<DemoCatalogDefinition>(0)
                 null
             },
         )
@@ -44,7 +44,7 @@ class DemoCatalogInitializerTest {
     @Test
     fun `dev initializer leaves a nonempty registry unchanged`() {
         val repository = mock(AgentRepository::class.java)
-        val service = mock(DemoCatalogBootstrapService::class.java)
+        val service = mock(DemoCatalogRegistrationService::class.java)
         `when`(repository.count()).thenReturn(1L)
 
         DemoCatalogInitializer(repository, service).run(DefaultApplicationArguments())

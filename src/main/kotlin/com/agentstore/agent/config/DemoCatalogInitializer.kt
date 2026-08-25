@@ -1,13 +1,13 @@
 package com.agentstore.agent.config
 
 import com.agentstore.agent.dto.request.DemoCatalogAgentRequest
-import com.agentstore.agent.dto.request.DemoCatalogBootstrapRequest
+import com.agentstore.agent.dto.request.DemoCatalogDefinition
 import com.agentstore.agent.dto.request.DemoCatalogDependencyRequest
 import com.agentstore.agent.dto.request.DemoFunctionContractRequest
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
 import com.agentstore.agent.repository.AgentRepository
-import com.agentstore.agent.service.DemoCatalogBootstrapService
+import com.agentstore.agent.service.DemoCatalogRegistrationService
 import java.util.UUID
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
@@ -18,11 +18,11 @@ import org.springframework.stereotype.Component
 @Profile("dev")
 class DemoCatalogInitializer(
     private val agentRepository: AgentRepository,
-    private val bootstrapService: DemoCatalogBootstrapService,
+    private val registrationService: DemoCatalogRegistrationService,
 ) : ApplicationRunner {
     override fun run(args: ApplicationArguments) {
         if (agentRepository.count() == 0L) {
-            bootstrapService.register(request = DemoCatalogSeed.request())
+            registrationService.register(request = DemoCatalogSeed.request())
         }
     }
 }
@@ -35,8 +35,8 @@ private object DemoCatalogSeed {
     private const val VERSION_CONSTRAINT = ">=1.0.0,<2.0.0"
     private val developerId = UUID.fromString("00000000-0000-0000-0000-00000000d001")
 
-    fun request(): DemoCatalogBootstrapRequest {
-        return DemoCatalogBootstrapRequest(
+    fun request(): DemoCatalogDefinition {
+        return DemoCatalogDefinition(
             agents = listOf(
                 root(
                     code = "investment-analysis",

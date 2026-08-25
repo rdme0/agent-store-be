@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.util.UUID
 
-data class DemoCatalogBootstrapRequest(
+data class DemoCatalogDefinition(
     @field:Valid val agents: List<DemoCatalogAgentRequest>,
 )
 
