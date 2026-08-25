@@ -1,1 +1,0 @@
-CREATE DATABASE agent_store_integration;
