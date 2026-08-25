@@ -10,7 +10,7 @@ import org.springframework.test.context.ActiveProfiles
 
 @SpringBootTest(
     properties = [
-        "spring.datasource.url=jdbc:postgresql://localhost:5432/agent_store_integration?currentSchema=public",
+        "spring.datasource.url=\${INTEGRATION_DATASOURCE_URL}",
         "spring.datasource.username=postgres",
         "spring.datasource.password=\${INTEGRATION_DATASOURCE_PASSWORD}",
         "agent-store.service-name=agent-store-api",
