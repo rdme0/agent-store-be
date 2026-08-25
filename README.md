@@ -330,38 +330,37 @@ receipt header로 조회합니다. SSE는 기존 `Last-Event-ID` replay 규칙�
 
 ## 8. 로컬 실행
 
-Spring 운영 준비물은 Java 25와 PostgreSQL입니다. 선택적인 demo-agent는 별도 Go 1.26 프로젝트로 실행합니다.
+개발 환경의 PostgreSQL, Spring API와 선택적인 Go demo-agent는 상위 폴더의
+[`agent-store-infra`](../agent-store-infra)에서 함께 실행합니다. 프론트엔드는
+`agent-store-fe`에서 로컬 Vite 서버로 실행합니다.
 
 ```powershell
-Copy-Item .env.example .env
-docker compose up -d postgres
-.\gradlew.bat classes
-.\gradlew.bat test
-.\gradlew.bat bootRun
+Set-Location ../agent-store-infra
+Copy-Item ../agent-store-be/.env.example ../agent-store-be/.env
+Copy-Item ../demo-agent/.env.example ../demo-agent/.env
+docker compose --env-file ../agent-store-be/.env up --build -d
 ```
 
-루트 `docker-compose.yml`은 Docker Compose의 기본 `.env` interpolation으로 `POSTGRES_*` 값만 읽어
-`pgvector/pgvector:pg17` PostgreSQL을 시작합니다. Spring은 `.env`에서 password·token·private key만 읽고,
-포트·endpoint·결제 정책 같은 공개 설정은 `application.yaml`이 소유합니다. 최초 volume 생성 시 `agent_store`와
-`agent_store_integration` DB를 준비합니다. API는 `http://localhost:8080`, OpenAPI는
-`http://localhost:8080/openapi.json`입니다. 예시 DB는 `localhost:5432/agent_store`입니다. `POSTGRES_PORT`를
-바꾸면 `application.yaml`의 datasource port도 함께 바꾸십시오. Spring 시작 시 Flyway migration을 적용하고 Hibernate가
-schema를 validate합니다. 이미 적용한 migration을 수정하지 말고 새 migration을 추가합니다.
+Compose는 `pgvector/pgvector:pg17` PostgreSQL을 시작하고, 최초 volume 생성 시 `agent_store`와
+`agent_store_integration` DB를 준비합니다. API는 Docker 전용 `docker` profile에서 Compose의 PostgreSQL에 연결하며,
+개발 profile을 함께 활성화해 기존 loopback demo Agent endpoint를 유지합니다. API는
+`http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`, demo-agent는
+`http://localhost:8090`에서 확인할 수 있습니다. Spring 시작 시 Flyway migration을 적용하고 Hibernate가 schema를
+validate합니다. 이미 적용한 migration을 수정하지 말고 새 migration을 추가합니다.
 
 | `.env` 값 | 용도 |
 |---|---|
-| `SPRING_DATASOURCE_PASSWORD` | Spring PostgreSQL 비밀번호 |
+| `POSTGRES_PASSWORD` | Docker Compose PostgreSQL과 API의 개발용 PostgreSQL 비밀번호 |
 | `RUNTIME_TOKEN_SECRET` | callback token과 cursor 서명 secret |
 | `X402_PRIVATE_KEY` | x402 mode 전용 저잔액 payer key, `0x` + 64자리 hex |
-| `INTEGRATION_DATASOURCE_PASSWORD` | PostgreSQL integration test 전용 DB 비밀번호 |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Docker Compose가 직접 읽는 PostgreSQL 설정 |
+| `POSTGRES_PORT` | `agent-store-infra` Docker Compose가 직접 읽는 PostgreSQL host port |
 
 credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
 운영에서는 `application.yaml` 또는 운영용 YAML의 `agent-store.cors-origins`를 정확한 HTTPS origin으로 제한합니다.
 
-Demo Agent는 `C:\Users\we661\GolandProjects\demo-agent`의 독립 Go 서비스입니다. 설정 예시, x402 facilitator 값,
-실행과 검증 명령은 해당 프로젝트의 README와 `.env.example`이 소유합니다. Spring의 `X402_PRIVATE_KEY`는 demo-agent에
-복사하지 않습니다.
+Demo Agent는 독립 Go 서비스이지만 개발 Compose에서는 API 컨테이너의 네트워크 네임스페이스를 공유합니다. 따라서
+`127.0.0.1:8090` endpoint와 `127.0.0.1:8080` runtime callback은 컨테이너 안에서도 그대로 동작합니다. demo-agent의
+설정 예시와 검증 명령은 해당 프로젝트 README가 소유하며, Spring의 `X402_PRIVATE_KEY`는 demo-agent에 복사하지 않습니다.
 
 `agent-store.payment-mode=x402`에서 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet
@@ -392,7 +391,8 @@ DB를 자동 생성합니다. 기존 volume에 DB가 없다면 PostgreSQL 관리
 `.env`에 `INTEGRATION_DATASOURCE_PASSWORD`를 명시해야 합니다.
 
 ```powershell
-docker compose exec postgres createdb -U postgres agent_store_integration
+Set-Location ../agent-store-infra
+docker compose --env-file ../agent-store-be/.env exec postgres createdb -U postgres agent_store_integration
 ```
 
 그 뒤 `RUN_POSTGRES_INTEGRATION_TESTS=true`와 `SPRING_EXCLUSIVE_MAINTENANCE=true`를 모두 명시해야 실제
@@ -413,9 +413,9 @@ integration test가 실행됩니다. 일반 server boot용 안전장치가 아�
 공급자 선택은 Quote 발급 중에만 일어납니다. 선택된 Agent, Version, endpoint, 가격, `payTo`, 계약 Schema와 후보 제외 사유는 snapshot에
 고정됩니다. 실행 중 호출 실패, 출력 계약 위반 또는 결제 불명 상태에서 다른 공급자로 자동 전환하거나 다시 결제하지 않습니다.
 
-독립 공급자 reference scenario는 `C:\Users\we661\GolandProjects\demo-agent`의 `docker-compose.yml`로 실행합니다. 같은 Go image가
-investment, financial, news-fast, news-deep, risk를 별도 endpoint와 registration으로 제공하며 x402 mode에서는 각 slug에 별도의
-price와 `payTo`를 사용합니다.
+독립 공급자 reference scenario는 `agent-store-infra` Compose의 demo-agent 서비스로 실행합니다. 같은 Go image가
+investment, financial, news-fast, news-deep, risk endpoint를 제공하며 x402 mode에서는 각 slug에 별도의 price와
+`payTo`를 사용합니다.
 
 Spring의 공급자 선택부터 developer별 정산까지는 전용 PostgreSQL opt-in E2E로 fresh DB에서 재현할 수 있습니다. fixture는 서로 다른
 developer·endpoint·`payTo`를 가진 investment, news-fast, news-deep, risk를 만들고 `lowest_price`로 news-fast를 선택합니다. Quote
