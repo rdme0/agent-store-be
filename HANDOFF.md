@@ -1,6 +1,6 @@
 # AgentStore BE 인수인계서
 
-최종 갱신: 2026-08-25
+최종 갱신: 2026-08-27
 
 ## 2026-08-25 catalog 전환
 
@@ -49,12 +49,13 @@
 - Function Contract API와 manifest import/export가 추가됐다. 공개 API는 사람이 읽는 kebab-case function code와
   `inputSchema`/`outputSchema` 계약만 제공하며, 구형 capability endpoint·dependency field는 제거됐다.
 - DRAFT Version dependency는 `pinned`·`allowlist`·`marketplace` provider scope와
-  `lowest_price`·`latest_version`·`highest_reliability`·`fastest`·`balanced` strategy를 선언할 수 있다.
-  provider 선택은 Quote ID seed를 포함한 Quote-time resolver에서만 수행하며, selected provider·후보
-  metrics·선택 이유는 snapshot으로 고정된다. 실행 중 fallback은 없다.
+  `lowest_price`·`latest_version`·`highest_reliability`·`fastest` strategy를 선언할 수 있다.
+  provider 선택은 Quote-time resolver에서만 결정적으로 수행하며, selected provider·후보 metrics·선택 이유는
+  snapshot으로 고정된다. 실행 중 fallback, balanced 가중치, 임의 exploration은 없다.
 - 30일 execution-step observation으로 Wilson lower-bound 신뢰도, 성공 호출 p95 latency, output contract
-  compliance를 계산한다. 20건 미만 provider는 metric strategy에서 explicit exploration으로만 선택될 수
-  있고 payment/reconciliation/platform outcome은 공급자 reliability 분모에서 제외된다.
+  compliance를 계산한다. 20건 미만 provider는 metric strategy의 후보가 될 수 없고
+  `PROVIDER_METRICS_INSUFFICIENT`로 명시적으로 거절된다. payment/reconciliation/platform outcome은 공급자
+  reliability 분모에서 제외된다.
 - Flyway V16~V19는 manifest, function provider selection, observation schema를 추가하고 구형
   `target_capability_id`·`selection_policy` 열과 enum을 제거했다. V19의 DB constraint는 direct dependency 또는
   완전한 function provider declaration 중 하나만 저장하도록 강제한다.
@@ -62,13 +63,13 @@
 - Quote snapshot의 각 resolved Version에 Agent 공개 `agentDescription`을 nullable로 고정한다. 새 실행은 실행 당시 설명을 재현하고, 과거 snapshot은 필드 누락 상태로 계속 역직렬화된다.
 
 - immutable function contract의 Schema는 64 KiB·깊이 32 제한, 원격 `$ref` 금지와 Draft 2020-12 검증을 적용한다.
-- function dependency는 `lowest_price`·`latest_version`·`highest_reliability`·`fastest`·`balanced` 전략으로 Quote 때 공급자를 결정하며 후보 수, Version·가격·cycle·하위 graph 한도를 검사한다.
+- function dependency는 `lowest_price`·`latest_version`·`highest_reliability`·`fastest` 전략으로 Quote 때 공급자를 결정하며 후보 수, Version·가격·cycle·하위 graph 한도를 검사한다.
 - Quote snapshot은 계약 Schema, 후보별 제외 사유, 선택 Version과 이유를 보존한다. 실행 중 다른 공급자로 fallback하거나 재결제하지 않는다.
 - root/dependency input은 reservation·결제 전에, output은 결제 및 형식 검증 뒤 function contract Schema로 검사한다. 출력 위반은 결제 증거를 보존하고 `AGENT_OUTPUT_SCHEMA_INVALID`로 terminalize한다.
 - `ExecutionResponse.quoteSnapshot`으로 새로고침 뒤에도 선택과 거래 graph를 복원한다.
 - PostgreSQL opt-in reference E2E는 서로 다른 developer·endpoint·`payTo`의 root, function provider 둘, direct 공급자를 구성한다. `lowest_price` 선택 뒤 더 우선적인 Version이 publish돼도 기존 snapshot을 실행하고, 선택된 세 개발자에게만 1000·900·1000 atomic 수익이 귀속됨을 검증한다.
 
-- `/v1/invocation-intents` 외부 x402 호출은 AgentStore의 기본 공개 API다. 외부 개발자는 API key 없이 direct Agent 또는
+- `/v1/invocations` 외부 x402 호출은 AgentStore의 기본 공개 API다. 외부 개발자는 API key 없이 direct Agent 또는
   Function Contract를 선택하고, AgentStore가 고정한 Base Sepolia USDC EIP-3009 `exact` requirement에 결제한다. intent는
   Quote·입력·provider cost·platform fee·총액을 결제 전에 고정하며, idempotency key별 PostgreSQL transaction advisory lock으로
   중복 Quote를 막는다. receipt token은 header로 한 번만 반환하고 hash만 저장한다. incoming settlement이 영속된 뒤에만 내부

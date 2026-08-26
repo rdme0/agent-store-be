@@ -33,7 +33,7 @@ class ExternalX402PaymentService(
     private val headerCodec = X402HeaderCodec(objectMapper)
 
     fun paymentRequired(intent: ExternalInvocationIntent): ExternalPaymentRequirementDto {
-        val resourceUrl = properties.publicBaseUrl.trimEnd('/') + "/v1/invocation-intents/${intent.id}/execute"
+        val resourceUrl = properties.publicBaseUrl.trimEnd('/') + "/v1/invocations"
         val requirement = objectMapper.createObjectNode().apply {
             put("scheme", "exact")
             put("network", BASE_SEPOLIA)

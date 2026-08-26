@@ -13,6 +13,7 @@ import com.agentstore.external.config.ExternalApiProperties
 import com.agentstore.external.dto.request.CreateExternalInvocationIntentRequest
 import com.agentstore.external.dto.internal.ExternalInvocationExecuteResultDto
 import com.agentstore.external.dto.internal.ExternalInvocationIntentCreatedDto
+import com.agentstore.external.dto.internal.ExternalInvocationResultDto
 import com.agentstore.external.dto.internal.IncomingPaymentSettlementDto
 import com.agentstore.external.dto.response.ExternalInvocationExecutionResponse
 import com.agentstore.external.dto.response.ExternalInvocationIntentResponse
@@ -108,6 +109,25 @@ class ExternalInvocationService(
 
             created(intent = intent, requestHash = requestHash)
         }
+    }
+
+    fun invoke(
+        idempotencyKey: String?,
+        request: CreateExternalInvocationIntentRequest,
+        signatureHeader: String?,
+    ): ExternalInvocationResultDto {
+        val created = createIntent(idempotencyKey = idempotencyKey, request = request)
+        val result = execute(
+            id = created.response.id,
+            receiptToken = created.receiptToken,
+            signatureHeader = signatureHeader,
+        )
+        return ExternalInvocationResultDto(
+            receiptToken = created.receiptToken,
+            paymentRequiredHeader = result.paymentRequiredHeader,
+            paymentResponseHeader = result.paymentResponseHeader,
+            response = result.response,
+        )
     }
 
     fun execute(

@@ -5,7 +5,6 @@ import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.common.web.AgentStoreErrorResponses
 import com.agentstore.external.dto.request.CreateExternalInvocationIntentRequest
 import com.agentstore.external.dto.response.ExternalInvocationExecutionResponse
-import com.agentstore.external.dto.response.ExternalInvocationIntentResponse
 import com.agentstore.external.dto.response.ExternalInvocationStatusResponse
 import com.agentstore.external.service.ExternalIntentRateLimiter
 import com.agentstore.external.service.ExternalInvocationService
@@ -44,47 +43,29 @@ class ExternalInvocationController(
         private const val LAST_EVENT_ID_HEADER = "Last-Event-ID"
     }
 
-    @PostMapping("/invocation-intents")
-    @Operation(operationId = "postV1InvocationIntents", summary = "Create an external x402 invocation intent")
-    @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
-    fun createIntent(
-        @RequestHeader(IDEMPOTENCY_KEY_HEADER, required = false) idempotencyKey: String?,
-        @Valid @RequestBody request: CreateExternalInvocationIntentRequest,
-        servletRequest: HttpServletRequest,
-    ): ResponseEntity<CommonResponse<ExternalInvocationIntentResponse>> {
-        rateLimiter.requireAllowed(remoteAddress = servletRequest.remoteAddr)
-        val created = service.createIntent(idempotencyKey = idempotencyKey, request = request)
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-            .header(RECEIPT_HEADER, created.receiptToken)
-            .body(CommonResponse.success(result = created.response))
-    }
-
-    @PostMapping("/invocation-intents/{id}/execute")
-    @Operation(operationId = "postV1InvocationIntentsByIdExecute", summary = "Pay and start an invocation")
-    @ApiResponse(
-        responseCode = "202",
-        description = "Payment was settled and the asynchronous execution was created",
-        useReturnTypeSchema = true,
-    )
+    @PostMapping("/invocations")
+    @Operation(operationId = "postV1Invocations", summary = "Pay and start an external x402 invocation")
+    @ApiResponse(responseCode = "202", useReturnTypeSchema = true)
     @ApiResponse(
         responseCode = "402",
         description = "x402 payment is required",
         content = [Content(schema = Schema(implementation = CommonResponse::class))],
     )
-    fun execute(
-        @PathVariable id: UUID,
-        @RequestHeader(RECEIPT_HEADER, required = false) receiptToken: String?,
+    fun invoke(
+        @RequestHeader(IDEMPOTENCY_KEY_HEADER, required = false) idempotencyKey: String?,
         @RequestHeader(PAYMENT_SIGNATURE_HEADER, required = false) signatureHeader: String?,
+        @Valid @RequestBody request: CreateExternalInvocationIntentRequest,
+        servletRequest: HttpServletRequest,
     ): ResponseEntity<CommonResponse<ExternalInvocationExecutionResponse>> {
-        val result = service.execute(
-            id = id,
-            receiptToken = receiptToken,
+        rateLimiter.requireAllowed(remoteAddress = servletRequest.remoteAddr)
+        val result = service.invoke(
+            idempotencyKey = idempotencyKey,
+            request = request,
             signatureHeader = signatureHeader,
         )
-        val response = result.response
-        if (response == null) {
+        if (result.response == null) {
             return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                .header(RECEIPT_HEADER, result.receiptToken)
                 .header(PAYMENT_REQUIRED_HEADER, requireNotNull(result.paymentRequiredHeader))
                 .body(
                     CommonResponse(
@@ -97,12 +78,13 @@ class ExternalInvocationController(
         }
 
         return ResponseEntity.accepted()
+            .header(RECEIPT_HEADER, result.receiptToken)
             .header(PAYMENT_RESPONSE_HEADER, requireNotNull(result.paymentResponseHeader))
-            .body(CommonResponse.success(result = response))
+            .body(CommonResponse.success(result = requireNotNull(result.response)))
     }
 
-    @GetMapping("/invocation-intents/{id}")
-    @Operation(operationId = "getV1InvocationIntentsById", summary = "Get an external invocation status")
+    @GetMapping("/invocations/{id}")
+    @Operation(operationId = "getV1InvocationsById", summary = "Get an external invocation status")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun get(
         @PathVariable id: UUID,
@@ -111,8 +93,8 @@ class ExternalInvocationController(
         return CommonResponse.success(result = service.get(id = id, receiptToken = receiptToken))
     }
 
-    @GetMapping("/invocation-intents/{id}/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
-    @Operation(operationId = "getV1InvocationIntentsByIdEvents", summary = "Stream external invocation events")
+    @GetMapping("/invocations/{id}/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
+    @Operation(operationId = "getV1InvocationsByIdEvents", summary = "Stream external invocation events")
     @ApiResponse(
         responseCode = "200",
         description = "Server-sent event stream",

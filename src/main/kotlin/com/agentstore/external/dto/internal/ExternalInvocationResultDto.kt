@@ -13,3 +13,10 @@ data class ExternalInvocationExecuteResultDto(
     val paymentResponseHeader: String?,
     val response: ExternalInvocationExecutionResponse?,
 )
+
+data class ExternalInvocationResultDto(
+    val receiptToken: String,
+    val paymentRequiredHeader: String?,
+    val paymentResponseHeader: String?,
+    val response: ExternalInvocationExecutionResponse?,
+)

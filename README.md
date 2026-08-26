@@ -278,8 +278,8 @@ AgentStore가 받는 EVM 지갑입니다.
 | `agent-store.external-api.receipt-ttl` | 조회·SSE에 쓰는 1회 호출 receipt 유효 시간 |
 | `agent-store.external-api.rate-limit-per-minute` | source IP 기준 intent 생성 한도 |
 
-`POST /v1/invocation-intents`에는 길이 16~128의 `Idempotency-Key`를 보냅니다. 같은 key와 같은 본문은 같은 intent를
-반환하고, 본문이 다르면 `409`입니다. `agentCode` + `versionConstraint`로 특정 Agent를 고르거나, `functionCode` +
+`POST /v1/invocations`에는 길이 16~128의 `Idempotency-Key`를 보냅니다. 같은 key와 같은 본문은 같은 invocation을
+이어가고, 본문이 다르면 `409`입니다. `agentCode` + `versionConstraint`로 특정 Agent를 고르거나, `functionCode` +
 `contractVersion` + `selectionStrategy`로 Function Contract 공급자를 고릅니다. 둘을 함께 보낼 수 없습니다.
 
 ```json
@@ -302,14 +302,11 @@ AgentStore가 받는 EVM 지갑입니다.
 }
 ```
 
-성공 응답은 `201`이며 `result`에 공급자 비용, 플랫폼 수수료, 총 atomic USDC 비용과 만료 시각을 넣습니다. 조회에 필요한
-`X-AgentStore-Invocation-Receipt` header도 이때 한 번만 받습니다. 이 값은 bearer secret이므로 로그·브라우저 저장소·공개 URL에
-넣지 마세요. 서버는 원문이 아니라 hash만 저장합니다.
-
-다음으로 `POST /v1/invocation-intents/{intentId}/execute`에 receipt header를 넣어 보냅니다. 서명이 없으면 `402`와
-`PAYMENT-REQUIRED` header를 반환합니다. 외부 x402 client는 이 header의 v2 `exact` requirement와 완전히 일치하는
-Base Sepolia USDC EIP-3009 `PAYMENT-SIGNATURE`를 만들어 같은 요청에 다시 보냅니다. 서명 검증과 facilitator settlement가
-성공하면 `202`, `PAYMENT-RESPONSE`, 그리고 내부 `executionId`를 반환합니다. timeout·연결 손실·누락 receipt는 성공으로
+첫 요청은 `402`와 `PAYMENT-REQUIRED` header를 반환합니다. 조회에 필요한
+`X-AgentStore-Invocation-Receipt` header도 함께 받습니다. 이 값은 bearer secret이므로 로그·브라우저 저장소·공개 URL에
+넣지 마세요. 서버는 원문이 아니라 hash만 저장합니다. 외부 x402 client는 requirement의 v2 `exact` 조건과 완전히 일치하는
+Base Sepolia USDC EIP-3009 `PAYMENT-SIGNATURE`를 만들어 **같은 본문과 Idempotency-Key로** `POST /v1/invocations`를
+다시 호출합니다. 서명 검증과 facilitator settlement가 성공하면 `202`, `PAYMENT-RESPONSE`, 그리고 내부 `executionId`를 반환합니다. timeout·연결 손실·누락 receipt는 성공으로
 추정하지 않고 `reconciliation_required`가 되며 새 결제나 다른 공급자 fallback을 시작하지 않습니다.
 
 ```powershell
@@ -320,12 +317,12 @@ $headers = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri 'https://api.example.com/v1/invocation-intents' `
+  -Uri 'https://api.example.com/v1/invocations' `
   -Headers $headers `
   -Body '{"agentCode":"weather-summary","versionConstraint":"*","maxTotalAtomic":"1250000","input":{"city":"Seoul"}}'
 ```
 
-상태는 `GET /v1/invocation-intents/{intentId}`, 실시간 진행은 `GET /v1/invocation-intents/{intentId}/events`에서 같은
+상태는 `GET /v1/invocations/{invocationId}`, 실시간 진행은 `GET /v1/invocations/{invocationId}/events`에서 같은
 receipt header로 조회합니다. SSE는 기존 `Last-Event-ID` replay 규칙을 그대로 따릅니다. 최종 결과는 항상
 `CommonResponse.result.output`에 들어가므로 외부 서비스는 실행 그래프가 아닌 Agent output만 간단히 소비할 수 있습니다.
 
@@ -400,7 +397,7 @@ git diff --check
 
 - `lowest_price`: 가격이 낮은 공급자부터 선택하고 같은 가격이면 최신 Version을 우선합니다.
 - `latest_version`: 최신 Version부터 선택하고 같은 Version이면 가격이 낮은 공급자를 우선합니다.
-- `highest_reliability`, `fastest`, `balanced`: 30일 실행 관측값을 쓰며, 관측이 부족한 공급자는 명시적인 exploration에서만 선택합니다.
+- `highest_reliability`, `fastest`: 30일 실행 관측값을 쓰며, 관측이 부족하면 선택하지 않고 명시적으로 거절합니다.
 
 공급자 선택은 Quote 발급 중에만 일어납니다. 선택된 Agent, Version, endpoint, 가격, `payTo`, 계약 Schema와 후보 제외 사유는 snapshot에
 고정됩니다. 실행 중 호출 실패, 출력 계약 위반 또는 결제 불명 상태에서 다른 공급자로 자동 전환하거나 다시 결제하지 않습니다.
