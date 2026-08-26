@@ -29,6 +29,14 @@ Review in three passes:
 - `service` owns use cases/domain decisions; `client` owns transport. Prefer private service
   functions for cohesive one-use decisions. Reject both catch-all classes and invented one-use
   `Policy`/`Evaluator`/`Verifier`/`Helper` layers.
+- Reject snowball changes that duplicate one catalog, schema, status, configuration, policy, or
+  runtime state across layers or repositories. Require one authoritative owner and derived or
+  generated projections. A large class split into one-use wrappers without reducing behavior remains
+  a blocking complexity finding.
+- Reject speculative weights, thresholds, fallback modes, lifecycle states, switches, or extension
+  interfaces without a current caller and observable product behavior. When standard platform or
+  framework functionality materially removes owned code, require justification for maintaining a
+  custom implementation; do not require a larger dependency for a trivial replacement.
 - Controllers bind related query parameters through validated request DTOs. Wire enum values are
   lowercase snake_case. Check OpenAPI and frontend consumers for every contract change.
 - Every Kotlin function has a block body. Every companion is at the top and contains only constants,

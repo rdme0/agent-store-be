@@ -21,6 +21,10 @@ Read the relevant skill before changing its scope. `AGENTS.md` is only the entry
 우선순위를 정의하며, 투자 분석은 플랫폼을 검증하는 reference scenario이지 제품 자체가 아니다. 현재 구현 상태의 기준은 코드와
 `HANDOFF.md`이고, `ROADMAP.md`의 미구현 항목을 이미 제공되는 기능처럼 문서화하지 않는다.
 
+새 추상화, 선택 정책, 상태 모델 또는 인프라 기술을 추가하기 전에는
+[`COMPLEXITY_AUDIT.md`](./COMPLEXITY_AUDIT.md)를 읽는다. 이 문서는 네 저장소에 걸쳐 확인된 중복 소유권, 과도한 일반화와 단순화
+우선순위를 기록한다. 결제·복구·quote·SSE 안전 경계는 감사 문서의 단순화 대상에서 제외한다.
+
 ## Repository contract
 
 This repository is the Kotlin/Spring AgentStore runtime. Preserve the existing REST/SSE paths and

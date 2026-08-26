@@ -48,6 +48,27 @@ Do not create one-use `Policy`, `Evaluator`, `Verifier`, `Manager`, `Helper`, or
 to avoid a private function. Do not compensate by putting unrelated responsibilities into one
 oversized service.
 
+## Complexity and snowball control
+
+Do not solve a local requirement by creating a snowball that duplicates the same fact or policy
+across persistence, DTOs, OpenAPI, frontend state, demo runtime, and infrastructure. Before adding a
+field, strategy, state model, adapter, or abstraction, trace its full cross-repository blast radius
+and identify one authoritative owner. Other layers derive projections or generated contracts from
+that owner; they do not restate catalogs, schemas, statuses, defaults, or policy independently.
+
+Implement only the generality exercised by a current product flow. Do not add speculative weights,
+thresholds, fallback modes, lifecycle states, configuration switches, or extension interfaces before
+there is a concrete caller and observable behavior that needs them. Prefer removing unnecessary
+behavior before splitting a large class; distributing the same behavior across more one-use classes
+is not a simplification.
+
+Prefer an existing language, framework, browser, database, or library facility when it removes code
+and lifecycle ownership without weakening AgentStore invariants. Do not add a framework or dependency
+whose integration surface is larger than the custom code it replaces. For cross-repository contracts,
+prefer a versioned manifest, generated client, or another single source of truth over synchronized
+handwritten copies. Read `COMPLEXITY_AUDIT.md` before adding a new platform abstraction, selection
+policy, execution state representation, or infrastructure boundary.
+
 ## Kotlin readability
 
 - Every function uses a block body and explicit `return` for returned values. Expression bodies
