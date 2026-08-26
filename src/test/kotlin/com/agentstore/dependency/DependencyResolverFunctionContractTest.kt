@@ -34,14 +34,12 @@ class DependencyResolverFunctionContractTest {
         val lowestPrice = fixture.resolve(
             providerScope = ProviderScope.MARKETPLACE,
             strategy = ProviderSelectionStrategy.LOWEST_PRICE,
-            explorationPercent = 0,
             metrics = emptyMap(),
             allowedAgentIds = emptySet(),
         )
         val latestVersion = fixture.resolve(
             providerScope = ProviderScope.MARKETPLACE,
             strategy = ProviderSelectionStrategy.LATEST_VERSION,
-            explorationPercent = 0,
             metrics = emptyMap(),
             allowedAgentIds = emptySet(),
         )
@@ -53,14 +51,13 @@ class DependencyResolverFunctionContractTest {
     }
 
     @Test
-    fun `metric strategies require exploration for providers without enough observations`() {
+    fun `metric strategies reject providers without enough observations`() {
         val fixture = fixture()
 
         val exception = assertThrows(DomainClientException::class.java) {
             fixture.resolve(
                 providerScope = ProviderScope.MARKETPLACE,
                 strategy = ProviderSelectionStrategy.HIGHEST_RELIABILITY,
-                explorationPercent = 0,
                 metrics = emptyMap(),
                 allowedAgentIds = emptySet(),
             )
@@ -68,15 +65,6 @@ class DependencyResolverFunctionContractTest {
 
         assertEquals(ErrorCode.PROVIDER_METRICS_INSUFFICIENT, exception.errorCode)
 
-        val explored = fixture.resolve(
-            providerScope = ProviderScope.MARKETPLACE,
-            strategy = ProviderSelectionStrategy.HIGHEST_RELIABILITY,
-            explorationPercent = 20,
-            metrics = emptyMap(),
-            allowedAgentIds = emptySet(),
-        )
-
-        assertEquals(true, explored.root.dependencies.single().selection?.explorationSelected)
     }
 
     @Test
@@ -86,7 +74,6 @@ class DependencyResolverFunctionContractTest {
         val resolved = fixture.resolve(
             providerScope = ProviderScope.ALLOWLIST,
             strategy = ProviderSelectionStrategy.LOWEST_PRICE,
-            explorationPercent = 0,
             metrics = emptyMap(),
             allowedAgentIds = setOf(fixture.newest.agentId),
         )
@@ -103,7 +90,6 @@ class DependencyResolverFunctionContractTest {
         val resolved = fixture.resolve(
             providerScope = ProviderScope.MARKETPLACE,
             strategy = ProviderSelectionStrategy.LATEST_VERSION,
-            explorationPercent = 0,
             metrics = emptyMap(),
             allowedAgentIds = emptySet(),
             versionConstraint = ">=1.0.0,<2.0.0",
@@ -130,7 +116,6 @@ class DependencyResolverFunctionContractTest {
             fixture.resolve(
                 providerScope = ProviderScope.MARKETPLACE,
                 strategy = ProviderSelectionStrategy.LOWEST_PRICE,
-                explorationPercent = 0,
                 metrics = emptyMap(),
                 allowedAgentIds = emptySet(),
             )
@@ -244,12 +229,9 @@ class DependencyResolverFunctionContractTest {
         val cheap: AgentVersion,
         val newest: AgentVersion,
     ) {
-        private val selectionSeed = UUID.fromString("00000000-0000-0000-0000-000000000001")
-
         fun resolve(
             providerScope: ProviderScope,
             strategy: ProviderSelectionStrategy,
-            explorationPercent: Int,
             metrics: Map<UUID, ProviderPerformanceDto>,
             allowedAgentIds: Set<UUID>,
             versionConstraint: String = "*",
@@ -269,10 +251,6 @@ class DependencyResolverFunctionContractTest {
                 strategy,
                 null,
                 null,
-                explorationPercent,
-                null,
-                null,
-                null,
             )
             `when`(dependencyRepository.findAllBySourceVersionIdOrderByIdAsc(root.id)).thenReturn(listOf(dependency))
             `when`(
@@ -288,7 +266,6 @@ class DependencyResolverFunctionContractTest {
             )
             return resolver.resolve(
                 rootVersionId = root.id,
-                selectionSeed = selectionSeed,
                 allowUnresolvedRequired = false,
                 allowPriceExceeded = false,
             )

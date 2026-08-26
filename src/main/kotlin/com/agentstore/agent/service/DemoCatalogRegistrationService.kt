@@ -184,7 +184,6 @@ class DemoCatalogRegistrationService(
             ] ?: conflict(),
             providerScope = ProviderScope.MARKETPLACE,
             selectionStrategy = ProviderSelectionStrategy.LOWEST_PRICE,
-            explorationPercent = 0,
             versionConstraint = dependency.versionConstraint,
             required = true,
             maxPriceAtomic = dependency.maxPriceAtomic,

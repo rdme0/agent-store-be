@@ -65,8 +65,6 @@ data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<Res
                             },
                             selectedVersionId = selection.selectedVersionId,
                             selectedReason = selection.selectedReason,
-                            explorationSelected = selection.explorationSelected,
-                            selectionSeedDigest = selection.selectionSeedDigest,
                         )
                     },
                     resolved = edge.resolved?.snapshot(),

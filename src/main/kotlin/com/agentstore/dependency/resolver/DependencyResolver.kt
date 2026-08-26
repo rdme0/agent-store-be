@@ -24,7 +24,6 @@ import com.agentstore.dependency.repository.AgentDependencyRepository
 import com.agentstore.execution.service.ProviderMetricService
 import com.agentstore.execution.service.ProviderPerformanceDto
 import java.math.BigInteger
-import java.security.MessageDigest
 import java.util.UUID
 import org.semver4j.Semver
 import org.springframework.stereotype.Component
@@ -39,7 +38,7 @@ class DependencyResolver(
 ) {
     companion object {
         private const val MAX_PROVIDER_CANDIDATES = 50
-        private const val MAX_PROVIDER_EXPLORATIONS = 500
+        private const val MAX_PROVIDER_RESOLUTIONS = 500
         private const val SEMVER_COMPONENT = "(?:0|[1-9]\\d*)"
         private const val CONSTRAINT_VERSION = "$SEMVER_COMPONENT\\.$SEMVER_COMPONENT\\.$SEMVER_COMPONENT"
         private val CONSTRAINT_PREDICATE = Regex(
@@ -56,7 +55,6 @@ class DependencyResolver(
 
     fun resolve(
         rootVersionId: UUID,
-        selectionSeed: UUID,
         allowUnresolvedRequired: Boolean,
         allowPriceExceeded: Boolean,
     ): ResolvedGraph {
@@ -73,8 +71,7 @@ class DependencyResolver(
                 warnings = warnings,
                 depth = 0,
                 stepBudget = 32,
-                explorationBudget = ProviderExplorationBudget(MAX_PROVIDER_EXPLORATIONS),
-                selectionSeed = selectionSeed,
+                resolutionBudget = ProviderResolutionBudget(MAX_PROVIDER_RESOLUTIONS),
                 allowUnresolvedRequired = allowUnresolvedRequired,
                 allowPriceExceeded = allowPriceExceeded,
             ),
@@ -87,7 +84,6 @@ class DependencyResolver(
         contractVersion: String,
         strategy: ProviderSelectionStrategy,
         maxPriceAtomic: BigInteger,
-        selectionSeed: UUID,
     ): ResolvedGraph {
         val contract = capabilityService.requireByCode(
             code = functionCode,
@@ -108,10 +104,6 @@ class DependencyResolver(
             strategy,
             null,
             null,
-            0,
-            null,
-            null,
-            null,
         )
         val warnings = mutableListOf<QuoteWarning>()
         val edges = resolveFunctionEdges(
@@ -120,8 +112,7 @@ class DependencyResolver(
             warnings = warnings,
             depth = -1,
             remainingSteps = 32,
-            explorationBudget = ProviderExplorationBudget(MAX_PROVIDER_EXPLORATIONS),
-            selectionSeed = selectionSeed,
+            resolutionBudget = ProviderResolutionBudget(MAX_PROVIDER_RESOLUTIONS),
             allowUnresolvedRequired = false,
             allowPriceExceeded = false,
             resolveTail = { _, _ -> emptyList() },
@@ -183,8 +174,7 @@ class DependencyResolver(
         warnings: MutableList<QuoteWarning>,
         depth: Int,
         stepBudget: Int,
-        explorationBudget: ProviderExplorationBudget,
-        selectionSeed: UUID,
+        resolutionBudget: ProviderResolutionBudget,
         allowUnresolvedRequired: Boolean,
         allowPriceExceeded: Boolean,
     ): ResolvedNode {
@@ -204,8 +194,7 @@ class DependencyResolver(
             warnings = warnings,
             depth = depth,
             remainingSteps = stepBudget - 1,
-            explorationBudget = explorationBudget,
-            selectionSeed = selectionSeed,
+            resolutionBudget = resolutionBudget,
             allowUnresolvedRequired = allowUnresolvedRequired,
             allowPriceExceeded = allowPriceExceeded,
         )
@@ -227,8 +216,7 @@ class DependencyResolver(
         warnings: MutableList<QuoteWarning>,
         depth: Int,
         remainingSteps: Int,
-        explorationBudget: ProviderExplorationBudget,
-        selectionSeed: UUID,
+        resolutionBudget: ProviderResolutionBudget,
         allowUnresolvedRequired: Boolean,
         allowPriceExceeded: Boolean,
     ): List<ResolvedEdge> {
@@ -244,8 +232,7 @@ class DependencyResolver(
                 warnings = warnings,
                 depth = depth,
                 remainingSteps = remainingSteps,
-                explorationBudget = explorationBudget,
-                selectionSeed = selectionSeed,
+                resolutionBudget = resolutionBudget,
                 allowUnresolvedRequired = allowUnresolvedRequired,
                 allowPriceExceeded = allowPriceExceeded,
                 resolveTail = { nextRemaining, branchWarnings ->
@@ -256,8 +243,7 @@ class DependencyResolver(
                         warnings = branchWarnings,
                         depth = depth,
                         remainingSteps = nextRemaining,
-                        explorationBudget = explorationBudget,
-                        selectionSeed = selectionSeed,
+                        resolutionBudget = resolutionBudget,
                         allowUnresolvedRequired = allowUnresolvedRequired,
                         allowPriceExceeded = allowPriceExceeded,
                     )
@@ -270,8 +256,7 @@ class DependencyResolver(
             warnings = warnings,
             depth = depth,
             stepBudget = remainingSteps / dependency.maxCalls,
-            explorationBudget = explorationBudget,
-            selectionSeed = selectionSeed,
+            resolutionBudget = resolutionBudget,
             allowUnresolvedRequired = allowUnresolvedRequired,
             allowPriceExceeded = allowPriceExceeded,
         )
@@ -288,8 +273,7 @@ class DependencyResolver(
             warnings = warnings,
             depth = depth,
             remainingSteps = remainingSteps - consumedSteps,
-            explorationBudget = explorationBudget,
-            selectionSeed = selectionSeed,
+            resolutionBudget = resolutionBudget,
             allowUnresolvedRequired = allowUnresolvedRequired,
             allowPriceExceeded = allowPriceExceeded,
         )
@@ -301,8 +285,7 @@ class DependencyResolver(
         warnings: MutableList<QuoteWarning>,
         depth: Int,
         remainingSteps: Int,
-        explorationBudget: ProviderExplorationBudget,
-        selectionSeed: UUID,
+        resolutionBudget: ProviderResolutionBudget,
         allowUnresolvedRequired: Boolean,
         allowPriceExceeded: Boolean,
         resolveTail: (Int, MutableList<QuoteWarning>) -> List<ResolvedEdge>,
@@ -321,26 +304,17 @@ class DependencyResolver(
             versionIds = active.map { version -> version.id },
         )
         val strategy = dependency.selectionStrategy
-        val explorationSelected = shouldExplore(
-            dependency = dependency,
-            strategy = strategy,
-            candidates = active,
-            metrics = metrics,
-            selectionSeed = selectionSeed,
-        )
         val sorted = orderFunctionCandidates(
             candidates = active,
             dependency = dependency,
             strategy = strategy,
             metrics = metrics,
-            explorationSelected = explorationSelected,
-            selectionSeed = selectionSeed,
         )
         val summaries = mutableListOf<ProviderCandidate>()
         val stepBudget = remainingSteps / dependency.maxCalls
 
         for (candidate in sorted) {
-            explorationBudget.consume()
+            resolutionBudget.consume()
             val candidateAgent = agentService.requireAgent(candidate.agentId)
             val performance = metrics[candidate.id]
             val rejection = staticRejection(
@@ -367,8 +341,7 @@ class DependencyResolver(
                     warnings = candidateWarnings,
                     depth = depth + 1,
                     stepBudget = stepBudget,
-                    explorationBudget = explorationBudget,
-                    selectionSeed = selectionSeed,
+                    resolutionBudget = resolutionBudget,
                     allowUnresolvedRequired = allowUnresolvedRequired,
                     allowPriceExceeded = allowPriceExceeded,
                 )
@@ -412,16 +385,7 @@ class DependencyResolver(
                             functionContractVersion = contract.contractVersion,
                             candidates = summaries,
                             selectedVersionId = candidate.id,
-                            selectedReason = if (explorationSelected) {
-                                "selected_by_exploration"
-                            } else {
-                                "selected_by_${strategy?.value ?: "pinned"}"
-                            },
-                            explorationSelected = explorationSelected,
-                            selectionSeedDigest = selectionSeedDigest(
-                                dependency = dependency,
-                                selectionSeed = selectionSeed,
-                            ),
+                            selectedReason = "selected_by_${strategy?.value ?: "pinned"}",
                         ),
                     ),
                 ) + tail
@@ -461,11 +425,6 @@ class DependencyResolver(
                     candidates = summaries,
                     selectedVersionId = null,
                     selectedReason = null,
-                    explorationSelected = explorationSelected,
-                    selectionSeedDigest = selectionSeedDigest(
-                        dependency = dependency,
-                        selectionSeed = selectionSeed,
-                    ),
                 ),
             ),
         ) + resolveTail(remainingSteps, warnings)
@@ -477,8 +436,7 @@ class DependencyResolver(
         warnings: MutableList<QuoteWarning>,
         depth: Int,
         stepBudget: Int,
-        explorationBudget: ProviderExplorationBudget,
-        selectionSeed: UUID,
+        resolutionBudget: ProviderResolutionBudget,
         allowUnresolvedRequired: Boolean,
         allowPriceExceeded: Boolean,
     ): ResolvedEdge {
@@ -512,8 +470,7 @@ class DependencyResolver(
                 warnings = warnings,
                 depth = depth + 1,
                 stepBudget = stepBudget,
-                explorationBudget = explorationBudget,
-                selectionSeed = selectionSeed,
+                resolutionBudget = resolutionBudget,
                 allowUnresolvedRequired = allowUnresolvedRequired,
                 allowPriceExceeded = allowPriceExceeded,
             ),
@@ -600,43 +557,11 @@ class DependencyResolver(
         return null
     }
 
-    private fun shouldExplore(
-        dependency: AgentDependency,
-        strategy: ProviderSelectionStrategy?,
-        candidates: List<AgentVersion>,
-        metrics: Map<UUID, ProviderPerformanceDto>,
-        selectionSeed: UUID,
-    ): Boolean {
-        if (!isMetricStrategy(strategy = strategy)) {
-            return false
-        }
-        val lowSample = candidates.any { candidate -> metrics[candidate.id]?.isMature != true }
-        if (!lowSample) {
-            return false
-        }
-        val explorationPercent = dependency.explorationPercent ?: 0
-        if (explorationPercent == 0) {
-            return false
-        }
-        val hasMature = candidates.any { candidate -> metrics[candidate.id]?.isMature == true }
-        if (!hasMature) {
-            return true
-        }
-        val bucket = explorationDigest(
-            dependency = dependency,
-            selectionSeed = selectionSeed,
-            version = null,
-        ).take(2).toInt(radix = 16) * 100 / 256
-        return bucket < explorationPercent
-    }
-
     private fun orderFunctionCandidates(
         candidates: List<AgentVersion>,
         dependency: AgentDependency,
         strategy: ProviderSelectionStrategy?,
         metrics: Map<UUID, ProviderPerformanceDto>,
-        explorationSelected: Boolean,
-        selectionSeed: UUID,
     ): List<AgentVersion> {
         if (dependency.providerScope == ProviderScope.PINNED) {
             return candidates.sortedWith(::compareByVersionThenPrice)
@@ -646,53 +571,28 @@ class DependencyResolver(
                 compareByStrategy(
                     strategy = strategy ?: ProviderSelectionStrategy.LOWEST_PRICE,
                     metrics = metrics,
-                    weights = weights(dependency = dependency),
-                    candidates = candidates,
                 ),
             )
         }
         val mature = candidates.filter { candidate -> metrics[candidate.id]?.isMature == true }
-        val lowSample = candidates.filter { candidate -> metrics[candidate.id]?.isMature != true }
-        if (!explorationSelected && mature.isEmpty()) {
+        if (mature.isEmpty()) {
             throw DomainClientException(ErrorCode.PROVIDER_METRICS_INSUFFICIENT)
         }
         val metricOrder = compareByStrategy(
             strategy = strategy ?: ProviderSelectionStrategy.HIGHEST_RELIABILITY,
             metrics = metrics,
-            weights = weights(dependency = dependency),
-            candidates = mature,
         )
-        val orderedMature = mature.sortedWith(metricOrder)
-        if (!explorationSelected) {
-            return orderedMature
-        }
-        val exploratory = lowSample.sortedWith { left, right ->
-            val leftDigest = explorationDigest(
-                dependency = dependency,
-                selectionSeed = selectionSeed,
-                version = left,
-            )
-            val rightDigest = explorationDigest(
-                dependency = dependency,
-                selectionSeed = selectionSeed,
-                version = right,
-            )
-            val digestOrder = leftDigest.compareTo(rightDigest)
-            if (digestOrder != 0) digestOrder else compareByVersionThenPrice(left, right)
-        }
-        return exploratory + orderedMature
+        return mature.sortedWith(metricOrder)
     }
 
     private fun isMetricStrategy(strategy: ProviderSelectionStrategy?): Boolean {
         return strategy == ProviderSelectionStrategy.HIGHEST_RELIABILITY ||
-            strategy == ProviderSelectionStrategy.FASTEST || strategy == ProviderSelectionStrategy.BALANCED
+            strategy == ProviderSelectionStrategy.FASTEST
     }
 
     private fun compareByStrategy(
         strategy: ProviderSelectionStrategy,
         metrics: Map<UUID, ProviderPerformanceDto>,
-        weights: SelectionWeights,
-        candidates: List<AgentVersion>,
     ): Comparator<AgentVersion> {
         return Comparator { first, second ->
             val result = when (strategy) {
@@ -706,19 +606,6 @@ class DependencyResolver(
                     (metrics[first.id]?.p95LatencyMillis ?: Long.MAX_VALUE)
                         .compareTo(metrics[second.id]?.p95LatencyMillis ?: Long.MAX_VALUE)
                 }
-                ProviderSelectionStrategy.BALANCED -> -balancedScore(
-                    candidate = first,
-                    candidates = candidates,
-                    metrics = metrics,
-                    weights = weights,
-                ).compareTo(
-                    balancedScore(
-                        candidate = second,
-                        candidates = candidates,
-                        metrics = metrics,
-                        weights = weights,
-                    ),
-                )
             }
             if (result != 0) {
                 result
@@ -740,84 +627,6 @@ class DependencyResolver(
         val agentOrder = left.agentId.compareTo(right.agentId)
         return if (agentOrder != 0) agentOrder else left.id.compareTo(right.id)
     }
-
-    private fun balancedScore(
-        candidate: AgentVersion,
-        candidates: List<AgentVersion>,
-        metrics: Map<UUID, ProviderPerformanceDto>,
-        weights: SelectionWeights,
-    ): Double {
-        val reliability = (metrics[candidate.id]?.reliabilityPercent ?: 0) / 100.0
-        val priceScore = inverseBigIntegerScore(
-            values = candidates.map(AgentVersion::getPriceAtomic),
-            value = candidate.priceAtomic,
-        )
-        val speedScore = inverseLongScore(
-            values = candidates.mapNotNull { version -> metrics[version.id]?.p95LatencyMillis },
-            value = metrics[candidate.id]?.p95LatencyMillis ?: Long.MAX_VALUE,
-        )
-        return reliability * weights.reliability / 100.0 + priceScore * weights.price / 100.0 +
-            speedScore * weights.speed / 100.0
-    }
-
-    private fun inverseBigIntegerScore(values: List<BigInteger>, value: BigInteger): Double {
-        val minimum = values.minOrNull() ?: return 0.0
-        val maximum = values.maxOrNull() ?: return 0.0
-        if (minimum == maximum) {
-            return 1.0
-        }
-        val numerator = value.subtract(minimum).toDouble()
-        val denominator = maximum.subtract(minimum).toDouble()
-        return 1.0 - numerator / denominator
-    }
-
-    private fun inverseLongScore(values: List<Long>, value: Long): Double {
-        val minimum = values.minOrNull() ?: return 0.0
-        val maximum = values.maxOrNull() ?: return 0.0
-        if (minimum == maximum) {
-            return 1.0
-        }
-        return 1.0 - (value - minimum).toDouble() / (maximum - minimum).toDouble()
-    }
-
-    private fun weights(dependency: AgentDependency): SelectionWeights {
-        return SelectionWeights(
-            reliability = dependency.reliabilityWeight ?: 0,
-            price = dependency.priceWeight ?: 0,
-            speed = dependency.speedWeight ?: 0,
-        )
-    }
-
-    private fun selectionSeedDigest(dependency: AgentDependency, selectionSeed: UUID): String {
-        return explorationDigest(
-            dependency = dependency,
-            selectionSeed = selectionSeed,
-            version = null,
-        )
-    }
-
-    private fun explorationDigest(
-        dependency: AgentDependency,
-        selectionSeed: UUID,
-        version: AgentVersion?,
-    ): String {
-        val source = buildString {
-            append(selectionSeed)
-            append(':')
-            append(dependency.id)
-            version?.let { value -> append(':').append(value.id) }
-        }
-        return MessageDigest.getInstance("SHA-256")
-            .digest(source.toByteArray())
-            .take(8)
-            .joinToString(separator = "") { byte -> "%02x".format(byte) }
-    }
-
-    private data class SelectionWeights(
-        val reliability: Int,
-        val price: Int,
-        val speed: Int,
-    )
 
     private fun requireNoCycle(targetCode: String, currentPath: List<String>) {
         if (targetCode in currentPath) {
@@ -913,7 +722,7 @@ class DependencyResolver(
         )
     }
 
-    private class ProviderExplorationBudget(private var remaining: Int) {
+    private class ProviderResolutionBudget(private var remaining: Int) {
         fun consume() {
             if (remaining == 0) {
                 throw DomainClientException(ErrorCode.PROVIDER_EXPLORATION_LIMIT_EXCEEDED)

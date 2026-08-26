@@ -412,7 +412,6 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
                 functionContractId = contractId,
                 providerScope = ProviderScope.MARKETPLACE,
                 selectionStrategy = ProviderSelectionStrategy.LOWEST_PRICE,
-                explorationPercent = 0,
                 versionConstraint = "*",
                 required = true,
                 maxPriceAtomic = "1000",

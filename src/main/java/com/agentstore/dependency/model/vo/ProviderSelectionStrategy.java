@@ -7,8 +7,7 @@ public enum ProviderSelectionStrategy {
     LOWEST_PRICE("lowest_price"),
     LATEST_VERSION("latest_version"),
     HIGHEST_RELIABILITY("highest_reliability"),
-    FASTEST("fastest"),
-    BALANCED("balanced");
+    FASTEST("fastest");
 
     private final String value;
 

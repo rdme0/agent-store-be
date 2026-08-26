@@ -56,8 +56,6 @@ data class ProviderSelectionSnapshotDto(
     val candidates: List<ProviderCandidateSnapshotDto>,
     @field:Schema(nullable = true) val selectedVersionId: UUID? = null,
     @field:Schema(nullable = true) val selectedReason: String? = null,
-    val explorationSelected: Boolean = false,
-    @field:Schema(nullable = true) val selectionSeedDigest: String? = null,
 )
 
 data class DependencySnapshotDto(

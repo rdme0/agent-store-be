@@ -19,10 +19,6 @@ data class CreateDependencyRequest(
     val allowedProviderAgentIds: Set<UUID>? = null,
     @field:Min(0) @field:Max(100) val minReliabilityPercent: Int? = null,
     @field:Min(1) val maxP95LatencyMillis: Int? = null,
-    @field:Min(0) @field:Max(20) val explorationPercent: Int? = null,
-    @field:Min(0) @field:Max(100) val reliabilityWeight: Int? = null,
-    @field:Min(0) @field:Max(100) val priceWeight: Int? = null,
-    @field:Min(0) @field:Max(100) val speedWeight: Int? = null,
     @field:NotBlank @field:Size(max = 128) val versionConstraint: String,
     @field:Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED) val required: Boolean = true,
     @field:Pattern(regexp = "^[0-9]+$") val maxPriceAtomic: String,
@@ -39,18 +35,13 @@ data class UpdateDependencyRequest(
     val allowedProviderAgentIds: Set<UUID>? = null,
     @field:Min(0) @field:Max(100) val minReliabilityPercent: Int? = null,
     @field:Min(1) val maxP95LatencyMillis: Int? = null,
-    @field:Min(0) @field:Max(20) val explorationPercent: Int? = null,
-    @field:Min(0) @field:Max(100) val reliabilityWeight: Int? = null,
-    @field:Min(0) @field:Max(100) val priceWeight: Int? = null,
-    @field:Min(0) @field:Max(100) val speedWeight: Int? = null,
 ) {
     @JsonIgnore
     fun isEmpty(): Boolean {
         return versionConstraint == null && required == null && maxPriceAtomic == null && maxCalls == null &&
             providerScope == null && selectionStrategy == null &&
             allowedProviderAgentIds == null && minReliabilityPercent == null &&
-            maxP95LatencyMillis == null && explorationPercent == null && reliabilityWeight == null &&
-            priceWeight == null && speedWeight == null
+            maxP95LatencyMillis == null
     }
 }
 

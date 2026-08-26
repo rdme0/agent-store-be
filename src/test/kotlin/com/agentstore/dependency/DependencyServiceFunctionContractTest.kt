@@ -56,28 +56,24 @@ class DependencyServiceFunctionContractTest {
                 functionContractId = null,
                 providerScope = null,
                 selectionStrategy = null,
-                explorationPercent = null,
             ),
             request(
                 targetAgentId = null,
                 functionContractId = functionContractId,
                 providerScope = null,
                 selectionStrategy = null,
-                explorationPercent = 0,
             ),
             request(
                 targetAgentId = null,
                 functionContractId = functionContractId,
                 providerScope = ProviderScope.PINNED,
                 selectionStrategy = null,
-                explorationPercent = 0,
             ),
             request(
                 targetAgentId = UUID.randomUUID(),
                 functionContractId = functionContractId,
                 providerScope = ProviderScope.MARKETPLACE,
                 selectionStrategy = ProviderSelectionStrategy.LOWEST_PRICE,
-                explorationPercent = 0,
             ),
         )
 
@@ -94,14 +90,12 @@ class DependencyServiceFunctionContractTest {
         functionContractId: UUID?,
         providerScope: ProviderScope?,
         selectionStrategy: ProviderSelectionStrategy?,
-        explorationPercent: Int?,
     ): CreateDependencyRequest {
         return CreateDependencyRequest(
             targetAgentId = targetAgentId,
             functionContractId = functionContractId,
             providerScope = providerScope,
             selectionStrategy = selectionStrategy,
-            explorationPercent = explorationPercent,
             versionConstraint = "*",
             maxPriceAtomic = "1000",
         )

@@ -70,10 +70,8 @@ class QuoteService(
             },
         )
             ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
-        val quoteId = UUID.randomUUID()
         val graph = resolver.resolve(
             rootVersionId = root.id,
-            selectionSeed = quoteId,
             allowUnresolvedRequired = false,
             allowPriceExceeded = false,
         )
@@ -82,6 +80,7 @@ class QuoteService(
         val estimate = krwEstimateService.estimate(amountAtomic = cost.maxCostAtomic)
         val snapshot = graph.root.snapshot().copy(krwEstimate = estimate)
         val expiresAt = Instant.now().plus(5, ChronoUnit.MINUTES)
+        val quoteId = UUID.randomUUID()
         val quote = quoteRepository.save(
             ExecutionQuote(
                 quoteId,
@@ -109,13 +108,11 @@ class QuoteService(
         strategy: ProviderSelectionStrategy,
         maxTotalAtomic: BigInteger,
     ): QuoteResponse {
-        val quoteId = UUID.randomUUID()
         val graph = resolver.resolveFunctionRoot(
             functionCode = functionCode,
             contractVersion = contractVersion,
             strategy = strategy,
             maxPriceAtomic = maxTotalAtomic,
-            selectionSeed = quoteId,
         )
         validateEndpoints(node = graph.root)
         val cost = costResolver.resolve(graph.root)
@@ -125,6 +122,7 @@ class QuoteService(
         val estimate = krwEstimateService.estimate(amountAtomic = cost.maxCostAtomic)
         val snapshot = graph.root.snapshot().copy(krwEstimate = estimate)
         val expiresAt = Instant.now().plus(5, ChronoUnit.MINUTES)
+        val quoteId = UUID.randomUUID()
         val quote = quoteRepository.save(
             ExecutionQuote(
                 quoteId,

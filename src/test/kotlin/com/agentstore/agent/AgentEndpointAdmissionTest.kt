@@ -143,7 +143,6 @@ class AgentEndpointAdmissionTest {
         `when`(
             resolver.resolve(
                 rootVersionId = eq(root.id) ?: root.id,
-                selectionSeed = any(UUID::class.java) ?: UUID(0, 0),
                 allowUnresolvedRequired = eq(false),
                 allowPriceExceeded = eq(false),
             )

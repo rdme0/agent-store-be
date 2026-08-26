@@ -121,7 +121,6 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
         val registry = runtimeFixture.createCapabilityMarketplaceRegistry()
         val graph = dependencyResolver.resolve(
             rootVersionId = registry.rootVersionId,
-            selectionSeed = UUID.randomUUID(),
             allowUnresolvedRequired = false,
             allowPriceExceeded = false,
         )
@@ -143,7 +142,6 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
         )
         val currentGraph = dependencyResolver.resolve(
             rootVersionId = registry.rootVersionId,
-            selectionSeed = UUID.randomUUID(),
             allowUnresolvedRequired = false,
             allowPriceExceeded = false,
         )

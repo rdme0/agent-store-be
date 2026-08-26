@@ -158,10 +158,6 @@ class AgentManifestService(
                     }.toSet(),
                     minReliabilityPercent = dependency.minReliabilityPercent,
                     maxP95LatencyMillis = dependency.maxP95LatencyMillis,
-                    explorationPercent = dependency.explorationPercent,
-                    reliabilityWeight = dependency.reliabilityWeight,
-                    priceWeight = dependency.priceWeight,
-                    speedWeight = dependency.speedWeight,
                     versionConstraint = dependency.versionConstraint,
                     required = dependency.required,
                     maxPriceAtomic = dependency.maxPriceAtomic,
@@ -290,17 +286,13 @@ class AgentManifestService(
         )
         requireAllowedKeys(
             root = resolution,
-            allowed = setOf("strategy", "explorationPercent", "weights"),
+            allowed = setOf("strategy"),
         )
         val providerScope = ProviderScope.valueOf(
             requireString(root = providers, field = "scope").uppercase(),
         )
         val strategy = optionalString(root = resolution, field = "strategy")
             ?.let(ProviderSelectionStrategy::from)
-        val weights = resolution["weights"]?.let { value -> requireMapValue(value = value, field = "weights") }
-        weights?.let { value ->
-            requireAllowedKeys(root = value, allowed = setOf("reliability", "price", "speed"))
-        }
         val allowedCodes = optionalList(root = providers, field = "allowedAgentCodes")
             .map { value -> value as? String ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE) }
         val pinnedCode = optionalString(root = providers, field = "pinnedAgentCode")
@@ -313,10 +305,6 @@ class AgentManifestService(
             allowedAgentCodes = allowedCodes,
             minReliabilityPercent = optionalInt(root = constraints, field = "minReliabilityPercent"),
             maxP95LatencyMillis = optionalInt(root = constraints, field = "maxP95LatencyMillis"),
-            explorationPercent = requireInt(root = resolution, field = "explorationPercent"),
-            reliabilityWeight = optionalInt(root = weights, field = "reliability"),
-            priceWeight = optionalInt(root = weights, field = "price"),
-            speedWeight = optionalInt(root = weights, field = "speed"),
             versionConstraint = requireString(root = constraints, field = "versionConstraint"),
             required = requireBoolean(root = constraints, field = "required"),
             maxPriceAtomic = requireString(root = constraints, field = "maxPriceAtomic"),
@@ -442,10 +430,6 @@ private data class ParsedDependencyDto(
     val allowedAgentCodes: List<String>,
     val minReliabilityPercent: Int?,
     val maxP95LatencyMillis: Int?,
-    val explorationPercent: Int,
-    val reliabilityWeight: Int?,
-    val priceWeight: Int?,
-    val speedWeight: Int?,
     val versionConstraint: String,
     val required: Boolean,
     val maxPriceAtomic: String,

@@ -47,14 +47,6 @@ public class AgentDependency extends BaseEntity {
 
     private Integer maxP95LatencyMillis;
 
-    private Integer explorationPercent;
-
-    private Integer reliabilityWeight;
-
-    private Integer priceWeight;
-
-    private Integer speedWeight;
-
     @Column(nullable = false)
     private String versionConstraint;
 
@@ -89,16 +81,11 @@ public class AgentDependency extends BaseEntity {
 
     public void configureFunctionSelection(UUID functionContractId, ProviderScope providerScope,
             ProviderSelectionStrategy selectionStrategy, Integer minReliabilityPercent,
-            Integer maxP95LatencyMillis, Integer explorationPercent, Integer reliabilityWeight,
-            Integer priceWeight, Integer speedWeight) {
+            Integer maxP95LatencyMillis) {
         this.functionContractId = functionContractId;
         this.providerScope = providerScope;
         this.selectionStrategy = selectionStrategy;
         this.minReliabilityPercent = minReliabilityPercent;
         this.maxP95LatencyMillis = maxP95LatencyMillis;
-        this.explorationPercent = explorationPercent;
-        this.reliabilityWeight = reliabilityWeight;
-        this.priceWeight = priceWeight;
-        this.speedWeight = speedWeight;
     }
 }

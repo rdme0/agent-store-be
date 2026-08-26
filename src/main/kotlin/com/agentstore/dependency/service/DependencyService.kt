@@ -78,10 +78,6 @@ class DependencyService(
                 request.selectionStrategy,
                 request.minReliabilityPercent,
                 request.maxP95LatencyMillis,
-                request.explorationPercent,
-                request.reliabilityWeight,
-                request.priceWeight,
-                request.speedWeight,
             )
         }
         return try {
@@ -165,9 +161,6 @@ class DependencyService(
         val providerScope = request.providerScope
             ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         capabilityService.requireCapability(id = functionContractId)
-        if (request.explorationPercent == null) {
-            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
-        }
         when (providerScope) {
             ProviderScope.PINNED -> {
                 if (request.targetAgentId == null) {
@@ -195,16 +188,6 @@ class DependencyService(
 
     private fun validateStrategy(request: CreateDependencyRequest) {
         val strategy = request.selectionStrategy ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
-        if (strategy == ProviderSelectionStrategy.BALANCED) {
-            val weights = listOf(request.reliabilityWeight, request.priceWeight, request.speedWeight)
-            if (weights.any { value -> value == null } || weights.filterNotNull().sum() != 100) {
-                throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
-            }
-        } else if (
-            request.reliabilityWeight != null || request.priceWeight != null || request.speedWeight != null
-        ) {
-            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
-        }
     }
 
     private fun updateFunctionSelection(dependency: AgentDependency, request: UpdateDependencyRequest) {
@@ -213,8 +196,7 @@ class DependencyService(
         }
         val providerScope = request.providerScope ?: dependency.providerScope
         val selectionStrategy = request.selectionStrategy ?: dependency.selectionStrategy
-        val explorationPercent = request.explorationPercent ?: dependency.explorationPercent
-        if (providerScope == null || explorationPercent == null) {
+        if (providerScope == null) {
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
         if (providerScope == ProviderScope.PINNED && selectionStrategy != null) {
@@ -223,29 +205,12 @@ class DependencyService(
         if (providerScope != ProviderScope.PINNED && selectionStrategy == null) {
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
-        val reliabilityWeight = request.reliabilityWeight ?: dependency.reliabilityWeight
-        val priceWeight = request.priceWeight ?: dependency.priceWeight
-        val speedWeight = request.speedWeight ?: dependency.speedWeight
-        if (selectionStrategy == ProviderSelectionStrategy.BALANCED) {
-            val weights = listOf(reliabilityWeight, priceWeight, speedWeight)
-            if (weights.any { value -> value == null } || weights.filterNotNull().sum() != 100) {
-                throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
-            }
-        } else if (
-            request.reliabilityWeight != null || request.priceWeight != null || request.speedWeight != null
-        ) {
-            throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
-        }
         dependency.configureFunctionSelection(
             dependency.functionContractId,
             providerScope,
             selectionStrategy,
             request.minReliabilityPercent ?: dependency.minReliabilityPercent,
             request.maxP95LatencyMillis ?: dependency.maxP95LatencyMillis,
-            explorationPercent,
-            if (selectionStrategy == ProviderSelectionStrategy.BALANCED) reliabilityWeight else null,
-            if (selectionStrategy == ProviderSelectionStrategy.BALANCED) priceWeight else null,
-            if (selectionStrategy == ProviderSelectionStrategy.BALANCED) speedWeight else null,
         )
     }
 
@@ -301,9 +266,7 @@ class DependencyService(
     private fun isFunctionDependency(request: CreateDependencyRequest): Boolean {
         return request.functionContractId != null || request.providerScope != null ||
             request.selectionStrategy != null || request.allowedProviderAgentIds != null ||
-            request.minReliabilityPercent != null || request.maxP95LatencyMillis != null ||
-            request.explorationPercent != null || request.reliabilityWeight != null ||
-            request.priceWeight != null || request.speedWeight != null
+            request.minReliabilityPercent != null || request.maxP95LatencyMillis != null
     }
 
     private fun response(dependency: AgentDependency): DependencyResponse {

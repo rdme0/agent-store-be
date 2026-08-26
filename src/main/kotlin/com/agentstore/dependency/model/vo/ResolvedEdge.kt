@@ -20,8 +20,6 @@ data class ProviderSelection(
     val candidates: List<ProviderCandidate>,
     val selectedVersionId: UUID?,
     val selectedReason: String?,
-    val explorationSelected: Boolean = false,
-    val selectionSeedDigest: String? = null,
 )
 
 data class ProviderCandidate(
