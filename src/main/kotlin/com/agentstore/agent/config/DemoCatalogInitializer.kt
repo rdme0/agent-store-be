@@ -8,6 +8,7 @@ import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.service.DemoCatalogRegistrationService
+import com.agentstore.common.config.AgentStoreProperties
 import java.util.UUID
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
@@ -19,21 +20,24 @@ import org.springframework.stereotype.Component
 class DemoCatalogInitializer(
     private val agentRepository: AgentRepository,
     private val registrationService: DemoCatalogRegistrationService,
+    private val properties: AgentStoreProperties,
 ) : ApplicationRunner {
     override fun run(args: ApplicationArguments) {
         if (agentRepository.count() == 0L) {
-            registrationService.register(request = DemoCatalogSeed.request())
+            registrationService.register(request = DemoCatalogSeed(baseUrl = properties.demoAgentBaseUrl).request())
         }
     }
 }
 
-private object DemoCatalogSeed {
-    private const val CONTRACT_VERSION = "1.0.0"
-    private const val AGENT_VERSION = "1.0.0"
-    private const val NETWORK = "eip155:84532"
-    private const val ASSET = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
-    private const val VERSION_CONSTRAINT = ">=1.0.0,<2.0.0"
-    private val developerId = UUID.fromString("00000000-0000-0000-0000-00000000d001")
+private class DemoCatalogSeed(private val baseUrl: String) {
+    companion object {
+        private const val CONTRACT_VERSION = "1.0.0"
+        private const val AGENT_VERSION = "1.0.0"
+        private const val NETWORK = "eip155:84532"
+        private const val ASSET = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+        private const val VERSION_CONSTRAINT = ">=1.0.0,<2.0.0"
+        private val developerId = UUID.fromString("00000000-0000-0000-0000-00000000d001")
+    }
 
     fun request(): DemoCatalogDefinition {
         return DemoCatalogDefinition(
@@ -270,7 +274,7 @@ private object DemoCatalogSeed {
                 outputSchema = outputSchema,
             ),
             semver = AGENT_VERSION,
-            endpoint = "http://127.0.0.1:8090/agents/$code/invoke",
+            endpoint = "${baseUrl.trimEnd('/')}/agents/$code/invoke",
             priceAtomic = priceAtomic,
             network = NETWORK,
             asset = ASSET,

@@ -20,7 +20,7 @@ class AgentEndpointPolicy(
         private val IPV6_LOOPBACK = ByteArray(16).apply { this[lastIndex] = 1 }
         private val IPV4_LOOPBACK = byteArrayOf(127, 0, 0, 1)
         private val HTTP_SCHEMES = setOf("http", "https")
-        private val DEVELOPMENT_LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1", "::1")
+        private val DEVELOPMENT_AGENT_HOSTS = setOf("localhost", "127.0.0.1", "::1", "demo-agent")
     }
 
     fun validate(endpoint: String) {
@@ -51,13 +51,13 @@ class AgentEndpointPolicy(
         }
 
         if (isDevelopmentProfile()) {
-            if (host !in DEVELOPMENT_LOOPBACK_HOSTS) {
+            if (host !in DEVELOPMENT_AGENT_HOSTS) {
                 throw DomainClientException(
                     errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
                     messageArguments = arrayOf("development only permits loopback Agent endpoints"),
                 )
             }
-            return ValidatedAgentEndpoint(uri = uri, addresses = developmentLoopbackAddress(host))
+            return ValidatedAgentEndpoint(uri = uri, addresses = developmentAddresses(host = host))
         }
 
         if (scheme != "https") {
@@ -87,10 +87,19 @@ class AgentEndpointPolicy(
         return environment.matchesProfiles("dev", "development", "test")
     }
 
-    private fun developmentLoopbackAddress(host: String): List<InetAddress> {
+    private fun developmentAddresses(host: String): List<InetAddress> {
         return when (host) {
             "::1" -> listOf(InetAddress.getByAddress(IPV6_LOOPBACK))
-            else -> listOf(InetAddress.getByAddress(IPV4_LOOPBACK))
+            "localhost", "127.0.0.1" -> listOf(InetAddress.getByAddress(IPV4_LOOPBACK))
+            else -> runCatching { addressResolver.resolve(host) }.getOrElse {
+                throw DomainClientException(
+                    errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
+                    messageArguments = arrayOf("development Agent endpoint host could not be resolved"),
+                )
+            }.takeIf(List<InetAddress>::isNotEmpty) ?: throw DomainClientException(
+                errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
+                messageArguments = arrayOf("development Agent endpoint host could not be resolved"),
+            )
         }
     }
 

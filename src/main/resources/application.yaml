@@ -54,6 +54,7 @@ agent-store:
   service-name: agent-store-api
   api-version: 0.1.0
   runtime-callback-base-url: http://127.0.0.1:8080
+  demo-agent-base-url: http://127.0.0.1:8090
   cors-origins:
     - http://localhost:*
   runtime-token-secret: ${RUNTIME_TOKEN_SECRET}

@@ -1,0 +1,3 @@
+agent-store:
+  runtime-callback-base-url: http://api:8080
+  demo-agent-base-url: http://demo-agent:8090
