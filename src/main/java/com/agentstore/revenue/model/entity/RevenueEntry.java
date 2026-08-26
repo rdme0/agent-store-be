@@ -1,7 +1,6 @@
 package com.agentstore.revenue.model.entity;
 
 import com.agentstore.common.model.entity.BaseEntity;
-import com.agentstore.payment.model.vo.PaymentMode;
 import com.agentstore.revenue.model.vo.RevenueType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -49,19 +48,14 @@ public class RevenueEntry extends BaseEntity {
     @Column(nullable = false, columnDefinition = "BIGINT")
     private BigInteger amountAtomic;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "PaymentMode")
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    private PaymentMode paymentMode;
-
-    @Column(unique = true)
+    @Column(nullable = false, unique = true)
     private String transactionHash;
 
     @Column(unique = true)
     private String paymentIdentifier;
 
     public RevenueEntry(UUID id, UUID developerId, UUID executionStepId, UUID paymentAttemptId,
-            RevenueType type, BigInteger amountAtomic, PaymentMode paymentMode,
+            RevenueType type, BigInteger amountAtomic,
             String transactionHash, String paymentIdentifier) {
         this.id = id;
         this.developerId = developerId;
@@ -69,7 +63,6 @@ public class RevenueEntry extends BaseEntity {
         this.paymentAttemptId = paymentAttemptId;
         this.type = type;
         this.amountAtomic = amountAtomic;
-        this.paymentMode = paymentMode;
         this.transactionHash = transactionHash;
         this.paymentIdentifier = paymentIdentifier;
     }

@@ -1,6 +1,5 @@
 package com.agentstore.revenue.dto.response
 
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.revenue.model.entity.RevenueEntry
 import com.agentstore.revenue.model.vo.RevenueType
 import io.swagger.v3.oas.annotations.media.Schema
@@ -13,8 +12,7 @@ data class RevenueEntryResponse(
     val paymentAttemptId: UUID,
     @field:Schema(allowableValues = ["DIRECT", "DEPENDENCY"]) val type: RevenueType,
     @field:Schema(pattern = "^[0-9]+$") val amountAtomic: String,
-    @field:Schema(allowableValues = ["simulated", "x402"]) val paymentMode: String,
-    @field:Schema(nullable = false) val transactionHash: String? = null,
+    val transactionHash: String,
     @field:Schema(nullable = false) val paymentIdentifier: String? = null,
     val createdAt: Instant,
 ) {
@@ -26,11 +24,6 @@ data class RevenueEntryResponse(
                 paymentAttemptId = entry.paymentAttemptId,
                 type = entry.type,
                 amountAtomic = entry.amountAtomic.toString(),
-                paymentMode = if (entry.paymentMode == PaymentMode.X402) {
-                    "x402"
-                } else {
-                    "simulated"
-                },
                 transactionHash = entry.transactionHash,
                 paymentIdentifier = entry.paymentIdentifier,
                 createdAt = entry.createdAt,

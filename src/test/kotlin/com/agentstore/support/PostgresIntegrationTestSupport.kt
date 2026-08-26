@@ -18,7 +18,7 @@ import org.springframework.test.context.ActiveProfiles
         "agent-store.runtime-callback-base-url=http://127.0.0.1:8080",
         "agent-store.cors-origins=http://localhost:*",
         "agent-store.runtime-token-secret=integration-runtime-secret",
-        "agent-store.payment-mode=simulated",
+        "X402_PRIVATE_KEY=0x1111111111111111111111111111111111111111111111111111111111111111",
     ],
 )
 @ActiveProfiles("postgres-integration")

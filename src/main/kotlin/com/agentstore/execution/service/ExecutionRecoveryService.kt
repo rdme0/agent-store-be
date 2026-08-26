@@ -6,7 +6,6 @@ import com.agentstore.execution.model.vo.ExecutionStepStatus
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.payment.model.vo.PaymentAttemptStatus
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.service.PaymentService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
@@ -21,6 +20,12 @@ class ExecutionRecoveryService(
     @Transactional
     fun failActiveExecutions(): Int {
         var recovered = 0
+        paymentService.findRequiredAttempts().forEach { attempt ->
+            paymentService.markReconciliationRequired(
+                attemptId = attempt.id,
+                failureCode = "PAYMENT_RECONCILIATION_REQUIRED",
+            )
+        }
         executionRepository.findAllByStatusIn(
             listOf(
                 ExecutionStatus.PENDING,
@@ -35,20 +40,11 @@ class ExecutionRecoveryService(
                 }
                 val steps = stepRepository.findAllByExecutionIdOrderByCreatedAtAsc(execution.id)
                 val attempts = steps.flatMap { step -> paymentService.findAllByStepId(step.id) }
-                val ambiguousRequired = attempts.filter {
-                    it.paymentMode == PaymentMode.X402 && it.status == PaymentAttemptStatus.REQUIRED
-                }
-                ambiguousRequired.forEach { attempt ->
-                    paymentService.markReconciliationRequired(
-                        attemptId = attempt.id,
-                        failureCode = "PAYMENT_RECONCILIATION_REQUIRED",
-                    )
-                }
                 val unresolvedAttemptExists = attempts.any { attempt ->
                     attempt.status == PaymentAttemptStatus.RECONCILIATION_REQUIRED ||
                         (attempt.status == PaymentAttemptStatus.SETTLED && attempt.projectedAt == null)
                 }
-                val unresolved = ambiguousRequired.isNotEmpty() || unresolvedAttemptExists
+                val unresolved = unresolvedAttemptExists
                 steps.filter { step ->
                     step.status == ExecutionStepStatus.CREATED ||
                         step.status == ExecutionStepStatus.PAYMENT_REQUIRED ||

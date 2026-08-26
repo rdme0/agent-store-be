@@ -17,9 +17,9 @@
 | DEP-03 | 후보 51개 이상 | quote 거절 | 조용한 후보 절단 | `DependencyResolverFunctionContractTest` |
 | DEP-04 | metric strategy의 low-sample provider | exploration 없이는 거절 | 근거 없는 reliability/latency 선택 | `DependencyResolverFunctionContractTest` |
 | DEP-05 | allowlist 밖 provider | 후보에서 제외 | 선언 밖 호출·결제 | `DependencyResolverFunctionContractTest` |
-| DEP-06 | Quote 뒤 registry/가격 변경 | snapshot 대상만 실행 | 최신 provider로 교체 | PostgreSQL simulated E2E |
+| DEP-06 | Quote 뒤 registry/가격 변경 | snapshot 대상만 실행 | 최신 provider로 교체 | PostgreSQL runtime E2E |
 | RUN-01 | input schema 불일치 | reservation/payment 전 거절 | 외부 호출 또는 결제 | `ExecutionCapabilitySchemaTest` |
-| RUN-02 | output schema 불일치 | settlement 증거 보존 후 invocation failure | 자동 fallback·재결제 | PostgreSQL simulated E2E |
+| RUN-02 | output schema 불일치 | settlement 증거 보존 후 invocation failure | 자동 fallback·재결제 | PostgreSQL runtime E2E |
 | PAY-01 | 결제 후 timeout/unknown | reconciliation required | 다른 provider 재결제 | 기존 payment/recovery suite |
 | SSE-01 | replay/live 순서 경합 | terminal 상태 보존 | 과거 이벤트가 성공/실패 덮어씀 | existing execution SSE tests |
 

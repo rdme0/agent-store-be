@@ -7,7 +7,6 @@ import com.agentstore.payment.dto.internal.PaymentInvocationResultDto
 import com.agentstore.payment.dto.internal.PaymentReconciliationResultDto
 import com.agentstore.payment.exception.PaymentOutcomeUnknownException
 import com.agentstore.payment.model.entity.PaymentAttempt
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.x402.client.X402AgentClient
 import com.agentstore.x402.codec.X402HeaderCodec
 import com.agentstore.x402.dto.internal.X402PaymentRequiredDto
@@ -44,7 +43,6 @@ class X402PaymentService(
         private val EVM_TRANSACTION_HASH = Regex("^0x[0-9a-fA-F]{64}$")
     }
 
-    override val mode = PaymentMode.X402
     private val headerCodec = X402HeaderCodec(objectMapper)
 
     override fun invoke(request: PaymentInvocationRequestDto): PaymentInvocationResultDto {
@@ -104,16 +102,16 @@ class X402PaymentService(
         } catch (_: Exception) {
             throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
         }
-        if (!receipt.success || receipt.network != BASE_SEPOLIA || !EVM_TRANSACTION_HASH.matches(
-                receipt.transaction.orEmpty()
-            )
+        val transactionHash = receipt.transaction
+        if (!receipt.success || receipt.network != BASE_SEPOLIA || transactionHash == null ||
+            !EVM_TRANSACTION_HASH.matches(transactionHash)
         ) {
             throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
         }
         return PaymentInvocationResultDto(
             output = parseAgentOutput(paid.body),
-            transactionHash = receipt.transaction,
-            paymentIdentifier = receipt.transaction,
+            transactionHash = transactionHash,
+            paymentIdentifier = transactionHash,
             agentStatus = paid.status,
         )
     }

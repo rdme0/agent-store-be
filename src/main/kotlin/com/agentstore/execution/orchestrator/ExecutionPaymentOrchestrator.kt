@@ -47,7 +47,6 @@ class ExecutionPaymentOrchestrator(
             network = network,
             asset = asset,
             payTo = payTo,
-            paymentMode = paymentClient.mode,
         )
         var externalPaymentObserved = false
         return try {
@@ -74,17 +73,15 @@ class ExecutionPaymentOrchestrator(
                     body = body,
                 )
             )
-            val transactionHash = result.transactionHash ?: "simulated:$attemptId"
             externalPaymentObserved = true
             if (!settlementService.settleIfActive(
                     executionId = executionId,
                     stepId = stepId,
                     attemptId = attemptId,
                     amount = amount,
-                    transactionHash = transactionHash,
+                    transactionHash = result.transactionHash,
                     paymentIdentifier = result.paymentIdentifier,
                     revenueType = revenueType,
-                    paymentMode = paymentClient.mode,
                 )
             ) {
                 throw PaymentExecutionException(

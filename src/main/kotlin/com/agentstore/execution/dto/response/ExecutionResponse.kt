@@ -18,7 +18,6 @@ data class PaymentAttemptResponse(
     )
     val status: String,
     @field:Schema(pattern = "^[0-9]+$") val amountAtomic: String,
-    @field:Schema(allowableValues = ["simulated", "x402"]) val mode: String,
     @field:Schema(nullable = false) val transactionHash: String? = null,
     @field:Schema(nullable = false) val paymentIdentifier: String? = null,
     @field:Schema(nullable = false) val failureCode: String? = null
@@ -68,7 +67,6 @@ data class ExecutionStepResponse(
                         id = payment.id,
                         status = payment.status.name,
                         amountAtomic = payment.amountAtomic.toString(),
-                        mode = payment.paymentMode.name.lowercase(),
                         transactionHash = payment.transactionHash,
                         paymentIdentifier = payment.paymentIdentifier,
                         failureCode = payment.failureCode,

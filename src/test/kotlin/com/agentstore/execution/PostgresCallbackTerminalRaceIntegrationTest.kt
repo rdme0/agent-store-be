@@ -4,7 +4,6 @@ import com.agentstore.execution.guard.BudgetGuard
 import com.agentstore.execution.guard.RuntimeCallbackAdmissionService
 import com.agentstore.execution.orchestrator.ExecutionPaymentSettlementService
 import com.agentstore.execution.service.ExecutionRunService
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.service.PaymentService
 import com.agentstore.revenue.model.vo.RevenueType
 import com.agentstore.support.PostgresIntegrationTestSupport
@@ -91,8 +90,7 @@ class PostgresCallbackTerminalRaceIntegrationTest : PostgresIntegrationTestSuppo
             BigInteger.ONE,
             "eip155:84532",
             "USDC",
-            "0x0000000000000000000000000000000000000001",
-            PaymentMode.SIMULATED
+            "0x0000000000000000000000000000000000000001"
         )
         val barrier = CyclicBarrier(2)
         val pool = Executors.newFixedThreadPool(2)
@@ -106,8 +104,7 @@ class PostgresCallbackTerminalRaceIntegrationTest : PostgresIntegrationTestSuppo
                     BigInteger.ONE,
                     "0x${UUID.randomUUID().toString().replace("-", "")}",
                     attemptId.toString(),
-                    RevenueType.DIRECT,
-                    PaymentMode.SIMULATED
+                    RevenueType.DIRECT
                 )
             })
             val terminal = pool.submit(Callable {

@@ -3,7 +3,6 @@ package com.agentstore.execution.orchestrator
 import com.agentstore.execution.event.ExecutionEventService
 import com.agentstore.execution.guard.BudgetGuard
 import com.agentstore.execution.service.ExecutionStepService
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.service.PaymentService
 import jakarta.transaction.Transactional
 import java.math.BigInteger
@@ -25,7 +24,6 @@ class ExecutionPaymentPreparationService(
         network: String,
         asset: String,
         payTo: String,
-        paymentMode: PaymentMode
     ): UUID {
         budgetGuard.reserve(executionId = executionId, amount = amount)
         val attemptId = paymentService.require(
@@ -34,7 +32,6 @@ class ExecutionPaymentPreparationService(
             network = network,
             asset = asset,
             payTo = payTo,
-            mode = paymentMode,
         )
         stepService.markPaymentRequired(stepId = stepId)
         eventService.append(

@@ -2,7 +2,6 @@ package com.agentstore.payment
 
 import com.agentstore.payment.model.entity.PaymentAttempt
 import com.agentstore.payment.model.vo.PaymentAttemptStatus
-import com.agentstore.payment.model.vo.PaymentMode
 import java.math.BigInteger
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -18,13 +17,12 @@ class PaymentAttemptTest {
             "eip155:84532",
             "USDC",
             "0xreceiver",
-            PaymentMode.SIMULATED
         )
-        attempt.settled("simulated:tx", "simulated:payment")
+        attempt.settled("0x${"a".repeat(64)}", "0x${"a".repeat(64)}")
 
         assertEquals(PaymentAttemptStatus.SETTLED, attempt.status)
-        assertEquals("simulated:tx", attempt.transactionHash)
-        assertEquals("simulated:payment", attempt.paymentIdentifier)
+        assertEquals("0x${"a".repeat(64)}", attempt.transactionHash)
+        assertEquals("0x${"a".repeat(64)}", attempt.paymentIdentifier)
     }
 
     @Test
@@ -36,9 +34,8 @@ class PaymentAttemptTest {
             "eip155:84532",
             "USDC",
             "0xreceiver",
-            PaymentMode.SIMULATED
         )
-        attempt.settled("simulated:tx", null)
+        attempt.settled("0x${"b".repeat(64)}", null)
         attempt.failed("late_failure")
         attempt.reconciliationRequired("late_reconciliation")
 

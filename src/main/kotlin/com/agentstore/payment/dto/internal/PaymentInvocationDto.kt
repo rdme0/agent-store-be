@@ -17,7 +17,7 @@ data class PaymentInvocationRequestDto(
 
 data class PaymentInvocationResultDto(
     val output: JsonNode,
-    val transactionHash: String? = null,
+    val transactionHash: String,
     val paymentIdentifier: String? = null,
     val agentStatus: Int = 200,
 )

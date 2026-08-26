@@ -17,7 +17,6 @@ class InvocationTokenServiceTest {
             runtimeCallbackBaseUrl = "http://127.0.0.1:8080",
             corsOrigins = listOf("*"),
             runtimeTokenSecret = "test-secret",
-                paymentMode = "simulated",
                 bithumbApiUrl = "https://api.bithumb.com",
                 bithumbRequestTimeout = Duration.ofSeconds(2),
                 bithumbCacheTtl = Duration.ofSeconds(60),

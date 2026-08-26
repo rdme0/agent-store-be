@@ -44,7 +44,7 @@ flowchart TB
     Chain["Base Sepolia"]
     Browser -->|JSON API와 SSE| Spring
     Spring -->|JPA transaction| DB
-    Spring -->|simulated 또는 EIP - 3009 서명 호출| Demo
+    Spring -->|EIP-3009 서명 호출| Demo
     Demo -->|verify / settle| Facilitator
     Facilitator -->|USDC settlement| Chain
 ```
@@ -177,9 +177,7 @@ Agent output이 Version의 `responseFormat`과 맞지 않으면 결제 기록을
 
 ## 4. 결제, 장애, 복구
 
-- `agent-store.payment-mode=simulated`: 실제 chain 결제 없이 동일한 원장 흐름을 검사합니다.
-- `agent-store.payment-mode=x402`: Spring이 전용 hot-wallet private key로 Base Sepolia USDC EIP-3009 payload를 직접
-  서명합니다.
+- Spring은 전용 hot-wallet private key로 Base Sepolia USDC EIP-3009 payload를 직접 서명합니다.
 
 네트워크 timeout은 실패를 뜻하지 않습니다. 외부 결제는 성공하고 응답만 유실될 수 있어 서버는 side effect 전에 payment intent와 budget
 reservation을 먼저 영속화합니다.
@@ -354,7 +352,7 @@ validate합니다. 이미 적용한 migration을 수정하지 말고 새 migrati
 |---|---|
 | `POSTGRES_PASSWORD` | Docker Compose PostgreSQL과 API의 개발용 PostgreSQL 비밀번호 |
 | `RUNTIME_TOKEN_SECRET` | callback token과 cursor 서명 secret |
-| `X402_PRIVATE_KEY` | x402 mode 전용 저잔액 payer key, `0x` + 64자리 hex |
+| `X402_PRIVATE_KEY` | 필수 저잔액 payer key, `0x` + 64자리 hex |
 | `POSTGRES_PORT` | `agent-store-infra` Docker Compose가 직접 읽는 PostgreSQL host port |
 
 credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
@@ -366,7 +364,7 @@ Demo Agent는 독립 Go 서비스이지만 개발 Compose에서는 API 컨테이
 `dev` profile Spring은 `agents`가 0개일 때만 demo catalog를 직접 생성합니다. 기존 Agent가 하나라도 있으면 아무것도 바꾸지 않으며,
 신규 volume에서는 user, developer, Function Contract, Agent Version, dependency가 함께 생성됩니다.
 
-`agent-store.payment-mode=x402`에서 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
+Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet
 자금이 준비돼야 하며 funded Base Sepolia 성공을 보장하지 않습니다.
 

@@ -25,14 +25,13 @@ import com.agentstore.dependency.resolver.DependencyResolver
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.payment.service.KrwEstimateService
 import com.agentstore.payment.client.PinnedAgentRestClientFactory
-import com.agentstore.payment.client.SimulatedPaymentClient
 import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
+import com.agentstore.x402.client.X402AgentClient
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sun.net.httpserver.HttpServer
 import java.math.BigInteger
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.time.Duration
 import java.util.UUID
 import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
@@ -171,31 +170,17 @@ class AgentEndpointAdmissionTest {
     }
 
     @Test
-    fun `simulated client rejects unsafe endpoint before outbound request construction`() {
-        val client = SimulatedPaymentClient(
+    fun `native x402 client rejects unsafe endpoint before outbound request construction`() {
+        val client = X402AgentClient(
             endpointPolicy = productionPolicy(),
             pinnedClientFactory = PinnedAgentRestClientFactory(),
-            objectMapper = ObjectMapper(),
-            invocationDeadline = Duration.ofSeconds(30),
-        )
-        val request = PaymentInvocationRequestDto(
-            "attempt",
-            "key",
-            "token",
-            "https://agent.example.com",
-            "1",
-            "1",
-            "eip155:84532",
-            "USDC",
-            RECEIVER,
-            mapOf("input" to "test")
         )
 
-        assertUnsafe { client.invoke(request) }
+        assertUnsafe { client.prepare(endpoint = "https://agent.example.com") }
     }
 
     @Test
-    fun `simulated client pins loopback connection preserves host and does not follow redirects`() {
+    fun `native x402 client pins loopback connection preserves host and does not follow redirects`() {
         val redirectedRequests = AtomicInteger()
         val target = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/target") { exchange ->
@@ -222,26 +207,32 @@ class AgentEndpointAdmissionTest {
             val policy = AgentEndpointPolicy(
                 MockEnvironment().apply { setActiveProfiles("dev") },
                 AgentEndpointAddressResolver { error("loopback must not use DNS") })
-            val client = SimulatedPaymentClient(
+            val client = X402AgentClient(
                 endpointPolicy = policy,
                 pinnedClientFactory = PinnedAgentRestClientFactory(),
-                objectMapper = ObjectMapper(),
-                invocationDeadline = Duration.ofSeconds(30),
             )
             val request = PaymentInvocationRequestDto(
-                "attempt",
-                "key",
-                "token",
-                "http://localhost:${redirect.address.port}/invoke",
-                "1",
-                "1",
-                "eip155:84532",
-                "USDC",
-                RECEIVER,
-                emptyMap<String, Any>()
+                paymentAttemptId = "attempt",
+                idempotencyKey = "key",
+                invocationToken = "token",
+                endpoint = "http://localhost:${redirect.address.port}/invoke",
+                amountAtomic = "1",
+                maxPriceAtomic = "1",
+                network = "eip155:84532",
+                asset = "USDC",
+                payTo = RECEIVER,
+                body = emptyMap<String, Any>(),
             )
 
-            assertThrows(IllegalStateException::class.java) { client.invoke(request) }
+            val response = client.post(
+                connection = client.prepare(endpoint = request.endpoint),
+                request = request,
+                body = ObjectMapper().writeValueAsBytes(request.body),
+                paymentSignature = null,
+                deadline = System.nanoTime() + 30_000_000_000,
+            )
+
+            assertEquals(302, response.status)
             assertEquals("localhost:${redirect.address.port}", receivedHost)
             assertEquals(0, redirectedRequests.get())
         } finally {

@@ -10,7 +10,6 @@ data class AgentStoreProperties(
     val runtimeCallbackBaseUrl: String,
     val corsOrigins: List<String>,
     val runtimeTokenSecret: String,
-    val paymentMode: String,
     val bithumbApiUrl: String,
     val bithumbRequestTimeout: Duration,
     val bithumbCacheTtl: Duration,

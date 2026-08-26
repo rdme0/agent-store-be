@@ -4,7 +4,6 @@ import com.agentstore.execution.orchestrator.ExecutionPaymentRecoveryProjectionO
 import com.agentstore.execution.service.ExecutionLifecycleService
 import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.payment.client.PaymentReconciliationClient
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.model.vo.PaymentReconciliationStatus
 import java.util.UUID
 import org.springframework.stereotype.Service
@@ -25,9 +24,6 @@ class PaymentSettlementRecoveryService(
             recovered += projectSettledAttempt(attempt.id)
         }
         paymentService.findReconciliationRequiredAttempts().forEach { attempt ->
-            if (attempt.paymentMode != PaymentMode.X402) {
-                return@forEach
-            }
             val result = reconciliationClient.reconcile(attempt)
             // Neither a process restart/transport UNKNOWN nor a request rejection can prove
             // that the original signed payment did not settle. Both retain the reservation.

@@ -7,7 +7,7 @@ description: Keep AgentStore Kotlin/Spring native x402, demo-agent, database, an
 
 Document the Spring process (`8080`) and the optional independent Go demo-agent (`8090`), profiles,
 YAML-owned public configuration, secret-only Spring `.env`, Flyway baseline/migrate behavior,
-simulated versus native x402 mode, Spring-only hot-wallet secret handling, and exact Gradle/Go
-verification commands. Docker Compose interpolation may retain its required `.env` values. The
+native x402-only payment, Spring-only hot-wallet secret handling, and exact Gradle/Go verification
+commands. Docker Compose interpolation may retain its required `.env` values. The
 demo-agent owns its own `.env.example` and README; backend documentation only links to it. Do not
 claim Base Sepolia smoke success without funded configuration.

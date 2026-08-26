@@ -32,7 +32,7 @@ JSON field. Preserve
 PostgreSQL schema/data, Flyway history, ACTIVE-version immutability, dependency limits,
 execution/payment/recovery state machines, callback authentication, SSE replay, and the native x402
 signing boundary.
-When `PAYMENT_MODE=x402`, Spring supports only x402 v2 `exact` EIP-3009 on Base Sepolia USDC. The
+Spring supports only x402 v2 `exact` EIP-3009 on Base Sepolia USDC. The
 dedicated hot-wallet
 private key, typed-data payload, signature, and raw x402 headers must never be persisted or logged.
 Spring is the only database writer. Preserve pre-existing dirty paths

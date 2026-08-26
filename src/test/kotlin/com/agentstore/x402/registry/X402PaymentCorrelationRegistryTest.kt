@@ -37,7 +37,7 @@ class X402PaymentCorrelationRegistryTest {
                     5,
                     TimeUnit.SECONDS
                 ).transactionHash
-            }).containsOnly("0xtx")
+            }).containsOnly("0x${"a".repeat(64)}")
             assertThat(calls).hasValue(1)
         } finally {
             executor.shutdownNow()
@@ -62,8 +62,8 @@ class X402PaymentCorrelationRegistryTest {
     private fun settled(): PaymentInvocationResultDto {
         return PaymentInvocationResultDto(
             output = NullNode.instance,
-            transactionHash = "0xtx",
-            paymentIdentifier = "0xtx",
+            transactionHash = "0x${"a".repeat(64)}",
+            paymentIdentifier = "0x${"a".repeat(64)}",
             agentStatus = 200,
         )
     }

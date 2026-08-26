@@ -6,7 +6,6 @@ import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.payment.client.PaymentReconciliationClient
 import com.agentstore.payment.dto.internal.PaymentReconciliationResultDto
 import com.agentstore.payment.model.entity.PaymentAttempt
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.model.vo.PaymentReconciliationStatus
 import com.agentstore.payment.service.PaymentExternalSettlementService
 import com.agentstore.payment.service.PaymentService
@@ -47,10 +46,9 @@ class PaymentSettlementRecoveryServiceTest {
             BigInteger.ONE,
             "eip155:84532",
             "USDC",
-            "0xreceiver",
-            PaymentMode.SIMULATED
+            "0xreceiver"
         )
-        attempt.settled("simulated:tx", "payment-id")
+        attempt.settled("0x${"a".repeat(64)}", "payment-id")
 
         `when`(paymentService.findSettledAttempts()).thenReturn(listOf(attempt))
         `when`(paymentService.find(attempt.id)).thenReturn(attempt)
@@ -89,8 +87,7 @@ class PaymentSettlementRecoveryServiceTest {
             BigInteger.ONE,
             "eip155:84532",
             "USDC",
-            "0xreceiver",
-            PaymentMode.X402
+            "0xreceiver"
         )
         attempt.reconciliationRequired("PAYMENT_RECONCILIATION_REQUIRED")
         `when`(paymentService.findSettledAttempts()).thenReturn(emptyList())

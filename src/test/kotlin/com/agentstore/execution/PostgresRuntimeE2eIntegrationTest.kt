@@ -11,7 +11,6 @@ import com.agentstore.dependency.resolver.DependencyResolver
 import com.agentstore.payment.client.PaymentClient
 import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
 import com.agentstore.payment.dto.internal.PaymentInvocationResultDto
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.support.DependencyRuntimeFixture
 import com.agentstore.support.PostgresIntegrationTestSupport
 import com.fasterxml.jackson.databind.JsonNode
@@ -32,8 +31,8 @@ import org.springframework.context.annotation.Primary
 
 @EnabledIfEnvironmentVariable(named = "RUN_POSTGRES_INTEGRATION_TESTS", matches = "true")
 @EnabledIfEnvironmentVariable(named = "SPRING_EXCLUSIVE_MAINTENANCE", matches = "true")
-@Import(PostgresSimulatedRuntimeE2eIntegrationTest.PaymentClientConfiguration::class)
-class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
+@Import(PostgresRuntimeE2eIntegrationTest.TestPaymentClientConfiguration::class)
+class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
     @Autowired
     private lateinit var runner: ExecutionRunner
 
@@ -53,7 +52,7 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
     private lateinit var objectMapper: ObjectMapper
 
     @Test
-    fun `simulated root invokes declared dependency then completes with persisted SSE and revenue`() {
+    fun `test payment client invokes declared dependency then completes with persisted SSE and revenue`() {
         val fixture = runtimeFixture.createRootWithDependency()
         paymentClient.arm(fixture)
 
@@ -106,7 +105,12 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
                 fixture.root.executionId
             )
         ).isEqualTo(2)
-        assertThat(events.replay(fixture.root.executionId, 0).map { it.type }).contains(
+        assertThat(
+            events.replay(
+                executionId = fixture.root.executionId,
+                afterSequence = 0,
+            ).map { event -> event.type },
+        ).contains(
             "DEPENDENCY_STEP_COMPLETED",
             "EXECUTION_COMPLETED"
         )
@@ -434,7 +438,7 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
 
     private fun awaitTerminalEvents(executionId: UUID): List<ExecutionEventResponse> {
         repeat(50) {
-            val replay = events.replay(executionId, 0)
+            val replay = events.replay(executionId = executionId, afterSequence = 0)
             if (replay.lastOrNull()?.type in setOf(
                     "EXECUTION_COMPLETED",
                     "EXECUTION_FAILED",
@@ -456,23 +460,28 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
         error(
             "Timed out waiting for terminal SSE event; execution=$execution steps=$steps events=${
                 events.replay(
-                    executionId,
-                    0
+                    executionId = executionId,
+                    afterSequence = 0,
                 )
             }"
         )
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    class PaymentClientConfiguration {
+    class TestPaymentClientConfiguration {
         @Bean
         @Primary
         fun callbackPaymentClient(
             tokenService: InvocationTokenService,
             callbackService: ObjectProvider<RuntimeCallbackService>,
             objectMapper: ObjectMapper,
-        ): CallbackPaymentClient =
-            CallbackPaymentClient(tokenService, callbackService, objectMapper)
+        ): CallbackPaymentClient {
+            return CallbackPaymentClient(
+                tokenService = tokenService,
+                callbackService = callbackService,
+                objectMapper = objectMapper,
+            )
+        }
     }
 
     class CallbackPaymentClient(
@@ -480,7 +489,6 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
         private val callbackService: ObjectProvider<RuntimeCallbackService>,
         private val objectMapper: ObjectMapper,
     ) : PaymentClient {
-        override val mode = PaymentMode.SIMULATED
 
         @Volatile
         private var fixture: DependencyRuntimeFixture? = null
@@ -525,30 +533,15 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
         }
 
         fun returnRootMarkdown(markdown: String) {
-            rootOutput = demoAgentEnvelope(
-                agentCode = "root",
-                output = objectMapper.nodeFactory.textNode(markdown),
-            )
+            rootOutput = objectMapper.createObjectNode().put("output", markdown)
         }
 
         fun returnChildText(text: String) {
-            childOutput = demoAgentEnvelope(
-                agentCode = "child",
-                output = objectMapper.nodeFactory.textNode(text),
-            )
+            childOutput = objectMapper.createObjectNode().put("output", text)
         }
 
         fun callbackInputs(): List<JsonNode> {
             return callbackInputs.toList()
-        }
-
-        private fun demoAgentEnvelope(agentCode: String, output: JsonNode): JsonNode {
-            val envelope = objectMapper.createObjectNode()
-            envelope.put("transport", "agentstore-demo/v1")
-            envelope.put("agent", agentCode)
-            envelope.set<JsonNode>("output", output)
-            envelope.set<JsonNode>("dependencyResults", objectMapper.createObjectNode())
-            return envelope
         }
 
         override fun invoke(request: PaymentInvocationRequestDto): PaymentInvocationResultDto {
@@ -578,16 +571,20 @@ class PostgresSimulatedRuntimeE2eIntegrationTest : PostgresIntegrationTestSuppor
                     throw exception
                 }
                 return PaymentInvocationResultDto(
-                    rootOutput ?: objectMapper.readTree("{\"agent\":\"root\",\"status\":\"completed\"}"),
-                    "simulated-root-${request.paymentAttemptId}",
-                    request.paymentAttemptId
+                    output = rootOutput ?: objectMapper.readTree("{\"agent\":\"root\",\"status\":\"completed\"}"),
+                    transactionHash = transactionHash(request = request),
+                    paymentIdentifier = request.paymentAttemptId,
                 )
             }
             return PaymentInvocationResultDto(
-                childOutput ?: objectMapper.readTree("{\"agent\":\"child\",\"status\":\"completed\"}"),
-                "simulated-child-${request.paymentAttemptId}",
-                request.paymentAttemptId
+                output = childOutput ?: objectMapper.readTree("{\"agent\":\"child\",\"status\":\"completed\"}"),
+                transactionHash = transactionHash(request = request),
+                paymentIdentifier = request.paymentAttemptId,
             )
+        }
+
+        private fun transactionHash(request: PaymentInvocationRequestDto): String {
+            return "0x${request.paymentAttemptId.replace("-", "").padEnd(64, '0')}"
         }
     }
 }

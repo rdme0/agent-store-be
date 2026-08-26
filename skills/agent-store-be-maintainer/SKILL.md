@@ -127,6 +127,10 @@ that express real nullability, uniqueness, column definition, or a genuinely dif
 - Native x402 supports only v2 `exact` EIP-3009 on Base Sepolia USDC. Never persist or log the hot
   wallet key, typed data, signature, or raw payment headers. Challenge matching, timeout, size,
   endpoint/redirect, duplicate correlation, and reconcile behavior remain fail-closed.
+- Runtime payment is native x402-only. Do not add a simulated payment mode, simulated payment
+  client, payment-mode database field, REST/SSE payment-mode field, or synthetic settlement hash.
+  Tests may use an explicitly named test double that returns a valid-shaped transaction hash, but
+  it must not create a production runtime branch or alter recovery semantics.
 
 ## Verification and handoff
 

@@ -57,7 +57,6 @@ agent-store:
   cors-origins:
     - http://localhost:*
   runtime-token-secret: ${RUNTIME_TOKEN_SECRET}
-  payment-mode: simulated
   bithumb-api-url: https://api.bithumb.com
   bithumb-request-timeout: PT2S
   bithumb-cache-ttl: PT60S

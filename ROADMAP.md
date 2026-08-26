@@ -44,7 +44,7 @@ Agent 간 거래를 증명한다. 특정 도메인 서비스에 플랫폼의 구
 - Agent와 immutable ACTIVE Version 등록
 - 명시적인 Agent dependency와 DAG quote 계산
 - Version, endpoint, 가격, 결제 조건과 호출 한도가 고정된 quote snapshot
-- simulated 결제와 Base Sepolia USDC x402 v2 `exact` EIP-3009 결제
+- Base Sepolia USDC x402 v2 `exact` EIP-3009 결제
 - Agent별 payment journal, reservation, settlement와 revenue projection
 - 중복 실행 방지, unknown 결제 reconciliation과 recovery
 - runtime callback 인증, SSE 실행 관찰과 output format 검증
@@ -66,14 +66,13 @@ Agent 간 거래를 증명한다. 특정 도메인 서비스에 플랫폼의 구
 - 최소 두 개의 독립 실행 endpoint 또는 프로세스로 공급자 경계를 보여준다.
 - Agent별 가격과 실제 정산 수익을 실행 graph에서 확인할 수 있게 한다.
 - funded Base Sepolia 환경의 실제 x402 실행을 opt-in smoke로 검증한다.
-- 심사와 장애 대응을 위해 지갑 없이 사용할 수 있는 deterministic simulated 경로도 유지한다.
 - 실행 전 최대 비용, Agent별 실제 비용, 결제 상태와 공급자 수익을 한 화면에서 설명한다.
 
 완료 기준:
 
 - 하나의 root 실행이 둘 이상의 독립 `payTo`로 정산된다.
 - 같은 실행의 quote, dependency step, payment journal과 revenue 합계가 일치한다.
-- 실제 x402 성공 증거와 simulated 재현 경로가 모두 준비된다.
+- 실제 x402 성공 증거와 payment journal·reconciliation 재현 경로가 준비된다.
 
 ## Phase 2 — 교체 가능한 Agent 계약
 

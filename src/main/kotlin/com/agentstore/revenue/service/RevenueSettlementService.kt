@@ -30,7 +30,6 @@ class RevenueSettlementService(
                 attempt.id,
                 type,
                 attempt.amountAtomic,
-                attempt.paymentMode,
                 attempt.transactionHash,
                 attempt.paymentIdentifier
             )

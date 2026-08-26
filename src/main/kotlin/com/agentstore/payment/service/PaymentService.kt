@@ -3,7 +3,6 @@ package com.agentstore.payment.service
 import com.agentstore.payment.model.entity.PaymentAttempt
 import com.agentstore.payment.model.entity.PaymentSettlementJournal
 import com.agentstore.payment.model.vo.PaymentAttemptStatus
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.repository.PaymentAttemptRepository
 import com.agentstore.payment.repository.PaymentSettlementJournalRepository
 import jakarta.transaction.Transactional
@@ -26,6 +25,10 @@ class PaymentService(
 
     fun findReconciliationRequiredAttempts(): List<PaymentAttempt> {
         return attemptRepository.findAllByStatusIn(listOf(PaymentAttemptStatus.RECONCILIATION_REQUIRED))
+    }
+
+    fun findRequiredAttempts(): List<PaymentAttempt> {
+        return attemptRepository.findAllByStatusIn(listOf(PaymentAttemptStatus.REQUIRED))
     }
 
     @Transactional
@@ -56,9 +59,8 @@ class PaymentService(
         network: String,
         asset: String,
         payTo: String,
-        mode: PaymentMode
     ): UUID {
-        val attempt = PaymentAttempt(UUID.randomUUID(), stepId, amount, network, asset, payTo, mode)
+        val attempt = PaymentAttempt(UUID.randomUUID(), stepId, amount, network, asset, payTo)
         return attemptRepository.save(attempt).id
     }
 

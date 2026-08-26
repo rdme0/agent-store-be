@@ -10,11 +10,14 @@ import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
 import com.agentstore.dependency.service.DependencyService
 import com.agentstore.support.PostgresIntegrationTestSupport
 import java.sql.Connection
+import java.sql.SQLException
+import java.sql.Statement
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.junit.jupiter.api.Test
+import org.springframework.core.io.ClassPathResource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
 
@@ -33,7 +36,7 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
             String::class.java,
         )
-        assertEquals("22", version)
+        assertEquals("23", version)
         assertEquals(
             1,
             jdbcTemplate.queryForObject(
@@ -84,6 +87,20 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             1,
             jdbcTemplate.queryForObject(
                 "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'agent_dependency_allowed_providers' and column_name = 'updated_at'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = 'public' and table_name in ('payment_attempts', 'revenue_entries') and column_name = 'payment_mode'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
+                "select count(*) from pg_type where typname = 'PaymentMode'",
                 Int::class.java,
             ),
         )
@@ -218,6 +235,101 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
                 fixtureId
             )
         )
+    }
+
+    @Test
+    fun `V23 rejects a historical simulated payment before removing its payment mode`() {
+        executeV23AgainstTemporarySchema(
+            paymentMode = "SIMULATED",
+            revenueTransactionHash = "0x${"a".repeat(64)}",
+            expectedMessage = "simulated payment records require an explicit local database reset before V23",
+        ) { statement ->
+            assertEquals(
+                1,
+                count(
+                    statement = statement,
+                    query = "select count(*) from payment_attempts where payment_mode = 'SIMULATED'",
+                ),
+            )
+            assertEquals(
+                1,
+                count(
+                    statement = statement,
+                    query = "select count(*) from information_schema.columns where table_name = 'payment_attempts' and column_name = 'payment_mode'",
+                ),
+            )
+            assertEquals(
+                1,
+                count(
+                    statement = statement,
+                    query = "select count(*) from pg_type where typname = 'PaymentMode' and typnamespace = pg_my_temp_schema()",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `V23 rejects revenue without a native transaction hash before changing the schema`() {
+        executeV23AgainstTemporarySchema(
+            paymentMode = "X402",
+            revenueTransactionHash = null,
+            expectedMessage = "revenue without a native transaction hash requires an explicit local database reset before V23",
+        ) { statement ->
+            assertEquals(
+                1,
+                count(
+                    statement = statement,
+                    query = "select count(*) from revenue_entries where transaction_hash is null",
+                ),
+            )
+            assertEquals(
+                1,
+                count(
+                    statement = statement,
+                    query = "select count(*) from information_schema.columns where table_name = 'revenue_entries' and column_name = 'payment_mode'",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `V23 removes legacy mode schema only for native payment evidence`() {
+        jdbcTemplate.execute<Unit> { connection: Connection ->
+            connection.createStatement().use { statement ->
+                createV23TemporarySchema(
+                    statement = statement,
+                    paymentMode = "X402",
+                    revenueTransactionHash = "0x${"a".repeat(64)}",
+                )
+                try {
+                    statement.execute(v23Sql())
+
+                    assertEquals(
+                        0,
+                        count(
+                            statement = statement,
+                            query = "select count(*) from information_schema.columns where table_name in ('payment_attempts', 'revenue_entries') and column_name = 'payment_mode'",
+                        ),
+                    )
+                    assertEquals(
+                        0,
+                        count(
+                            statement = statement,
+                            query = "select count(*) from pg_type where typname = 'PaymentMode' and typnamespace = pg_my_temp_schema()",
+                        ),
+                    )
+                    assertEquals(
+                        1,
+                        count(
+                            statement = statement,
+                            query = "select count(*) from revenue_entries where transaction_hash = '0x${"a".repeat(64)}'",
+                        ),
+                    )
+                } finally {
+                    cleanupV23TemporarySchema(statement = statement)
+                }
+            }
+        }
     }
 
     @Test
@@ -370,6 +482,66 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             id,
             key,
         )
+    }
+
+    private fun executeV23AgainstTemporarySchema(
+        paymentMode: String,
+        revenueTransactionHash: String?,
+        expectedMessage: String,
+        verifyFailure: (Statement) -> Unit,
+    ) {
+        jdbcTemplate.execute<Unit> { connection: Connection ->
+            connection.createStatement().use { statement ->
+                createV23TemporarySchema(
+                    statement = statement,
+                    paymentMode = paymentMode,
+                    revenueTransactionHash = revenueTransactionHash,
+                )
+                try {
+                    val exception = assertThrows(SQLException::class.java) {
+                        statement.execute(v23Sql())
+                    }
+                    assertEquals(true, exception.message.orEmpty().contains(expectedMessage))
+                    verifyFailure(statement)
+                } finally {
+                    cleanupV23TemporarySchema(statement = statement)
+                }
+            }
+        }
+    }
+
+    private fun createV23TemporarySchema(
+        statement: Statement,
+        paymentMode: String,
+        revenueTransactionHash: String?,
+    ) {
+        statement.execute("create type pg_temp.\"PaymentMode\" as enum ('SIMULATED', 'X402')")
+        statement.execute("set search_path to pg_temp, public")
+        statement.execute("create temporary table payment_attempts (payment_mode \"PaymentMode\")")
+        statement.execute("create temporary table revenue_entries (payment_mode \"PaymentMode\", transaction_hash text)")
+        statement.execute("insert into payment_attempts (payment_mode) values ('$paymentMode'::\"PaymentMode\")")
+        val hashValue = revenueTransactionHash?.let { value -> "'$value'" } ?: "null"
+        statement.execute("insert into revenue_entries (payment_mode, transaction_hash) values ('$paymentMode'::\"PaymentMode\", $hashValue)")
+    }
+
+    private fun cleanupV23TemporarySchema(statement: Statement) {
+        statement.execute("drop table if exists revenue_entries")
+        statement.execute("drop table if exists payment_attempts")
+        statement.execute("drop type if exists \"PaymentMode\"")
+        statement.execute("set search_path to public")
+    }
+
+    private fun count(statement: Statement, query: String): Int {
+        statement.executeQuery(query).use { result ->
+            check(result.next())
+            return result.getInt(1)
+        }
+    }
+
+    private fun v23Sql(): String {
+        return ClassPathResource(
+            "db/migration/V23__20260826000000_remove_simulated_payment_mode.sql",
+        ).inputStream.bufferedReader().use { reader -> reader.readText() }
     }
 
     private fun tryAdvisoryLock(connection: Connection, key: String): Boolean {

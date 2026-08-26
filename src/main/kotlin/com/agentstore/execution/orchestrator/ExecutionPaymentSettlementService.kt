@@ -6,7 +6,6 @@ import com.agentstore.execution.model.vo.ExecutionStatus
 import com.agentstore.execution.model.vo.ExecutionStepStatus
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
-import com.agentstore.payment.model.vo.PaymentMode
 import com.agentstore.payment.service.PaymentExternalSettlementService
 import com.agentstore.payment.service.PaymentService
 import com.agentstore.revenue.model.vo.RevenueType
@@ -36,7 +35,6 @@ class ExecutionPaymentSettlementService(
         transactionHash: String,
         paymentIdentifier: String?,
         revenueType: RevenueType,
-        paymentMode: PaymentMode,
     ): Boolean {
         // Global execution state-machine lock order: execution → step → payment attempt.
         val execution =
@@ -73,7 +71,6 @@ class ExecutionPaymentSettlementService(
                 "paymentAttemptId" to attemptId,
                 "amountAtomic" to amount.toString(),
                 "transactionHash" to transactionHash,
-                "paymentMode" to paymentMode.name,
             ),
         )
         // Normal and recovery projections share one durable per-attempt idempotency proof.

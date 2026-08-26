@@ -18,8 +18,8 @@
 | ID | 실패 경계·불변식 | 회귀 검증 |
 |---|---|---|
 | AC-BE-01 | V21은 기존 `agents.slug` 값·unique index를 `code`로 보존하며 적용된 migration을 바꾸지 않는다. | `PostgresSchemaIntegrationTest`의 V21 scratch-schema data/index 검증과 current Flyway schema 검증 |
-| AC-BE-02 | 과거 quote JSONB의 `agentSlug`/`targetAgentSlug`는 읽을 때 canonical `agentCode`/`targetAgentCode`가 되어 root 실행·callback path에서 빈 값이 되지 않는다. | `QuoteSnapshotCompatibilityTest`, `ExecutionCapabilitySchemaTest`, `PostgresSimulatedRuntimeE2eIntegrationTest` |
-| AC-BE-03 | runtime JSON 결과의 business `output` 필드는 보존하고, bundled demo-agent의 `agent`·`dependencyResults` transport envelope만 unwrap한다. | `RuntimeOutputEnvelopeTest`, `PostgresSimulatedRuntimeE2eIntegrationTest` |
+| AC-BE-02 | 과거 quote JSONB의 `agentSlug`/`targetAgentSlug`는 읽을 때 canonical `agentCode`/`targetAgentCode`가 되어 root 실행·callback path에서 빈 값이 되지 않는다. | `QuoteSnapshotCompatibilityTest`, `ExecutionCapabilitySchemaTest`, `PostgresRuntimeE2eIntegrationTest` |
+| AC-BE-03 | runtime JSON 결과의 business `output` 필드는 보존하고, bundled demo-agent의 `agent`·`dependencyResults` transport envelope만 unwrap한다. | `RuntimeOutputEnvelopeTest`, `PostgresRuntimeE2eIntegrationTest` |
 | AC-BE-04 | dev initializer는 registry가 비었을 때만 고정 demo catalog를 생성하고, 기존 Agent가 있으면 변경하지 않는다. | `DemoCatalogInitializerTest` |
 | AC-BE-05 | catalog 생성은 기존 Agent/Version/Dependency service 경계를 통해 하나의 transaction으로 처리되고, empty registry에서만 시작된다. | `DemoCatalogInitializerTest` |
 | AC-BE-06 | public API/OpenAPI는 `{code}` 계약과 `CommonResponse`만 노출하며 demo catalog용 HTTP endpoint는 없다. | Spring `/openapi.json` 재생성 뒤 `openapi/openapi.json` parity 검사와 FE `npm run api:generate` |
@@ -29,7 +29,7 @@
 
 - 경로: `C:\Users\we661\IdeaProjects\agent-store-be`
 - 스택: Kotlin/Spring + Java JPA Entity/VO/Enum, PostgreSQL/Flyway, Web3j native x402
-- FE: `C:\Users\we661\WebstormProjects\agent-store-fe`
+- FE: `C:\Users\we661\IdeaProjects\agent-store-fe`
 - API OpenAPI artifact: `openapi\openapi.json`
 
 ## 구조 규칙
@@ -74,7 +74,7 @@
   중복 Quote를 막는다. receipt token은 header로 한 번만 반환하고 hash만 저장한다. incoming settlement이 영속된 뒤에만 내부
   Execution을 만들며, 불명확한 facilitator 결과는 `reconciliation_required`로 유지하고 재결제·fallback하지 않는다.
 
-- Registry·Dependency·Quote·Revenue·simulated Execution/SSE/runtime callback Spring 이식이 존재한다.
+- Registry·Dependency·Quote·Revenue·native x402 Execution/SSE/runtime callback Spring 이식이 존재한다.
 - Marketplace `GET /api/agents`는 cursor/limit에 더해 `q`, `sort=newest|name_asc`를 지원한다.
 - 목록 cursor는 q/sort에 binding된 HMAC keyset cursor다. 삭제·비활성화된 cursor row 뒤에도 페이지가 지속된다.
 - Marketplace 목록은 ACTIVE version만 노출하며 `dependencyCount`는 distinct target Agent 수다.
@@ -98,13 +98,22 @@
 ## 현재 상태와 다음 순서
 
 Node x402 bridge와 backend 내 demo-agent workspace를 제거하고 Spring native x402 v2 client로 교체했다. Demo agent는
-`C:\Users\we661\GolandProjects\demo-agent`의 독립 Go 서비스다. `agent-store.payment-mode=x402`는 Base Sepolia 기본
+`C:\Users\we661\IdeaProjects\demo-agent`의 독립 Go 서비스다. Spring은 Base Sepolia 기본
 USDC의 `exact`/EIP-3009만 지원하고 `X402_PRIVATE_KEY`를 Spring secret으로 직접 주입한다. Quote와 402 challenge
 조건을 모두 대조한 뒤 EIP-712 서명을 만들며 Permit2와 그 외 transfer method는 서명 전에 거절한다. 기존
 endpoint DNS pinning, redirect 금지, 30초 timeout, 1 MiB 제한, 동일 attempt/key in-flight correlation과
 unknown
 결제의 reservation 보존 정책은 유지한다. JVM restart 뒤 in-memory settlement evidence가 없으면 recovery는
 재결제하지 않고 계속 `UNKNOWN`을 반환한다.
+
+V23은 legacy `PaymentMode`/`payment_mode` column을 제거한다. migration은 historical `SIMULATED` row 또는 native
+transaction hash가 없는 revenue row를 발견하면 명시적 로컬 DB reset을 요구하며 abort한다. 데이터의 모호한 결제를
+native transaction처럼 바꾸거나 삭제하지 않는다. production payment client는 `X402PaymentService` 하나이며,
+`X402_PRIVATE_KEY`는 모든 Spring runtime에서 필수다.
+
+현재 `openapi/openapi.json`은 V23 전 artifact라 payment mode field를 아직 포함한다. source DTO와 controller contract는
+수정됐지만, Gradle plugin artifact를 offline cache에서 해석하지 못하고 network도 막혀 있어 Spring `/openapi.json`으로
+재생성하지 못했다. 의존성 해소 뒤 artifact 재생성과 FE generated client 갱신이 필요하다.
 
 로컬 PostgreSQL의 Flyway V11/V12 history checksum은 현재 immutable migration과 불일치했으나, schema/data를 바꾸지 않는
 Flyway `repair`로 history만 동기화했다. V11의 `payment_attempts.projected_at` 존재를 확인했고, V12가 backfill 대상으로

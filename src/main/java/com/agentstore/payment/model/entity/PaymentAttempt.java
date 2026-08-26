@@ -2,7 +2,6 @@ package com.agentstore.payment.model.entity;
 
 import com.agentstore.common.model.entity.BaseEntity;
 import com.agentstore.payment.model.vo.PaymentAttemptStatus;
-import com.agentstore.payment.model.vo.PaymentMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -52,24 +51,18 @@ public class PaymentAttempt extends BaseEntity {
 
     private String failureCode;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "PaymentMode")
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    private PaymentMode paymentMode = PaymentMode.SIMULATED;
-
     private String paymentIdentifier;
 
     private Instant projectedAt;
 
     public PaymentAttempt(UUID id, UUID executionStepId, BigInteger amountAtomic, String network,
-            String asset, String payTo, PaymentMode paymentMode) {
+            String asset, String payTo) {
         this.id = id;
         this.executionStepId = executionStepId;
         this.amountAtomic = amountAtomic;
         this.network = network;
         this.asset = asset;
         this.payTo = payTo;
-        this.paymentMode = paymentMode;
         this.status = PaymentAttemptStatus.REQUIRED;
     }
 
