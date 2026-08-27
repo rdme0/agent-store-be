@@ -339,7 +339,7 @@ Copy-Item ../demo-agent/.env.example ../demo-agent/.env
 docker compose --env-file ../agent-store-be/.env up --build -d
 ```
 
-Compose는 `pgvector/pgvector:pg17` PostgreSQL을 시작하고, 최초 volume 생성 시 `agent_store` DB를 준비합니다. API는 Compose가 주입하는 표준 datasource 환경변수로 PostgreSQL에
+Compose는 `postgres:17` PostgreSQL을 시작하고, 최초 volume 생성 시 `agent_store` DB를 준비합니다. API는 Compose가 주입하는 표준 datasource 환경변수로 PostgreSQL에
 연결하며, 개발 profile을 활성화해 기존 loopback demo Agent endpoint를 유지합니다. API는
 `http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`, demo-agent는
 `http://localhost:8090`에서 확인할 수 있습니다. Spring 시작 시 Flyway migration을 적용하고 Hibernate가 schema를
@@ -359,7 +359,8 @@ Demo Agent는 독립 Go 서비스다. Compose에서는 일반 service network를
 `demo-agent:8090`으로 통신한다. host에서는 demo-agent가 `127.0.0.1:8090`으로만 노출된다. Go의
 `catalog/agents.yaml`이 demo 계약의 단일 원본이며, API와 Go health가 준비된 뒤 `catalog-bootstrap` one-shot service가
 Function Contract 등록 → manifest import → Version publish 순서로 처리한다. 이미 ACTIVE 데이터가 있으면 catalog와
-다른 내용을 덮어쓰지 않고 drift 오류로 중단한다. Spring은 더 이상 demo catalog를 직접 seed하지 않는다.
+다른 내용을 덮어쓰지 않고 drift 오류로 중단한다. Spring은 더 이상 demo catalog를 직접 seed하지 않으며, `dev` 프로필의
+`DevIdentityInitializer`는 개발자 registry가 비어 있을 때 bootstrap에 필요한 고정 demo identity만 만든다.
 
 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet

@@ -2,6 +2,24 @@
 
 기준일: 2026-08-26
 
+## 현재 반영 상태 (2026-08-27)
+
+이 문서는 당시의 감사 근거와 권장 순서를 보존한다. 아래 표는 현재 코드에 반영된 상태를 표시하며, 과거 migration·fixture에 남은
+용어는 회귀 검증을 위해 의도적으로 유지한다.
+
+| 감사 항목 | 현재 상태 |
+| --- | --- |
+| demo catalog 단일 소스 | 완료. Go `catalog/agents.yaml`과 `catalog-bootstrap`이 원본·등록 경계를 소유하고 Spring catalog seed/initializer는 제거됐다. `dev` 프로필의 `DevIdentityInitializer`는 빈 developer registry에 bootstrap용 identity만 만든다. |
+| FE 실행 상태 단일화 | 완료. 영속 `ExecutionDto + quoteSnapshot`과 SSE cursor/refetch만 사용하며 이전 generic timeline/reducer 계층은 제거됐다. |
+| runtime callback 소유권 | 완료. Root Agent만 dependency callback을 시작하고 specialist는 호출하지 않는다. |
+| 공급자 선택 정책 | 완료. `balanced`, 사용자 가중치, exploration은 제거됐고 현재 네 가지 결정적 전략만 유지한다. |
+| 외부 invocation 경계 | 완료. `/v1/invocations`의 402 → 동일 요청 retry → 202 흐름으로 통합됐다. |
+| UI mode·manifest·graph·Compose | 완료. `usageType`, typed manifest, ReactFlow/Dagre, 일반 Compose service DNS를 사용한다. |
+| 표준화·환경 정리 | 완료. 확인 action은 native dialog, PostgreSQL은 `postgres:17`, 공개 설정은 YAML, secret만 `.env`에 둔다. |
+| 남은 마무리 | 완료. 실제 Go와 무관한 추적 Gradle/Spring scaffold를 제거하고 stale 문서와 전체 검증을 정리했다. funded facilitator가 필요한 native x402 성공 smoke는 opt-in으로 남긴다. |
+
+`fastest`와 `highest_reliability`는 현재 공개 계약과 failure matrix에 포함된 결정적 preset이므로 이 마무리 작업에서 추가로 제거하지 않는다.
+
 ## 감사 목적
 
 이 문서는 `agent-store-be`, `agent-store-fe`, `demo-agent`, `agent-store-infra`를 하나의 제품으로 보고 다음을 찾은 결과다.

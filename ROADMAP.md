@@ -103,7 +103,7 @@ finance.stock-risk-analysis
 
 ## Phase 3 — 조건 기반 공급자 선택
 
-상태: 가격·Version·execution observation 기반의 결정적 선택과 Quote snapshot 구현 완료. `pinned`·`allowlist`·`marketplace` 범위와 `highest_reliability`·`fastest`·`balanced` 전략을 제공한다. 실행 중 fallback은 후속 작업이다.
+상태: 가격·Version·execution observation 기반의 결정적 선택과 Quote snapshot 구현 완료. `pinned`·`allowlist`·`marketplace` 범위와 `lowest_price`·`latest_version`·`highest_reliability`·`fastest` 전략을 제공한다. 사용자 가중치와 임의 exploration은 제거했으며, 실행 중 fallback은 후속 작업이다.
 
 목표는 상위 Agent가 특정 공급자를 미리 알지 않아도 필요한 일을 조건으로 요청하는 것이다.
 
@@ -153,7 +153,7 @@ Investment Agent
 
 목표는 Agent 선택과 거래 결과를 운영 데이터로 검증할 수 있게 하는 것이다.
 
-- 30일 execution-step observation으로 Wilson lower-bound 신뢰도, 성공 호출 p95 응답 시간과 output contract compliance를 집계한다. 20건 미만 provider는 명시적인 exploration 없이 metric strategy로 선택하지 않는다.
+- 30일 execution-step observation으로 Wilson lower-bound 신뢰도, 성공 호출 p95 응답 시간과 output contract compliance를 집계한다. 20건 미만 provider는 metric strategy로 선택하지 않는다.
 - 결제 불명 및 reconciliation 발생률을 별도로 표시한다.
 - 조작 가능한 사용자 별점보다 검증된 실행 journal 기반 지표를 우선한다.
 - 실행별 graph, Version, 가격, 실제 비용, settlement와 시각을 담은 Execution Proof를 제공한다.
