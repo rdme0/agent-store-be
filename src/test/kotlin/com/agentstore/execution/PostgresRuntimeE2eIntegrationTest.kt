@@ -531,15 +531,30 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
         }
 
         fun returnRootMarkdown(markdown: String) {
-            rootOutput = objectMapper.createObjectNode().put("output", markdown)
+            rootOutput = demoAgentEnvelope(
+                agentCode = "root",
+                output = objectMapper.nodeFactory.textNode(markdown),
+            )
         }
 
         fun returnChildText(text: String) {
-            childOutput = objectMapper.createObjectNode().put("output", text)
+            childOutput = demoAgentEnvelope(
+                agentCode = "child",
+                output = objectMapper.nodeFactory.textNode(text),
+            )
         }
 
         fun callbackInputs(): List<JsonNode> {
             return callbackInputs.toList()
+        }
+
+        private fun demoAgentEnvelope(agentCode: String, output: JsonNode): JsonNode {
+            val envelope = objectMapper.createObjectNode()
+            envelope.put("transport", "agentstore-demo/v1")
+            envelope.put("agent", agentCode)
+            envelope.set<JsonNode>("output", output)
+            envelope.set<JsonNode>("dependencyResults", objectMapper.createObjectNode())
+            return envelope
         }
 
         override fun invoke(request: PaymentInvocationRequestDto): PaymentInvocationResultDto {
