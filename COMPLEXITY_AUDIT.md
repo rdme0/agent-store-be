@@ -1,258 +1,134 @@
 # AgentStore 복잡도·스노우볼 감사
 
-기준일: 2026-08-26
-
-## 현재 반영 상태 (2026-08-27)
-
-이 문서는 당시의 감사 근거와 권장 순서를 보존한다. 아래 표는 현재 코드에 반영된 상태를 표시하며, 과거 migration·fixture에 남은
-용어는 회귀 검증을 위해 의도적으로 유지한다.
-
-| 감사 항목 | 현재 상태 |
-| --- | --- |
-| demo catalog 단일 소스 | 완료. Go `catalog/agents.yaml`과 `catalog-bootstrap`이 원본·등록 경계를 소유하고 Spring catalog seed/initializer는 제거됐다. `dev` 프로필의 `DevIdentityInitializer`는 빈 developer registry에 bootstrap용 identity만 만든다. |
-| FE 실행 상태 단일화 | 완료. 영속 `ExecutionDto + quoteSnapshot`과 SSE cursor/refetch만 사용하며 이전 generic timeline/reducer 계층은 제거됐다. |
-| runtime callback 소유권 | 완료. Root Agent만 dependency callback을 시작하고 specialist는 호출하지 않는다. |
-| 공급자 선택 정책 | 완료. `balanced`, 사용자 가중치, exploration은 제거됐고 현재 네 가지 결정적 전략만 유지한다. |
-| 외부 invocation 경계 | 완료. `/v1/invocations`의 402 → 동일 요청 retry → 202 흐름으로 통합됐다. |
-| UI mode·manifest·graph·Compose | 완료. `usageType`, typed manifest, ReactFlow/Dagre, 일반 Compose service DNS를 사용한다. |
-| 표준화·환경 정리 | 완료. 확인 action은 native dialog, PostgreSQL은 `postgres:17`, 공개 설정은 YAML, secret만 `.env`에 둔다. |
-| 남은 마무리 | 완료. 실제 Go와 무관한 추적 Gradle/Spring scaffold를 제거하고 stale 문서와 전체 검증을 정리했다. funded facilitator가 필요한 native x402 성공 smoke는 opt-in으로 남긴다. |
-
-`fastest`와 `highest_reliability`는 현재 공개 계약과 failure matrix에 포함된 결정적 preset이므로 이 마무리 작업에서 추가로 제거하지 않는다.
+기준일: 2026-08-27
 
 ## 감사 목적
 
-이 문서는 `agent-store-be`, `agent-store-fe`, `demo-agent`, `agent-store-infra`를 하나의 제품으로 보고 다음을 찾은 결과다.
+이 문서는 현재 코드에 남아 있는 복잡도만 기록한다. 해결된 감사 항목과 과거 실행 순서는 제거하며, 완료 이력은 Git history와
+`HANDOFF.md`에서 확인한다.
 
-- 한 기능이 DB, API, 프론트, 테스트까지 불필요하게 번지는 스노우볼 코드
-- 같은 사실을 여러 저장소나 여러 상태 모델이 중복 소유해 서로 어긋날 수 있는 구조
-- 현재 트래픽과 시연 범위에 비해 너무 일찍 일반화된 구현
-- 표준 기능이나 더 단순한 기술로 대체할 수 있는 자체 구현
+- 문자열 기반 계약이나 수동 환경 준비처럼 표준 기능으로 실제 제거할 수 있는 코드
+- 여러 서비스가 나눠 가진 parsing·validation 책임
+- 향후 요구가 생겼을 때만 도입해야 하는 기술과 현재 도입하면 안 되는 기술
+- 코드량이 많아도 결제·복구·quote·SSE 안전을 위해 보존해야 하는 경계
 
-파일이 크다는 이유만으로 제거 대상으로 판단하지 않았다. AgentStore의 핵심인 x402 결제, quote 고정, 공급자별 정산과 실패 복구를
-설명하거나 보호하는 복잡도는 별도로 보존 대상으로 분류했다.
+파일이 크다는 이유만으로 제거 대상으로 판단하지 않는다. AgentStore의 핵심인 x402 결제, quote 고정, 공급자별 정산과 실패 복구를
+설명하거나 보호하는 복잡도는 보존 대상으로 분류한다.
 
-## 결론
+## 남은 감사 항목
 
-가장 먼저 줄여야 할 것은 다음 세 가지다.
-
-1. Spring과 Go가 각각 소유하는 중복 demo catalog를 하나의 선언 파일로 통합한다.
-2. 프론트 실행 화면의 `ExecutionDto`, timeline reducer, journey model이라는 병렬 상태를 하나의 실행 projection으로 통합한다.
-3. 공급자 선택은 유지하되 `balanced` 가중치와 임의 exploration을 실제 운영 데이터가 생길 때까지 제거한다.
-
-새로운 플랫폼 기술을 더 도입할 단계는 아니다. Kafka, Temporal, 별도 payment microservice, plugin framework를 추가하면 현재 문제를
-해결하지 못하고 운영 경계만 늘어난다. 우선 소유권 중복과 상태 표현 중복을 제거하는 편이 효과가 크다.
-
-## 우선순위 요약
-
-| 우선순위 | 항목 | 현재 문제 | 권장 방향 |
+| 판단 | 대상 | 현재 복잡도 | 권장 해법 |
 | --- | --- | --- | --- |
-| P0 | demo catalog 단일 소스 | Spring과 Go의 계약이 이미 다름 | Go가 생성하는 Version manifest를 dev bootstrap이 등록 |
-| P0 | 프론트 실행 상태 단일화 | snapshot, SSE, journey가 서로 다른 상태 모델을 가짐 | 단일 `ExecutionProjection`과 SSE cursor만 유지 |
-| P1 | runtime callback의 역할 확정 | 동적 호출 프로토콜인데 Go가 모든 dependency를 선호출 | root Agent가 호출하도록 옮기거나 Spring orchestration으로 단순화 |
-| P1 | 공급자 선택 정책 축소 | 통계·가중치·탐색이 전 계층으로 확산 | 결정적 preset만 남기고 운영 데이터 후 확장 |
-| P1 | 외부 invocation API 축소 | x402 한 번 호출이 intent 생성과 execute로 분리 | 하나의 invocation resource에 402 retry를 결합 |
-| P2 | UI mode의 API 누수 제거 | `easy/developer`가 서비스·cursor 계약이 됨 | 도메인 필터 `usageType`만 API에 노출 |
-| P2 | manifest typed binding | 450줄 서비스가 raw YAML map을 직접 파싱 | typed document와 공통 검증 경계 사용 |
-| P2 | graph UI 전략 통일 | 수제 좌표 그래프와 journey가 같은 관계를 중복 표현 | journey로 통일하거나 검증된 DAG layout 사용 |
-| P2 | Compose 네트워크 정상화 | API와 Go가 network namespace를 공유 | 서비스 DNS와 dev 전용 exact allowlist 사용 |
-| P3 | 작은 표준화 항목 | custom dialog, 미사용 pgvector, 공개 env | 플랫폼 표준과 일반 PostgreSQL·공개 YAML 사용 |
+| 우선 적용 | quote snapshot 소비 | typed DTO가 있는데 실행 경로가 다시 `JsonNode.path(...)`로 읽음 | 저장 시 JSONB를 유지하고 읽기 경계를 `QuoteSnapshotDto`로 통일 |
+| 우선 적용 | PostgreSQL integration test | 전용 DB와 환경변수를 개발자가 미리 준비해야 함 | Testcontainers `PostgreSQLContainer`와 Spring Boot `@ServiceConnection` 사용 |
+| 적용 가치 있음 | Version constraint | parser·정규화·비교가 748줄 resolver에 함께 있음 | `VersionConstraint` immutable value object로 파싱 책임 분리 |
+| 조건부 적용 | runtime callback 인증 | controller가 header를 받고 service가 Bearer parsing과 HMAC 검증까지 수행 | Spring Security filter chain에서 인증하고 typed principal만 service에 전달 |
+| 제한적 적용 | 단순 외부 HTTP API | JDK `HttpClient` request·JSON binding boilerplate | 안전 요구가 단순한 client만 Spring HTTP Service Client 또는 `RestClient` 사용 |
+| 요구 발생 후 | execution dispatch | 수동 `afterCommit`과 `@Async` 사이에 crash gap이 있음 | 실행 재개가 필요해질 때만 DB-backed job/outbox 또는 durable event publication 도입 |
 
-## 상세 감사
+### 1. quote snapshot은 typed DTO를 실제 읽기 모델로 사용한다
 
-### P0. demo catalog가 두 저장소에 중복되어 이미 계약이 어긋났다
+`QuoteSnapshotDto.kt`에는 `ResolvedVersionSnapshotDto`, `DependencySnapshotDto`와 legacy `agentSlug` alias까지 정의되어 있다.
+하지만 `QuoteService.snapshot()`은 정규화한 `JsonNode`를 반환하고, `ExecutionService`, `ExecutionRunner`,
+`RuntimeCallbackService`, `ExternalInvocationService`가 `version`, `endpoint`, `priceAtomic`, `functionContract`,
+`dependencies`를 문자열 key로 다시 탐색한다.
 
-Spring의 `DemoCatalogInitializer.kt:30-186`과 Go의 `internal/catalog/catalog.go:95-108`이 같은 13개 Agent의 이름, 설명,
-Function Contract, 가격, `payTo`, dependency를 각각 하드코딩한다. Spring에는 이를 DB 객체로 바꾸기 위한
-`DemoCatalogRegistrationService.kt`도 별도로 존재한다.
+이 구조에서는 필드명이 바뀌어도 컴파일이 성공하고, 누락된 숫자가 `0`으로 처리되는 등 실패가 실제 실행 시점까지 늦어진다.
 
-단순 중복 가능성이 아니라 실제 drift가 발생했다.
+1. JSONB 저장과 과거 snapshot 보존은 그대로 유지한다.
+2. `QuoteService` 한 곳에서 legacy alias를 포함해 `QuoteSnapshotDto`로 역직렬화한다.
+3. 실행·callback·외부 invocation은 typed snapshot만 받는다.
+4. 공개 응답에 JSON tree가 필요하면 같은 DTO를 Jackson으로 직렬화한다.
 
-- Spring specialist output schema: `DemoCatalogInitializer.kt:217-240`의 `{ "type": "object" }`
-- Go specialist output schema: `internal/catalog/catalog.go:45-92`의 `summary`, `sources`, 도메인별 필수 필드와
-  `additionalProperties: false`
+새 dependency 없이 이미 쓰는 Jackson과 DTO로 여러 서비스의 방어적 `.path()` 분기와 문자열 key를 제거할 수 있으므로 가장 먼저 할
+가치가 있다. 과거 snapshot read compatibility는 이 변환 경계의 회귀 테스트로 보존한다.
 
-따라서 Spring의 quote에는 느슨한 계약이 고정되고 Go runtime은 더 엄격한 결과를 만든다. AgentStore가 강조하는 계약 기반 공급자
-선택을 demo catalog 자체가 증명하지 못하는 상태다.
+### 2. integration datasource 준비는 Testcontainers로 없앤다
 
-권장 구조:
+현재 `PostgresIntegrationTestSupport`는 `INTEGRATION_DATASOURCE_URL`, `INTEGRATION_DATASOURCE_PASSWORD`, 별도
+`agent_store_integration` DB와 profile을 외부에서 준비해야 한다. 이 보호 장치는 공유 개발 DB를 잘못 지우지 않게 하지만, 테스트 실행
+방법 자체가 infra와 개발자 로컬 상태에 결합된다.
 
-1. Go catalog를 runtime 구현과 Schema의 원본으로 둔다.
-2. Go build 또는 작은 generator가 Agent별 Version manifest YAML을 만든다.
-3. infra의 dev bootstrap이 기존 manifest/API를 이용해 Spring에 등록한다.
-4. Spring의 `DemoCatalogSeed`, `DemoCatalogRegistrationService`, dev startup initializer를 제거한다.
+Spring Boot의
+[`@ServiceConnection`](https://docs.spring.io/spring-boot/reference/testing/testcontainers.html#testing.testcontainers.service-connections)은
+`PostgreSQLContainer`의 connection details를 datasource auto-configuration에 직접 공급한다. 테스트 suite가 소유하는
+`postgres:17` container를 한 번 띄우고 DB 이름을 `agent_store_integration`으로 고정하면 다음을 제거할 수 있다.
 
-Spring이 Go 내부 catalog를 HTTP로 읽으며 시작하게 만들지는 않는다. 시작 순서와 네트워크 장애가 DB bootstrap에 새로 결합되기 때문이다.
-버전 관리되는 정적 manifest artifact가 더 단순하고 재현 가능하다.
+- integration datasource URL/password 환경변수
+- 사람이 별도 DB를 만들고 비어 있는지 확인하는 실행 절차
+- 개발 Compose DB와 integration DB를 구분하기 위한 외부 설정
 
-### P0. 프론트 실행 상태가 세 벌이고 제거된 상태까지 보존한다
+Flyway 전체 migration, 실제 PostgreSQL lock/concurrency 검증과 tracked-fixture cleanup은 그대로 둔다. container가 test process 전용이면
+`SPRING_EXCLUSIVE_MAINTENANCE` 같은 수동 독점 실행 확인도 목적을 다시 검토할 수 있다. Docker가 없는 환경에서는 integration suite만
+기존처럼 opt-in으로 유지하면 된다.
 
-현재 실행 UI는 다음 사실을 동시에 다룬다.
+### 3. Version constraint를 resolver 밖의 값 객체로 만든다
 
-- 서버 조회 결과인 `ExecutionDto`
-- `features/execution/model.ts:103`의 `ExecutionTimelineState`와 `reducer.ts`
-- `journeyModel.ts:239-284`가 앞의 두 상태를 다시 합쳐 만든 journey model
+`DependencyResolver`는 graph 순회, direct/function dependency 해석, 후보 거절 사유, 공급자 정렬 외에 Python식 Version constraint의
+정규화·문법 검증·SemVer 비교까지 소유한다. `DependencyService`, `QuoteService`, `ExternalInvocationService`는 raw `String`을
+주고받으므로 같은 값이 유효하다는 사실을 타입으로 표현하지 못한다.
 
-여기에 `ExecutionTimeline.tsx`, `ExecutionJourney.tsx`, `DependencyGraph.tsx`가 서로 다른 관점으로 같은 실행을 표시한다. 새 실행 상태를
-추가하거나 제거할 때 event adapter, reducer, view model, journey model, 여러 화면과 테스트를 모두 맞춰야 한다.
+`VersionConstraint.parse(raw)`가 canonical expression과 predicates를 한 번 만들고 `matches(semver)`를 제공하는 immutable value
+object가 적절하다. HTTP/manifest 경계에서 한 번 parse하고 resolver는 이미 검증된 값만 받는다. 이는 generic rule engine이나 새 SemVer
+framework를 추가하는 작업이 아니며, 현재 사용하는 `semver4j` 위에서 독립적인 재사용 알고리즘 하나만 분리하는 것이다.
 
-실제 drift도 남아 있다.
+### 4. Spring Security는 인증까지만 옮긴다
 
-- `features/execution/model.ts:74`, `eventAdapter.ts:54,125`, `paymentPresentation.ts:1`에 삭제된 `simulated`가 존재한다.
-- generated type과 developer dashboard도 `simulated | x402`를 계속 처리한다.
-- 백엔드 native-only 변경 뒤 프론트 갱신이 늦어지는 이유가 생성 artifact만이 아니라 자체 중간 모델에도 같은 계약을 복제하기 때문이다.
+`RuntimeCallbackController`는 `Authorization` 문자열을 받고, `RuntimeCallbackService`가 Bearer prefix 제거와 HMAC token
+검증까지 수행한다. 반면 Spring이 demo-agent를 호출할 때 `X402AgentClient`는 `X-AgentStore-Invocation-Token`을 보내고 Go는 원
+invocation의 `Authorization`을 callback에 전달한다. 먼저 한 가지 header 계약으로 통일해야 한다.
 
-권장 구조:
+그 뒤 callback 경로에만 작은 `SecurityFilterChain`을 적용하면 header parsing, credential 검증, 인증 실패 응답과 principal 전달을
+request boundary로 모을 수 있다. Spring Security의 servlet 인증은
+[`SecurityFilterChain`, `AuthenticationManager`, `Authentication`](https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html)
+경계로 이 책임을 분리한다.
 
-- `ExecutionDto + quoteSnapshot`으로 초기화되는 단일 `ExecutionProjection`을 둔다.
-- `useExecutionEvents`는 연결 owner, cursor, replay dedupe만 책임지고 같은 projection에 event patch를 적용한다.
-- journey와 개발자 상세는 그 projection에서 selector로 계산한다.
-- 별도 generic timeline state가 꼭 필요한 원본 event audit 화면이 없다면 `model/reducer/viewModel` 계층을 제거한다.
-- `simulated`, 현재 백엔드에 없는 범용 terminal/payment 상태도 함께 제거한다.
+Spring Security가 다음 도메인 검증을 대신하면 안 된다.
 
-persisted SSE, sequence replay와 dedupe 자체는 제거 대상이 아니다. 서버의 장애 복구 계약은 유지하고 브라우저 안의 중복 projection만
-줄이는 것이 핵심이다.
+- token의 execution/step/version/call path와 DB row 일치
+- 실행과 parent step의 active 상태
+- 선언된 dependency, budget, idempotency와 terminal race
+- x402 signature·challenge·settlement 검증
 
-### P1. runtime callback은 핵심 기능인지 middleware 편의인지 결정해야 한다
+현재 보호할 endpoint가 callback 하나뿐이면 starter, filter, provider, entry point가 기존 몇 줄보다 많아질 수 있다. header 불일치는
+즉시 수정하되, 외부 receipt 인증이나 사용자 인증까지 공통 보안 경계가 두 곳 이상 생길 때 Spring Security를 도입한다. JWT/OAuth2
+resource server로 token 형식을 바꾸는 것은 별도 요구가 없는 한 하지 않는다.
 
-Spring은 `RuntimeCallbackService.kt`와 admission/token/terminal race 경계를 통해 Agent가 실행 중 dependency를 호출할 수 있게 한다. 이는
-“Agent가 다른 Agent를 구매한다”는 제품 설명을 기술적으로 뒷받침할 수 있는 중요한 경계다.
+### 5. 선언형 HTTP client는 안전 경계가 단순한 호출에만 사용한다
 
-그러나 Go의 현재 동작은 동적이지 않다.
+Spring Framework는 annotated interface를 `RestClient` 등에 연결하는
+[`HTTP Service Client`](https://docs.spring.io/spring-framework/reference/integration/rest-clients.html#rest-http-interface)를 제공한다.
+요청 경로와 DTO binding이 대부분인 API에는 boilerplate를 줄일 수 있다.
 
-- `internal/agent/service/agent_service.go:41-48`이 Agent 실행 전에 callback client를 호출한다.
-- `internal/runtime/client/callback_client.go:40-76`이 quote에 있는 모든 dependency를 동시에 호출한다.
-- 그 뒤에야 실제 Agent가 dependency 결과를 받는다.
+현재는 Bithumb 환율 조회 정도만 후보이고 우선순위는 낮다. `X402AgentClient`, `FacilitatorIncomingPaymentClient`와 pinned endpoint
+client에는 DNS pinning, redirect 금지, body/deadline 제한, raw header 처리와 결제 결과 unknown 분류가 있다. 이 책임은 proxy interface로
+숨겨도 없어지지 않으며 잘못 숨기면 안전 경계만 읽기 어려워진다. 이 client들은 수동 transport를 유지한다.
 
-즉, 복잡한 동적 callback 프로토콜을 운영하면서 시연 동작은 고정된 eager orchestration이다. 이 중간 상태가 가장 위험한 스노우볼이다.
+### 6. `afterCommit + @Async`는 단순 event annotation으로 바꾸지 않는다
 
-권장 선택은 제품 정의에 맞춰 callback을 유지하되 호출 책임을 root Agent 구현으로 옮기는 것이다. fixture root는 필요한 dependency를
-명시적으로 호출하고, OpenAI root는 허용된 dependency 중 필요한 것을 선택해 호출해야 한다. specialist에는 불필요한 runtime callback을
-주지 않는다.
+`ExecutionService`는 transaction commit 뒤 `ExecutionRunner.start()`를 부르고, `ExecutionEventService`도 event 저장 commit 뒤
+SSE broker에 publish한다. `@TransactionalEventListener(AFTER_COMMIT)`로 바꾸면 수동 synchronization 코드는 줄지만 process crash 때
+작업이 사라지는 성질은 같아서 구조만 이동한다.
 
-만약 root Agent가 호출을 결정할 계획이 없다면 반대로 Spring이 DAG를 bottom-up으로 실행하고 Go에는 결과만 넘기는 편이 훨씬 단순하다.
-두 모델을 동시에 유지하지 말아야 한다. 이 결정 전에는 callback protocol에 fallback, streaming tool call 같은 기능을 더 얹지 않는다.
+실행을 재시작 후 반드시 이어가야 한다는 요구가 생기면 DB job/outbox가 먼저다. Spring Modulith의
+[`Event Publication Registry`](https://docs.spring.io/spring-modulith/reference/events.html#event-publication-registry)는 원 transaction에
+publication을 기록하고 incomplete publication을 다시 제출할 수 있으므로 검토 후보가 될 수 있다. 그러나 현재 두 개의 `afterCommit`
+호출만 치환하려고 도입하면 library schema, serialization, cleanup, 재처리 정책이 새로 생긴다. 요구가 생기기 전에는 도입하지 않는다.
 
-### P1. 공급자 선택의 핵심은 좋지만 통계 정책이 너무 빨리 확장됐다
+payment journal과 reconciliation은 generic outbox나 retry로 대체하지 않는다. 결제 결과가 불명확한 상태에서 자동 재호출하면 이중 결제로
+이어질 수 있기 때문이다.
 
-Function Contract에 맞는 공급자를 가격이나 Version으로 고르는 기능은 AgentStore의 차별점이므로 유지해야 한다. 과한 부분은 그 위에
-한 번에 추가된 운영 최적화 정책이다.
+## 도입하지 않을 기술
 
-- `DependencyResolver.kt`는 924줄이다.
-- `ProviderSelectionStrategy`는 `lowest_price`, `latest_version`, `highest_reliability`, `fastest`, `balanced`를 제공한다.
-- `ProviderMetricService.kt:24-43,127-145`는 최소 20표본, 30일 window, Wilson lower bound, p95를 계산한다.
-- dependency entity/request/response/manifest/FE editor에 exploration 비율과 reliability/price/speed 가중치가 전파된다.
-- `DependencyResolver.kt:617-630,692-757`이 deterministic exploration bucket과 balanced normalization을 수행한다.
-
-아직 실제 공급자 트래픽과 지표 분포가 없으므로 20표본, 30일, 가중치의 의미를 검증할 수 없다. UI 입력값은 정밀해 보이지만 개발자가
-합리적으로 설정할 근거가 없다.
-
-권장 축소:
-
-- 즉시 유지: `lowest_price`, `latest_version`
-- 필요하면 유지: 관측 성공률만 사용하는 `highest_reliability` preset
-- 지금 제거: 임의 `explorationPercent`, 사용자 입력형 세 가중치, `balanced`
-- 데이터 축적 후 검토: `fastest`, Wilson/p95 maturity 기준, platform-managed exploration
-
-먼저 동작을 줄인 뒤 resolver를 graph resolution과 candidate ordering으로 나눈다. 924줄을 그대로 여러 클래스로 쪼개는 것은 복잡도를
-이동할 뿐 줄이지 못한다.
-
-### P1. 외부 개발자 API가 x402의 단순한 호출 경험을 가린다
-
-현재 외부 호출은 다음 흐름이다.
-
-1. `POST /v1/invocation-intents`로 intent를 생성하고 receipt token을 받는다.
-2. `POST /v1/invocation-intents/{id}/execute`에서 402 challenge를 받는다.
-3. 같은 execute endpoint에 payment signature를 보내 실행한다.
-4. 별도 GET/SSE로 상태를 확인한다.
-
-근거는 `ExternalInvocationController.kt:47-104`와 429줄의 `ExternalInvocationService.kt`다. 내부 durable intent와 receipt hash,
-idempotency lock은 결제 안전에 필요하지만 외부 resource를 두 단계 명령처럼 노출할 필요는 없다.
-
-권장 공개 계약:
-
-- `POST /v1/invocations` 한 경로가 body와 `Idempotency-Key`를 기준으로 intent를 영속화한다.
-- 결제가 없으면 같은 응답에서 402와 invocation receipt를 반환한다.
-- 같은 body/key/receipt와 `PAYMENT-SIGNATURE`로 재요청하면 settlement 후 202와 status URL을 반환한다.
-- `GET /v1/invocations/{id}`와 SSE는 유지한다.
-
-내부 상태 머신과 journal은 그대로 두면서 사용자가 이해해야 하는 create/execute 구분만 없앨 수 있다. 이것이 “외부 개발자 → AgentStore
-라우팅 → 공급자”라는 사용 사례와 x402의 same-request retry 형태에 더 가깝다.
-
-### P2. 쉬운 사용/개발자 모드가 API 도메인으로 누수됐다
-
-브라우저 표시 선택인 `easy | developer`가 `AgentView.kt`, `AgentService.kt`, `AgentListCursorCodec.kt`와 API query에 들어가 있다.
-easy detail에서 internal Agent를 not-found 처리하며 cursor signature도 UI mode에 묶인다. 프론트는 generated client가 이 query를
-표현하지 못해 `entities/agent/api.ts:73-79`에서 `as never`로 우회한다.
-
-권장 구조:
-
-- API 목록에는 도메인 필터인 nullable `usageType=user_facing|internal_component`만 둔다.
-- easy UI는 `usageType=user_facing`을 요청하고 developer UI는 필터를 생략한다.
-- 상세 조회는 UI mode와 무관하게 같은 resource를 반환한다. 실제 비공개 제어가 필요해지면 인증/권한으로 처리한다.
-- cursor는 `usageType` 같은 실제 검색 조건에만 binding한다.
-
-이렇게 해야 모바일 앱이나 외부 client가 `developer mode`라는 프론트 개념을 알아야 하는 상황을 막을 수 있다.
-
-### P2. manifest는 필요하지만 raw YAML parser는 유지보수 비용이 크다
-
-`AgentManifestService.kt`는 453줄이며 `Map<String, Any?>`를 대상으로 `requireAllowedKeys`, `requireMap`, `requireString`,
-`requireInt`, `requireBoolean` 등을 직접 구현한다(`:210-406`). import validation과 실제 request/service validation도 별도로 존재한다.
-
-manifest 자체는 제거하면 안 된다. 오히려 중복 demo catalog를 없애는 단일 계약으로 적극 사용해야 한다. 구현만 다음처럼 바꾼다.
-
-- `AgentManifestDocumentDto`와 중첩 typed DTO를 만든다.
-- 프로젝트의 Jackson 사용 방식에 맞춰 `jackson-dataformat-yaml`로 typed binding한다.
-- 알 수 없는 필드 거절, Bean Validation, Function Contract Schema 검증을 기존 service 경계와 공유한다.
-- canonical serialization과 SHA-256 digest만 manifest service의 고유 책임으로 남긴다.
-
-새 범용 parser framework를 만들지 말고 이미 쓰는 Jackson/validation 모델을 재사용한다.
-
-### P2. dependency graph를 수제 배치하면서 journey와 중복 유지한다
-
-`DependencyGraph.tsx:55-85`는 배열 순서를 고정 3열 좌표로 바꾸고, `:170-233`은 SVG 직선과 HTML node를 직접 겹쳐 그린다.
-DAG depth나 edge 교차를 고려하는 layout이 아니어서 graph가 커질수록 시각 품질을 직접 고쳐야 한다. 동시에 쉬운 실행 화면에는 이미 세로형
-`ExecutionJourney`가 있다.
-
-둘 중 하나를 선택한다.
-
-- 관계 이해가 목적이면 quote와 실행 모두 세로 journey/tree로 통일하고 custom SVG를 삭제한다.
-- 개발자에게 임의 DAG 탐색이 핵심이면 `@xyflow/react`와 Dagre/ELK 같은 검증된 layout을 사용한다.
-
-현재처럼 custom graph와 journey를 둘 다 독자적으로 발전시키는 방식은 피한다. 모바일에서는 계속 journey만 사용한다.
-
-### P2. Compose network namespace 공유가 서비스 독립성을 해친다
-
-infra `compose.yaml:36-38,49-65`에서 demo-agent가 `network_mode: service:api`를 사용하고 API가 Go의 8090 포트까지 대신 publish한다.
-이는 DB에 고정된 `127.0.0.1:8090` endpoint와 callback의 `127.0.0.1:8080`을 컨테이너에서도 그대로 쓰기 위한 우회다. 한 서비스의
-네트워크 변경과 재시작이 다른 서비스에 결합된다.
-
-권장 구조:
-
-- 일반 Compose network와 `http://api:8080`, `http://demo-agent:8090` 서비스 DNS를 사용한다.
-- dev catalog manifest가 container endpoint를 명시적으로 선택하도록 한다.
-- endpoint SSRF 정책은 production에서 그대로 유지하고, dev에서만 exact service hostname allowlist를 둔다.
-- API는 8080, demo-agent는 8090을 각자 publish하고 독립적으로 재시작한다.
-
-보안 정책 전체를 느슨하게 만들지 않고 개발 환경의 정확한 host만 허용해야 한다.
-
-### P3. 표준 기능으로 바로 줄일 수 있는 항목
-
-#### custom dialog
-
-`AgentDetailPage.tsx:228-272`가 Escape, Tab 순환, focusable 검색과 focus 복구를 직접 구현한다. 요청 owner lock은 필요하지만 modal의
-접근성 동작은 native `<dialog>.showModal()` 또는 프로젝트에서 하나로 정한 접근성 dialog component에 맡길 수 있다.
-
-#### 미사용 pgvector image
-
-infra `compose.yaml:5`는 `pgvector/pgvector:pg17`을 사용하지만 백엔드에 vector column, embedding, pgvector query가 없다. 현재는
-`postgres:17`로 충분하다. 실제 검색 migration이 생길 때 pgvector를 다시 도입한다.
-
-#### 공개 설정의 env 집중
-
-Go `.env.example:1-5`에는 host, port, 실행 mode와 facilitator URL이 함께 있다. secret은 `OPEN_AI_KEY`뿐이다. Compose가 직접
-override하는 host/port는 예외로 둘 수 있지만, 로컬 기본 정책과 공개 URL은 작은 checked-in YAML 또는 명시적 실행 flag로 옮기는 편이
-현재 프로젝트의 “secret-only env” 원칙과 맞다. 이를 위해 Viper 같은 설정 framework를 추가할 필요는 없다.
+- **Coroutine, WebFlux, R2DBC**: virtual thread 기반 Spring MVC/JPA와 Go의 sibling callback 병렬화가 이미 역할을 나눠 가진다. reactive
+  stack을 섞으면 transaction·MDC·blocking client 경계만 늘어난다.
+- **Spring Statemachine, Temporal, Kafka**: 현재 execution/payment 상태를 제거하지 못하고 별도 상태 저장소와 복구 의미를 하나 더 만든다.
+- **범용 retry/Resilience4j를 결제 호출에 적용**: read-only 환율 조회에는 검토할 수 있지만 Agent invoke·verify·settle에는 unknown outcome
+  정책이 우선이다.
+- **Bucket4j/Redis rate limiter**: 현재 단일 인스턴스 개발 환경의 `ExternalIntentRateLimiter`는 약 30줄이다. 분산 rate limit 요구 없이
+  dependency와 Redis lifecycle을 추가하면 더 복잡하다.
+- **MapStruct, QueryDSL, 범용 rules engine**: 현재 mapping/query/policy 규모에서는 annotation processing과 DSL 학습 비용이 대체할
+  코드보다 크다.
 
 ## 줄이면 안 되는 복잡도
 
@@ -262,43 +138,24 @@ override하는 host/port는 예외로 둘 수 있지만, 로컬 기본 정책과
 - payment intent, journal, reservation, transaction hash, revenue projection의 crash-window 복구
 - 결제 결과가 불명확할 때 재결제하지 않는 reconciliation 정책
 - quote 발급 시 Agent, Version, endpoint, 계약, 가격과 최대 비용을 고정하는 snapshot
-- callback을 유지하기로 했다면 token 인증, admission lock과 terminal race 처리
+- callback token 인증, admission lock과 terminal race 처리
 - persisted SSE sequence, replay/live dedupe와 terminal close
 - 결제 전 input Schema와 결제 후 output Schema 검증
 - DNS pinning, redirect 금지, body/deadline 제한과 production endpoint 정책
 
 이 경계들은 클래스 수를 줄이기 위해 합치기보다 상태 전이와 lock order가 읽히도록 유지해야 한다.
 
-## 권장 실행 순서
+## 후속 적용 순서
 
-### 1단계 — drift를 먼저 멈춘다
+1. quote snapshot read boundary를 typed DTO로 통일한다.
+2. PostgreSQL integration suite를 Testcontainers service connection으로 자급식으로 만든다.
+3. `VersionConstraint` 값 객체를 분리한 뒤 `DependencyResolver`가 graph/provider 선택만 소유하게 정리한다.
+4. invocation token header 계약을 먼저 통일하고, 인증 경계가 확장될 때 Spring Security를 도입한다.
+5. crash 후 execution 재개가 제품 요구가 될 때 durable dispatch를 별도 HIGH_RISK 작업으로 설계한다.
 
-1. native-only OpenAPI를 재생성하고 프론트 generated type과 자체 `simulated` 분기를 제거한다.
-2. Go catalog에서 manifest를 생성하고 Spring demo initializer를 제거한다.
-3. catalog/schema parity test를 추가해 같은 drift가 재발하지 않게 한다.
-
-### 2단계 — 동작을 줄인 뒤 코드를 줄인다
-
-1. 공급자 정책에서 `balanced`, 사용자 가중치, exploration을 제거한다.
-2. 축소된 정책을 기준으로 resolver와 dependency form을 정리한다.
-3. manifest를 typed binding으로 바꾼다.
-
-### 3단계 — 실행 모델의 주인을 하나로 만든다
-
-1. runtime callback의 호출 주체를 root Agent 또는 Spring 중 하나로 확정한다.
-2. 프론트 `ExecutionProjection`을 정의하고 timeline/journey의 병렬 상태를 통합한다.
-3. custom graph와 journey 중 주 표현을 하나로 정한다.
-
-### 4단계 — 외부 경계와 개발 환경을 단순화한다
-
-1. 외부 invocation API를 single-resource 402 retry로 합친다.
-2. UI `view` 대신 `usageType` filter를 사용한다.
-3. Compose를 일반 service network로 바꾼다.
-4. native dialog, 일반 PostgreSQL image, 공개 설정 위치를 정리한다.
-
-각 단계는 기능별로 별도 변경한다. 특히 payment/recovery, runtime callback, SSE, OpenAPI, Flyway 변경은 기존 `HIGH_RISK` failure
-matrix와 fresh verifier 절차를 그대로 적용한다. 아직 배포 전이라도 현재 적용된 Flyway migration을 조용히 수정하지 않는다. 전체 개발 DB
-reset과 baseline 재구성을 별도로 승인한 경우에만 migration squash를 검토한다.
+각 변경은 한 번에 묶지 않는다. typed snapshot은 quote/callback compatibility, Testcontainers는 migration·lock test 격리,
+Version constraint는 API/manifest/quote 의미 보존, Security는 401/403/CommonResponse와 callback race, durable dispatch는 중복 실행과
+payment recovery를 각각 독립적으로 검증한다.
 
 ## 새 기능 제안 전 판단 기준
 
