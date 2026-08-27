@@ -13,6 +13,15 @@ Schema/Flyway, transaction/lock, execution/callback, payment/recovery, SSE, and 
 HIGH_RISK. Follow the failure-matrix and fresh-verifier workflow in `AI.md`; style cleanup never
 weakens those safety requirements.
 
+## Path and privacy hygiene
+
+Never write host-specific absolute filesystem paths to tracked source, documentation, examples,
+generated artifacts, or handoff files. This includes Windows drive paths and user directories.
+Use repository-relative paths such as `./` or
+`../`, or say `이 저장소 루트` when the exact checkout location is irrelevant. Network URLs,
+Docker-internal paths, and protocol/test fixture URIs are not filesystem paths and may remain when
+they are required by the documented behavior. Search the owned diff for host paths before handoff.
+
 ## Package and language boundary
 
 Use only packages with a real responsibility: `controller`, `service`, `repository`, `dto/request`,

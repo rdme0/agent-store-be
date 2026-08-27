@@ -54,6 +54,10 @@ Review in three passes:
 - `.env.example` contains only Spring datasource/runtime/x402/integration secrets plus Docker Compose
   PostgreSQL password and port. Public URL, wallet, policy, timeout, or payment-mode values belong in
   YAML, not `.env`.
+- Reject host-specific absolute filesystem paths in tracked source, documentation, examples,
+  generated artifacts, and handoff files, including Windows drive/user paths and Unix user-directory
+  paths. Require repository-relative paths or a repository-root description. Do not flag
+  required network URLs, Docker-internal paths, or protocol/test fixture URIs as filesystem paths.
 - Common responses, exceptions, error codes, and the global exception handler are Kotlin. Internal
   DTOs end in `Dto`; HTTP types end in `Request` or `Response`.
 - Remove redundant repository `@Param` and convention-identical entity `@Column(name)` metadata.
