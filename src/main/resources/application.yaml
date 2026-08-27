@@ -21,6 +21,9 @@ spring:
           time_zone: UTC
   jackson:
     default-property-inclusion: non_null
+  http:
+    converters:
+      preferred-json-mapper: jackson2
   datasource:
     url: jdbc:postgresql://localhost:5432/agent_store?currentSchema=public
     username: postgres
