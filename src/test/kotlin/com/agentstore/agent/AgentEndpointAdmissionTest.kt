@@ -11,7 +11,7 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.model.entity.AgentDependency
@@ -100,7 +100,7 @@ class AgentEndpointAdmissionTest {
             mock(DeveloperRepository::class.java),
             productionPolicy(),
             mock(AgentListCursorCodec::class.java),
-            mock(AgentCapabilityService::class.java),
+            mock(FunctionContractService::class.java),
         )
 
         assertUnsafe { service.publish(draft.id) }
@@ -204,7 +204,7 @@ class AgentEndpointAdmissionTest {
         }
         try {
             val policy = AgentEndpointPolicy(
-                MockEnvironment().apply { setActiveProfiles("dev") },
+                MockEnvironment().apply { setActiveProfiles("test") },
                 AgentEndpointAddressResolver { error("loopback must not use DNS") })
             val client = X402AgentClient(
                 endpointPolicy = policy,
@@ -247,7 +247,7 @@ class AgentEndpointAdmissionTest {
             mock(DeveloperRepository::class.java),
             productionPolicy(),
             mock(AgentListCursorCodec::class.java),
-            mock(AgentCapabilityService::class.java),
+            mock(FunctionContractService::class.java),
         )
     }
 

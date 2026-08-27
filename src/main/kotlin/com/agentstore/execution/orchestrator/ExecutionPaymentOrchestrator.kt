@@ -1,5 +1,6 @@
 package com.agentstore.execution.orchestrator
 
+import com.agentstore.agent.service.AgentService
 import com.agentstore.execution.guard.BudgetGuard
 import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.execution.service.ProviderMetricService
@@ -26,6 +27,7 @@ class ExecutionPaymentOrchestrator(
     private val settlementService: ExecutionPaymentSettlementService,
     private val invocationTokenService: InvocationTokenService,
     private val providerMetricService: ProviderMetricService,
+    private val agentService: AgentService,
 ) {
     fun invoke(
         executionId: UUID,
@@ -58,7 +60,12 @@ class ExecutionPaymentOrchestrator(
                 agentVersionId = agentVersionId,
                 callPath = stepService.callPath(stepId = stepId),
             )
-            providerMetricService.start(stepId = stepId, agentVersionId = agentVersionId)
+            val functionContractId = agentService.requireVersion(id = agentVersionId).functionContractId
+            providerMetricService.start(
+                stepId = stepId,
+                agentVersionId = agentVersionId,
+                functionContractId = functionContractId,
+            )
             val result = paymentClient.invoke(
                 PaymentInvocationRequestDto(
                     paymentAttemptId = attemptId.toString(),

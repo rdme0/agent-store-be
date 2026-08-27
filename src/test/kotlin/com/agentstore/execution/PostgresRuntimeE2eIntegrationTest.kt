@@ -117,20 +117,20 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
     }
 
     @Test
-    fun `capability reference selects one provider and settles distinct developer revenues`() {
-        val registry = runtimeFixture.createCapabilityMarketplaceRegistry()
+    fun `function contract reference selects one provider and settles distinct developer revenues`() {
+        val registry = runtimeFixture.createFunctionContractMarketplaceRegistry()
         val graph = dependencyResolver.resolve(
             rootVersionId = registry.rootVersionId,
             allowUnresolvedRequired = false,
             allowPriceExceeded = false,
         )
         val cost = costResolver.resolve(root = graph.root)
-        val capabilityEdge = graph.root.dependencies.single { edge -> edge.selection != null }
+        val functionContractEdge = graph.root.dependencies.single { edge -> edge.selection != null }
         val dependencyIds = graph.root.dependencies.map { edge -> edge.dependency.id }
 
         assertThat(dependencyIds).isEqualTo(dependencyIds.sortedBy(UUID::toString))
-        assertThat(capabilityEdge.resolved?.version?.id).isEqualTo(registry.selectedProviderVersionId)
-        assertThat(capabilityEdge.selection?.candidates?.map { candidate -> candidate.versionId })
+        assertThat(functionContractEdge.resolved?.version?.id).isEqualTo(registry.selectedProviderVersionId)
+        assertThat(functionContractEdge.selection?.candidates?.map { candidate -> candidate.versionId })
             .containsExactly(registry.selectedProviderVersionId, registry.excludedProviderVersionId)
         assertThat(graph.root.dependencies.mapNotNull { edge -> edge.resolved?.version?.endpoint }.toSet())
             .hasSize(2)
@@ -138,7 +138,7 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
         val frozenSnapshot = objectMapper.writeValueAsString(graph.root.snapshot())
         val newlyPublishedVersionId = runtimeFixture.publishMorePreferredProvider(
             agentId = registry.excludedProviderAgentId,
-            capabilityId = registry.capabilityId,
+            functionContractId = registry.functionContractId,
         )
         val currentGraph = dependencyResolver.resolve(
             rootVersionId = registry.rootVersionId,
@@ -157,7 +157,7 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
         val scenario = DependencyRuntimeFixture(
             root = root,
             rootCode = registry.rootCode,
-            childCode = capabilityEdge.resolved?.version?.agentCode ?: error("Selected provider code is missing"),
+            childCode = functionContractEdge.resolved?.version?.agentCode ?: error("Selected provider code is missing"),
             childVersionId = registry.selectedProviderVersionId,
         )
         paymentClient.arm(fixture = scenario)
@@ -325,9 +325,9 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
     }
 
     @Test
-    fun `root capability output schema mismatch fails after settlement without losing payment evidence`() {
+    fun `root function contract output schema mismatch fails after settlement without losing payment evidence`() {
         val fixture = runtimeFixture.createRootWithDependency()
-        runtimeFixture.attachCapability(
+        runtimeFixture.attachFunctionContract(
             quoteId = fixture.root.quoteId,
             versionId = fixture.root.agentVersionId,
             outputSchema = """{"type":"object","required":["capabilityProof"]}""",
@@ -353,9 +353,9 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
     }
 
     @Test
-    fun `dependency capability input schema mismatch prevents child payment`() {
+    fun `dependency function contract input schema mismatch prevents child payment`() {
         val fixture = runtimeFixture.createRootWithDependency()
-        runtimeFixture.attachCapability(
+        runtimeFixture.attachFunctionContract(
             quoteId = fixture.root.quoteId,
             versionId = fixture.childVersionId,
             inputSchema = """{"type":"object","required":["missingContext"]}""",
@@ -381,9 +381,9 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
     }
 
     @Test
-    fun `dependency capability output schema mismatch preserves child settlement and stops fallback`() {
+    fun `dependency function contract output schema mismatch preserves child settlement and stops fallback`() {
         val fixture = runtimeFixture.createRootWithDependency()
-        runtimeFixture.attachCapability(
+        runtimeFixture.attachFunctionContract(
             quoteId = fixture.root.quoteId,
             versionId = fixture.childVersionId,
             outputSchema = """{"type":"object","required":["capabilityProof"]}""",

@@ -2,7 +2,7 @@ package com.agentstore.dependency
 
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentResponseFormat
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -46,7 +46,7 @@ class DependencyServiceFunctionContractTest {
             agentService,
             mock(DependencyResolver::class.java),
             mock(CycleValidator::class.java),
-            mock(AgentCapabilityService::class.java),
+            mock(FunctionContractService::class.java),
             mock(AgentDependencyAllowedProviderRepository::class.java),
         )
         val functionContractId = UUID.randomUUID()

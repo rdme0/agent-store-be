@@ -1,7 +1,7 @@
 package com.agentstore.execution.runner
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -34,7 +34,7 @@ class ExecutionRunner(
     private val executionRunService: ExecutionRunService,
     private val executionLifecycleService: ExecutionLifecycleService,
     private val properties: AgentStoreProperties,
-    private val capabilityService: AgentCapabilityService,
+    private val functionContractService: FunctionContractService,
     private val providerMetricService: ProviderMetricService,
 ) {
     private val logger = LoggerFactory.getLogger(ExecutionRunner::class.java)
@@ -177,7 +177,7 @@ class ExecutionRunner(
         if (!schema.isObject) {
             return
         }
-        capabilityService.validateInstance(
+        functionContractService.validateInstance(
             schema = schema,
             value = output,
             errorCode = ErrorCode.AGENT_OUTPUT_SCHEMA_INVALID,

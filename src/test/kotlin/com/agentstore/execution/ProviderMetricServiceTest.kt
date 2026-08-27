@@ -3,7 +3,6 @@ package com.agentstore.execution
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentResponseFormat
-import com.agentstore.agent.service.AgentService
 import com.agentstore.execution.model.entity.AgentInvocationObservation
 import com.agentstore.execution.model.vo.AgentInvocationOutcome
 import com.agentstore.execution.repository.AgentInvocationObservationRepository
@@ -23,7 +22,6 @@ class ProviderMetricServiceTest {
     @Test
     fun `payment uncertainty is excluded while invalid output lowers provider reliability`() {
         val repository = mock(AgentInvocationObservationRepository::class.java)
-        val agentService = mock(AgentService::class.java)
         val contractId = UUID.randomUUID()
         val now = Instant.parse("2026-08-24T00:00:00Z")
         val agent = Agent(UUID.randomUUID(), UUID.randomUUID(), "news", "뉴스", "뉴스")
@@ -64,7 +62,6 @@ class ProviderMetricServiceTest {
         ).thenReturn(observations)
         val service = ProviderMetricService(
             observationRepository = repository,
-            agentService = agentService,
             clock = Clock.fixed(now, ZoneOffset.UTC),
         )
 

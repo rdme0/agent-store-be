@@ -18,17 +18,17 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(name = "agent_capabilities", uniqueConstraints = @UniqueConstraint(columnNames = {
-        "key", "contract_version"}))
+@Table(name = "function_contracts", uniqueConstraints = @UniqueConstraint(columnNames = {
+        "code", "contract_version"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class AgentCapability extends BaseEntity {
+public class FunctionContract extends BaseEntity {
 
     @Id
     private UUID id;
 
     @Column(nullable = false, length = 128)
-    private String key;
+    private String code;
 
     @Column(nullable = false, length = 32)
     private String contractVersion;
@@ -52,11 +52,11 @@ public class AgentCapability extends BaseEntity {
     @Column(nullable = false, columnDefinition = "jsonb")
     private JsonNode outputSchema;
 
-    public AgentCapability(UUID id, String key, String contractVersion, String name,
+    public FunctionContract(UUID id, String code, String contractVersion, String name,
             String description, AgentResponseFormat responseFormat, JsonNode inputSchema,
             JsonNode outputSchema) {
         this.id = id;
-        this.key = key;
+        this.code = code;
         this.contractVersion = contractVersion;
         this.name = name;
         this.description = description;

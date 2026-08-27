@@ -25,19 +25,19 @@ enum class ErrorCode(
     AGENT_HAS_VERSIONS(Domain.AGENT, HttpStatus.CONFLICT, 2, "Version이 있는 Agent는 삭제할 수 없습니다."),
     AGENT_VERSION_ALREADY_EXISTS(Domain.AGENT, HttpStatus.CONFLICT, 3, "Agent version이 이미 존재합니다."),
     INVALID_VERSION_TRANSITION(Domain.AGENT, HttpStatus.CONFLICT, 4, "Agent version 상태 전환이 올바르지 않습니다."),
-    CAPABILITY_NOT_FOUND(Domain.AGENT, HttpStatus.NOT_FOUND, 4, "Agent capability를 찾을 수 없습니다."),
-    CAPABILITY_ALREADY_EXISTS(Domain.AGENT, HttpStatus.CONFLICT, 5, "Agent capability가 이미 존재합니다."),
-    INVALID_CAPABILITY_SCHEMA(
+    FUNCTION_CONTRACT_NOT_FOUND(Domain.AGENT, HttpStatus.NOT_FOUND, 4, "Function Contract를 찾을 수 없습니다."),
+    FUNCTION_CONTRACT_ALREADY_EXISTS(Domain.AGENT, HttpStatus.CONFLICT, 5, "Function Contract가 이미 존재합니다."),
+    INVALID_FUNCTION_CONTRACT_SCHEMA(
         Domain.AGENT,
         HttpStatus.BAD_REQUEST,
         6,
-        "Agent capability Schema가 올바르지 않습니다.",
+        "Function Contract Schema가 올바르지 않습니다.",
     ),
-    CAPABILITY_RESPONSE_FORMAT_MISMATCH(
+    FUNCTION_CONTRACT_RESPONSE_FORMAT_MISMATCH(
         Domain.AGENT,
         HttpStatus.CONFLICT,
         6,
-        "Capability와 응답 형식이 일치하지 않습니다.",
+        "Function Contract와 응답 형식이 일치하지 않습니다.",
     ),
 
     DEPENDENCY_INVALID_PRICE(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 1, "Dependency maxPriceAtomic이 올바르지 않습니다."),
@@ -66,13 +66,13 @@ enum class ErrorCode(
         Domain.DEPENDENCY,
         HttpStatus.UNPROCESSABLE_CONTENT,
         5,
-        "Capability 공급자 후보 수가 허용 범위를 초과했습니다.",
+        "Function Contract 공급자 후보 수가 허용 범위를 초과했습니다.",
     ),
-    PROVIDER_EXPLORATION_LIMIT_EXCEEDED(
+    PROVIDER_RESOLUTION_LIMIT_EXCEEDED(
         Domain.DEPENDENCY,
         HttpStatus.UNPROCESSABLE_CONTENT,
         6,
-        "Capability 공급자 조합 탐색 한도를 초과했습니다.",
+        "Function Contract 공급자 조합 탐색 한도를 초과했습니다.",
     ),
     PROVIDER_METRICS_INSUFFICIENT(
         Domain.DEPENDENCY,

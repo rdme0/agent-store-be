@@ -11,15 +11,33 @@ import org.springframework.mock.env.MockEnvironment
 
 class AgentEndpointPolicyTest {
     @Test
-    fun `development accepts only explicit loopback hosts`() {
+    fun `development accepts only exact local origins`() {
         val policy = policy("dev") { error("development loopback validation must not resolve DNS") }
 
         assertDoesNotThrow { policy.validate("http://localhost:8090/invoke") }
-        assertDoesNotThrow { policy.validate("https://127.0.0.1:8090/invoke") }
-        assertDoesNotThrow { policy.validate("http://[::1]:8090/invoke") }
+        assertDoesNotThrow { policy.validate("http://127.0.0.1:8090/invoke") }
+        assertUnsafe { policy.validate("https://127.0.0.1:8090/invoke") }
+        assertUnsafe { policy.validate("http://localhost:8091/invoke") }
+        assertUnsafe { policy.validate("http://[::1]:8090/invoke") }
         assertUnsafe { policy.validate("https://agent.example.com/invoke") }
         assertUnsafe { policy.validate("http://127.0.0.2/invoke") }
         assertUnsafe { policy.validate("http://localhost.:8090/invoke") }
+    }
+
+    @Test
+    fun `compose accepts only the demo agent service origin`() {
+        val environment = MockEnvironment().apply { setActiveProfiles("dev", "compose") }
+        val demoAgentAddress = InetAddress.getByAddress(byteArrayOf(172.toByte(), 20, 0, 2))
+        val policy = AgentEndpointPolicy(
+            environment = environment,
+            addressResolver = { host ->
+                if (host == "demo-agent") listOf(demoAgentAddress) else InetAddress.getAllByName(host).toList()
+            },
+        )
+
+        assertDoesNotThrow { policy.validate("http://demo-agent:8090/agents/news/invoke") }
+        assertUnsafe { policy.validate("http://demo-agent:8091/agents/news/invoke") }
+        assertUnsafe { policy.validate("http://localhost:8090/agents/news/invoke") }
     }
 
     @Test

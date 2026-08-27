@@ -1,17 +1,19 @@
 package com.agentstore.agent
 
+import com.agentstore.agent.config.AgentManifestConfiguration
 import com.agentstore.agent.dto.request.AgentManifestRequest
 import com.agentstore.agent.model.entity.Agent
-import com.agentstore.agent.model.entity.AgentCapability
+import com.agentstore.agent.model.entity.FunctionContract
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.agent.service.AgentManifestService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.dependency.service.DependencyService
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import jakarta.validation.Validation
 import java.math.BigInteger
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -22,12 +24,14 @@ import org.mockito.Mockito.`when`
 
 class AgentManifestServiceTest {
     private val agentService = mock(AgentService::class.java)
-    private val functionContractService = mock(AgentCapabilityService::class.java)
+    private val functionContractService = mock(FunctionContractService::class.java)
     private val dependencyService = mock(DependencyService::class.java)
     private val service = AgentManifestService(
         agentService = agentService,
         functionContractService = functionContractService,
         dependencyService = dependencyService,
+        yamlMapper = AgentManifestConfiguration().manifestYamlMapper(),
+        validator = Validation.buildDefaultValidatorFactory().validator,
     )
 
     @Test
@@ -83,7 +87,7 @@ class AgentManifestServiceTest {
             "투자 판단을 돕습니다.",
             AgentUsageType.USER_FACING,
         )
-        val contract = capability(id = UUID.randomUUID())
+        val contract = functionContract(id = UUID.randomUUID())
         val version = AgentVersion(
             UUID.randomUUID(),
             agent.id,
@@ -138,9 +142,9 @@ class AgentManifestServiceTest {
         """.trimIndent()
     }
 
-    private fun capability(id: UUID): AgentCapability {
+    private fun functionContract(id: UUID): FunctionContract {
         val schema = jacksonObjectMapper().readTree("""{"type":"object"}""")
-        return AgentCapability(
+        return FunctionContract(
             id,
             "investment-analysis",
             "2.0.0",

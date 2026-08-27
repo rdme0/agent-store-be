@@ -1,10 +1,10 @@
 package com.agentstore.dependency
 
 import com.agentstore.agent.model.entity.Agent
-import com.agentstore.agent.model.entity.AgentCapability
+import com.agentstore.agent.model.entity.FunctionContract
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentResponseFormat
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -126,7 +126,7 @@ class DependencyResolverFunctionContractTest {
 
     private fun fixture(): ResolverFixture {
         val agentService = mock(AgentService::class.java)
-        val contractService = mock(AgentCapabilityService::class.java)
+        val contractService = mock(FunctionContractService::class.java)
         val dependencyRepository = mock(AgentDependencyRepository::class.java)
         val allowedProviderRepository = mock(AgentDependencyAllowedProviderRepository::class.java)
         val metricService = mock(ProviderMetricService::class.java)
@@ -153,7 +153,7 @@ class DependencyResolverFunctionContractTest {
             priceAtomic = 1_500,
         )
         val schema = jacksonObjectMapper().readTree("""{"type":"object"}""")
-        val contract = AgentCapability(
+        val contract = FunctionContract(
             functionContractId,
             "news-analysis",
             "1.0.0",
@@ -168,8 +168,8 @@ class DependencyResolverFunctionContractTest {
         listOf(rootAgent, cheapAgent, newestAgent).forEach { agent ->
             `when`(agentService.requireAgent(agent.id)).thenReturn(agent)
         }
-        `when`(agentService.activeVersionsForCapability(functionContractId)).thenReturn(listOf(newest, cheap))
-        `when`(contractService.requireCapability(functionContractId)).thenReturn(contract)
+        `when`(agentService.activeVersionsForFunctionContract(functionContractId)).thenReturn(listOf(newest, cheap))
+        `when`(contractService.requireFunctionContract(functionContractId)).thenReturn(contract)
         `when`(dependencyRepository.findAllBySourceVersionIdOrderByIdAsc(cheap.id)).thenReturn(emptyList())
         `when`(dependencyRepository.findAllBySourceVersionIdOrderByIdAsc(newest.id)).thenReturn(emptyList())
 
@@ -285,7 +285,7 @@ class DependencyResolverFunctionContractTest {
         }
 
         fun setProviders(providers: List<AgentVersion>) {
-            `when`(agentService.activeVersionsForCapability(functionContractId)).thenReturn(providers)
+            `when`(agentService.activeVersionsForFunctionContract(functionContractId)).thenReturn(providers)
         }
     }
 }

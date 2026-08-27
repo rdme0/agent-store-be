@@ -1,6 +1,6 @@
 package com.agentstore.dependency
 
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -18,7 +18,7 @@ import org.mockito.Mockito.mock
 class DependencyResolverVersionConstraintTest {
     private val resolver = DependencyResolver(
         agentService = mock(AgentService::class.java),
-        capabilityService = mock(AgentCapabilityService::class.java),
+        functionContractService = mock(FunctionContractService::class.java),
         dependencyRepository = mock(AgentDependencyRepository::class.java),
         allowedProviderRepository = mock(AgentDependencyAllowedProviderRepository::class.java),
         providerMetricService = mock(ProviderMetricService::class.java),

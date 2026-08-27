@@ -20,7 +20,11 @@ class AgentEndpointPolicy(
         private val IPV6_LOOPBACK = ByteArray(16).apply { this[lastIndex] = 1 }
         private val IPV4_LOOPBACK = byteArrayOf(127, 0, 0, 1)
         private val HTTP_SCHEMES = setOf("http", "https")
-        private val DEVELOPMENT_AGENT_HOSTS = setOf("localhost", "127.0.0.1", "::1", "demo-agent")
+        private val LOCAL_AGENT_ORIGINS = setOf(
+            "http://localhost:8090",
+            "http://127.0.0.1:8090",
+        )
+        private const val COMPOSE_AGENT_ORIGIN = "http://demo-agent:8090"
     }
 
     fun validate(endpoint: String) {
@@ -51,10 +55,10 @@ class AgentEndpointPolicy(
         }
 
         if (isDevelopmentProfile()) {
-            if (host !in DEVELOPMENT_AGENT_HOSTS) {
+            if (!isAllowedDevelopmentOrigin(uri = uri)) {
                 throw DomainClientException(
                     errorCode = ErrorCode.UNSAFE_AGENT_ENDPOINT,
-                    messageArguments = arrayOf("development only permits loopback Agent endpoints"),
+                    messageArguments = arrayOf("development Agent endpoint origin is not allowed"),
                 )
             }
             return ValidatedAgentEndpoint(uri = uri, addresses = developmentAddresses(host = host))
@@ -85,6 +89,19 @@ class AgentEndpointPolicy(
 
     private fun isDevelopmentProfile(): Boolean {
         return environment.matchesProfiles("dev", "development", "test")
+    }
+
+    private fun isAllowedDevelopmentOrigin(uri: URI): Boolean {
+        if (environment.matchesProfiles("test")) {
+            return uri.scheme == "http" && uri.host?.trim('[', ']') in setOf("localhost", "127.0.0.1", "::1")
+        }
+
+        val origin = "${uri.scheme}://${uri.host}:${uri.port}"
+        return if (environment.matchesProfiles("compose")) {
+            origin == COMPOSE_AGENT_ORIGIN
+        } else {
+            origin in LOCAL_AGENT_ORIGINS
+        }
     }
 
     private fun developmentAddresses(host: String): List<InetAddress> {

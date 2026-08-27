@@ -1,6 +1,6 @@
 package com.agentstore.external.config
 
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.service.ExecutionService
@@ -64,7 +64,7 @@ class ExternalApiConfiguration {
         saleRepository: ExternalApiSaleRepository,
         quoteService: QuoteService,
         executionService: ExecutionService,
-        capabilityService: AgentCapabilityService,
+        functionContractService: FunctionContractService,
         x402PaymentService: ExternalX402PaymentService,
         objectMapper: ObjectMapper,
         transactionTemplate: TransactionTemplate,
@@ -76,7 +76,7 @@ class ExternalApiConfiguration {
             saleRepository = saleRepository,
             quoteService = quoteService,
             executionService = executionService,
-            capabilityService = capabilityService,
+            functionContractService = functionContractService,
             x402PaymentService = x402PaymentService,
             objectMapper = objectMapper,
             transactionTemplate = transactionTemplate,

@@ -2,7 +2,7 @@ package com.agentstore.dependency.resolver
 
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentVersionStatus
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.ClientException
 import com.agentstore.common.exception.client.DomainClientException
@@ -31,7 +31,7 @@ import org.springframework.stereotype.Component
 @Component
 class DependencyResolver(
     private val agentService: AgentService,
-    private val capabilityService: AgentCapabilityService,
+    private val functionContractService: FunctionContractService,
     private val dependencyRepository: AgentDependencyRepository,
     private val allowedProviderRepository: AgentDependencyAllowedProviderRepository,
     private val providerMetricService: ProviderMetricService,
@@ -85,7 +85,7 @@ class DependencyResolver(
         strategy: ProviderSelectionStrategy,
         maxPriceAtomic: BigInteger,
     ): ResolvedGraph {
-        val contract = capabilityService.requireByCode(
+        val contract = functionContractService.requireByCode(
             code = functionCode,
             contractVersion = contractVersion,
         )
@@ -163,7 +163,13 @@ class DependencyResolver(
     }
 
     fun newest(versions: List<AgentVersion>): AgentVersion? {
-        return versions.maxWithOrNull { left, right -> compareSemver(left.semver, right.semver) }
+        val comparator = Comparator<AgentVersion> { left, right ->
+            compareSemver(
+                left = left.semver,
+                right = right.semver,
+            )
+        }
+        return versions.maxWithOrNull(comparator = comparator)
     }
 
     private data class VersionPredicate(val operator: String, val version: String)
@@ -294,7 +300,7 @@ class DependencyResolver(
             ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_RESOLVED)
         val providerScope = dependency.providerScope
             ?: throw DomainClientException(ErrorCode.DEPENDENCY_NOT_RESOLVED)
-        val contract = capabilityService.requireCapability(id = functionContractId)
+        val contract = functionContractService.requireFunctionContract(id = functionContractId)
         val active = scopedCandidates(dependency = dependency, functionContractId = functionContractId)
         if (active.size > MAX_PROVIDER_CANDIDATES) {
             throw DomainClientException(ErrorCode.PROVIDER_CANDIDATE_LIMIT_EXCEEDED)
@@ -381,7 +387,7 @@ class DependencyResolver(
                             strategy = strategy,
                             providerScope = providerScope,
                             functionContractId = contract.id,
-                            functionCode = contract.key,
+                            functionCode = contract.code,
                             functionContractVersion = contract.contractVersion,
                             candidates = summaries,
                             selectedVersionId = candidate.id,
@@ -408,7 +414,7 @@ class DependencyResolver(
             code = "OPTIONAL_DEPENDENCY_NOT_RESOLVED",
             dependencyId = dependency.id,
             functionContractId = contract.id,
-            functionCode = contract.key,
+            functionCode = contract.code,
             versionConstraint = dependency.versionConstraint,
         )
         return listOf(
@@ -420,7 +426,7 @@ class DependencyResolver(
                     strategy = strategy,
                     providerScope = providerScope,
                     functionContractId = contract.id,
-                    functionCode = contract.key,
+                    functionCode = contract.code,
                     functionContractVersion = contract.contractVersion,
                     candidates = summaries,
                     selectedVersionId = null,
@@ -523,7 +529,7 @@ class DependencyResolver(
         dependency: AgentDependency,
         functionContractId: UUID,
     ): List<AgentVersion> {
-        val all = agentService.activeVersionsForCapability(capabilityId = functionContractId)
+        val all = agentService.activeVersionsForFunctionContract(functionContractId = functionContractId)
         return when (dependency.providerScope) {
             ProviderScope.PINNED -> {
                 val targetAgentId = dependency.targetAgentId
@@ -597,7 +603,10 @@ class DependencyResolver(
         return Comparator { first, second ->
             val result = when (strategy) {
                 ProviderSelectionStrategy.LOWEST_PRICE -> first.priceAtomic.compareTo(second.priceAtomic)
-                ProviderSelectionStrategy.LATEST_VERSION -> -compareSemver(first.semver, second.semver)
+                ProviderSelectionStrategy.LATEST_VERSION -> -compareSemver(
+                    left = first.semver,
+                    right = second.semver,
+                )
                 ProviderSelectionStrategy.HIGHEST_RELIABILITY -> {
                     -(metrics[first.id]?.reliabilityPercent ?: -1)
                         .compareTo(metrics[second.id]?.reliabilityPercent ?: -1)
@@ -610,13 +619,19 @@ class DependencyResolver(
             if (result != 0) {
                 result
             } else {
-                compareByVersionThenPrice(first, second)
+                compareByVersionThenPrice(
+                    left = first,
+                    right = second,
+                )
             }
         }
     }
 
     private fun compareByVersionThenPrice(left: AgentVersion, right: AgentVersion): Int {
-        val versionOrder = -compareSemver(left.semver, right.semver)
+        val versionOrder = -compareSemver(
+            left = left.semver,
+            right = right.semver,
+        )
         if (versionOrder != 0) {
             return versionOrder
         }
@@ -695,11 +710,11 @@ class DependencyResolver(
         name: String,
         description: String,
     ): ResolvedVersion {
-        val functionContract = version.capabilityId?.let { capabilityId ->
-            val contract = capabilityService.requireCapability(id = capabilityId)
+        val functionContract = version.functionContractId?.let { functionContractId ->
+            val contract = functionContractService.requireFunctionContract(id = functionContractId)
             ResolvedFunctionContract(
                 id = contract.id,
-                key = contract.key,
+                code = contract.code,
                 contractVersion = contract.contractVersion,
                 inputSchema = contract.inputSchema,
                 outputSchema = contract.outputSchema,
@@ -725,7 +740,7 @@ class DependencyResolver(
     private class ProviderResolutionBudget(private var remaining: Int) {
         fun consume() {
             if (remaining == 0) {
-                throw DomainClientException(ErrorCode.PROVIDER_EXPLORATION_LIMIT_EXCEEDED)
+                throw DomainClientException(ErrorCode.PROVIDER_RESOLUTION_LIMIT_EXCEEDED)
             }
             remaining -= 1
         }

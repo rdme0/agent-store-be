@@ -33,7 +33,7 @@ data class AgentVersionResponse(
             return AgentVersionResponse(
                 id = version.id,
                 agentId = version.agentId,
-                functionContractId = version.capabilityId,
+                functionContractId = version.functionContractId,
                 semver = version.semver,
                 status = version.status,
                 endpoint = version.endpoint,

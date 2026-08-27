@@ -355,11 +355,11 @@ validate합니다. 이미 적용한 migration을 수정하지 말고 새 migrati
 credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
 운영에서는 `application.yaml` 또는 운영용 YAML의 `agent-store.cors-origins`를 정확한 HTTPS origin으로 제한합니다.
 
-Demo Agent는 독립 Go 서비스이지만 개발 Compose에서는 API 컨테이너의 네트워크 네임스페이스를 공유합니다. 따라서
-`127.0.0.1:8090` endpoint와 `127.0.0.1:8080` runtime callback은 컨테이너 안에서도 그대로 동작합니다. demo-agent의
-설정 예시와 검증 명령은 해당 프로젝트 README가 소유하며, Spring의 `X402_PRIVATE_KEY`는 demo-agent에 복사하지 않습니다.
-`dev` profile Spring은 `agents`가 0개일 때만 demo catalog를 직접 생성합니다. 기존 Agent가 하나라도 있으면 아무것도 바꾸지 않으며,
-신규 volume에서는 user, developer, Function Contract, Agent Version, dependency가 함께 생성됩니다.
+Demo Agent는 독립 Go 서비스다. Compose에서는 일반 service network를 사용하므로 API는 `api:8080`, demo-agent는
+`demo-agent:8090`으로 통신한다. host에서는 demo-agent가 `127.0.0.1:8090`으로만 노출된다. Go의
+`catalog/agents.yaml`이 demo 계약의 단일 원본이며, API와 Go health가 준비된 뒤 `catalog-bootstrap` one-shot service가
+Function Contract 등록 → manifest import → Version publish 순서로 처리한다. 이미 ACTIVE 데이터가 있으면 catalog와
+다른 내용을 덮어쓰지 않고 drift 오류로 중단한다. Spring은 더 이상 demo catalog를 직접 seed하지 않는다.
 
 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet

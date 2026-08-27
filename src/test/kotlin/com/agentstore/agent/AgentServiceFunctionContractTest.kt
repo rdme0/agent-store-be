@@ -2,13 +2,13 @@ package com.agentstore.agent
 
 import com.agentstore.agent.codec.AgentListCursorCodec
 import com.agentstore.agent.dto.request.CreateAgentVersionRequest
-import com.agentstore.agent.model.entity.AgentCapability
+import com.agentstore.agent.model.entity.FunctionContract
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
 import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointPolicy
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -20,16 +20,16 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
 
-class AgentServiceCapabilityTest {
+class AgentServiceFunctionContractTest {
     @Test
-    fun `capability response format mismatch is rejected before version persistence`() {
-        val capabilityService = mock(AgentCapabilityService::class.java)
+    fun `function contract response format mismatch is rejected before version persistence`() {
+        val functionContractService = mock(FunctionContractService::class.java)
         val versionRepository = mock(AgentVersionRepository::class.java)
-        val capabilityId = UUID.randomUUID()
+        val functionContractId = UUID.randomUUID()
         val schema = jacksonObjectMapper().readTree("""{"type":"object"}""")
-        `when`(capabilityService.requireCapability(capabilityId)).thenReturn(
-            AgentCapability(
-                capabilityId,
+        `when`(functionContractService.requireFunctionContract(functionContractId)).thenReturn(
+            FunctionContract(
+                functionContractId,
                 "finance.stock-news-analysis",
                 "1.0.0",
                 "News",
@@ -45,7 +45,7 @@ class AgentServiceCapabilityTest {
             mock(DeveloperRepository::class.java),
             mock(AgentEndpointPolicy::class.java),
             mock(AgentListCursorCodec::class.java),
-            capabilityService,
+            functionContractService,
         )
 
         val exception = assertThrows(DomainClientException::class.java) {
@@ -59,11 +59,11 @@ class AgentServiceCapabilityTest {
                     asset = "USDC",
                     payTo = "0x0000000000000000000000000000000000000001",
                     responseFormat = AgentResponseFormat.MARKDOWN,
-                    functionContractId = capabilityId,
+                    functionContractId = functionContractId,
                 ),
             )
         }
 
-        assertEquals(ErrorCode.CAPABILITY_RESPONSE_FORMAT_MISMATCH, exception.errorCode)
+        assertEquals(ErrorCode.FUNCTION_CONTRACT_RESPONSE_FORMAT_MISMATCH, exception.errorCode)
     }
 }

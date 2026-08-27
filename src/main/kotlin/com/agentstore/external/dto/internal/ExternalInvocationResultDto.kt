@@ -2,6 +2,7 @@ package com.agentstore.external.dto.internal
 
 import com.agentstore.external.dto.response.ExternalInvocationExecutionResponse
 import com.agentstore.external.dto.response.ExternalInvocationIntentResponse
+import java.util.UUID
 
 data class ExternalInvocationIntentCreatedDto(
     val response: ExternalInvocationIntentResponse,
@@ -15,6 +16,7 @@ data class ExternalInvocationExecuteResultDto(
 )
 
 data class ExternalInvocationResultDto(
+    val invocationId: UUID,
     val receiptToken: String,
     val paymentRequiredHeader: String?,
     val paymentResponseHeader: String?,

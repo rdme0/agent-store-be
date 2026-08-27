@@ -15,7 +15,6 @@ import com.agentstore.agent.model.entity.Developer
 import com.agentstore.agent.model.vo.AgentListSort
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
-import com.agentstore.agent.model.vo.AgentView
 import com.agentstore.agent.model.vo.AgentVersionStatus
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
@@ -37,7 +36,7 @@ class AgentService(
     private val developerRepository: DeveloperRepository,
     private val endpointPolicy: AgentEndpointPolicy,
     private val cursorCodec: AgentListCursorCodec,
-    private val capabilityService: AgentCapabilityService,
+    private val functionContractService: FunctionContractService,
 ) {
     companion object {
         private val SEMVER = Regex(
@@ -120,19 +119,19 @@ class AgentService(
         cursor: String?,
         query: String?,
         sort: AgentListSort,
-        view: AgentView = AgentView.DEVELOPER,
+        usageType: AgentUsageType?,
     ): AgentListResponse {
         requireLimit(limit)
         val normalizedQuery = normalizeQuery(query)
         val decodedCursor = cursor?.let { value ->
-            cursorCodec.decode(cursor = value, query = normalizedQuery, sort = sort, view = view)
+            cursorCodec.decode(cursor = value, query = normalizedQuery, sort = sort, usageType = usageType)
         }
         val page = marketplaceAgents(
             query = normalizedQuery,
             sort = sort,
             cursor = decodedCursor,
             limit = limit,
-            view = view,
+            usageType = usageType,
         )
         val visibleItems = page.take(limit)
         val dependencyCounts = dependencyCounts(visibleItems.map { agent -> agent.id })
@@ -147,17 +146,14 @@ class AgentService(
             nextCursor = visibleItems.lastOrNull()
                 ?.takeIf { page.size > limit }
                 ?.let { agent ->
-                    cursorCodec.encode(agent = agent, query = normalizedQuery, sort = sort, view = view)
+                    cursorCodec.encode(agent = agent, query = normalizedQuery, sort = sort, usageType = usageType)
                 },
         )
     }
 
     @Transactional
-    fun getByCode(code: String, view: AgentView = AgentView.DEVELOPER): AgentResponse {
+    fun getByCode(code: String): AgentResponse {
         return agentRepository.findByCode(code)?.let { agent ->
-            if (view == AgentView.EASY && agent.usageType != AgentUsageType.USER_FACING) {
-                throw AgentNotFoundException()
-            }
             response(
                 agent = agent,
                 dependencyCount = dependencyCounts(agentIds = listOf(agent.id))[agent.id] ?: 0,
@@ -175,8 +171,8 @@ class AgentService(
             asset = request.asset,
             payTo = request.payTo,
         )
-        validateCapability(
-            capabilityId = request.functionContractId,
+        validateFunctionContract(
+            functionContractId = request.functionContractId,
             responseFormat = request.responseFormat,
         )
         val developer = requireDeveloper(request.developerId)
@@ -252,8 +248,8 @@ class AgentService(
             asset = request.asset,
             payTo = request.payTo,
         )
-        validateCapability(
-            capabilityId = request.functionContractId,
+        validateFunctionContract(
+            functionContractId = request.functionContractId,
             responseFormat = request.responseFormat,
         )
         val agent = requireAgent(agentId)
@@ -289,8 +285,8 @@ class AgentService(
         ) {
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
-        validateCapability(
-            capabilityId = version.capabilityId,
+        validateFunctionContract(
+            functionContractId = version.functionContractId,
             responseFormat = version.responseFormat,
         )
         endpointPolicy.validate(version.endpoint)
@@ -355,20 +351,20 @@ class AgentService(
         return content to sha256
     }
 
-    fun activeVersionsForCapability(capabilityId: UUID): List<AgentVersion> {
-        return agentVersionRepository.findAllByCapabilityIdAndStatus(
-            capabilityId = capabilityId,
+    fun activeVersionsForFunctionContract(functionContractId: UUID): List<AgentVersion> {
+        return agentVersionRepository.findAllByFunctionContractIdAndStatus(
+            functionContractId = functionContractId,
             status = AgentVersionStatus.ACTIVE,
         )
     }
 
-    private fun validateCapability(capabilityId: UUID?, responseFormat: AgentResponseFormat) {
-        if (capabilityId == null) {
+    private fun validateFunctionContract(functionContractId: UUID?, responseFormat: AgentResponseFormat) {
+        if (functionContractId == null) {
             return
         }
-        val capability = capabilityService.requireCapability(id = capabilityId)
-        if (capability.responseFormat != responseFormat) {
-            throw DomainClientException(ErrorCode.CAPABILITY_RESPONSE_FORMAT_MISMATCH)
+        val functionContract = functionContractService.requireFunctionContract(id = functionContractId)
+        if (functionContract.responseFormat != responseFormat) {
+            throw DomainClientException(ErrorCode.FUNCTION_CONTRACT_RESPONSE_FORMAT_MISMATCH)
         }
     }
 
@@ -383,7 +379,7 @@ class AgentService(
         sort: AgentListSort,
         cursor: AgentListCursorPayloadDto?,
         limit: Int,
-        view: AgentView,
+        usageType: AgentUsageType?,
     ): List<Agent> {
         val cursorId = cursor?.let { payload -> parseCursorId(payload.id) }
         val pageable = PageRequest.of(0, limit + 1)
@@ -391,7 +387,7 @@ class AgentService(
             AgentListSort.NEWEST -> agentRepository.findMarketplaceAgentsByCreatedAtDesc(
                 query = query,
                 status = AgentVersionStatus.ACTIVE,
-                usageType = if (view == AgentView.EASY) AgentUsageType.USER_FACING else null,
+                usageType = usageType,
                 hasCursor = cursor != null,
                 cursorCreatedAt = cursor?.createdAt,
                 cursorId = cursorId,
@@ -401,7 +397,7 @@ class AgentService(
             AgentListSort.NAME_ASC -> agentRepository.findMarketplaceAgentsByNameAsc(
                 query = query,
                 status = AgentVersionStatus.ACTIVE,
-                usageType = if (view == AgentView.EASY) AgentUsageType.USER_FACING else null,
+                usageType = usageType,
                 hasCursor = cursor != null,
                 cursorNameKey = cursor?.nameKey,
                 cursorId = cursorId,

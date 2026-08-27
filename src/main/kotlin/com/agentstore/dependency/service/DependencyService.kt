@@ -2,7 +2,7 @@ package com.agentstore.dependency.service
 
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.vo.AgentVersionStatus
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.agent.service.AgentService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -29,7 +29,7 @@ class DependencyService(
     private val agentService: AgentService,
     private val resolver: DependencyResolver,
     private val cycleValidator: CycleValidator,
-    private val capabilityService: AgentCapabilityService,
+    private val functionContractService: FunctionContractService,
     private val allowedProviderRepository: AgentDependencyAllowedProviderRepository,
 ) {
     @Transactional
@@ -59,7 +59,7 @@ class DependencyService(
             )
         }
         val functionContractId = request.functionContractId
-        functionContractId?.let(capabilityService::requireCapability)
+        functionContractId?.let(functionContractService::requireFunctionContract)
         val constraint = resolver.normalizeConstraint(constraint = request.versionConstraint)
         validateLimits(maxPriceAtomic = request.maxPriceAtomic, maxCalls = request.maxCalls)
         val dependency = AgentDependency(
@@ -160,7 +160,7 @@ class DependencyService(
             ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         val providerScope = request.providerScope
             ?: throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
-        capabilityService.requireCapability(id = functionContractId)
+        functionContractService.requireFunctionContract(id = functionContractId)
         when (providerScope) {
             ProviderScope.PINNED -> {
                 if (request.targetAgentId == null) {
@@ -271,11 +271,11 @@ class DependencyService(
 
     private fun response(dependency: AgentDependency): DependencyResponse {
         val target = dependency.targetAgentId?.let(agentService::requireAgent)
-        val functionContract = dependency.functionContractId?.let(capabilityService::requireCapability)
+        val functionContract = dependency.functionContractId?.let(functionContractService::requireFunctionContract)
         return DependencyResponse.from(
             dependency = dependency,
             targetAgentCode = target?.code,
-            functionCode = functionContract?.key,
+            functionCode = functionContract?.code,
             functionContractVersion = functionContract?.contractVersion,
         )
     }

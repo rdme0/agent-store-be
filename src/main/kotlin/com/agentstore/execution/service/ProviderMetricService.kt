@@ -1,6 +1,5 @@
 package com.agentstore.execution.service
 
-import com.agentstore.agent.service.AgentService
 import com.agentstore.execution.model.entity.AgentInvocationObservation
 import com.agentstore.execution.model.vo.AgentInvocationOutcome
 import com.agentstore.execution.repository.AgentInvocationObservationRepository
@@ -35,7 +34,6 @@ data class ProviderPerformanceDto(
 @Service
 class ProviderMetricService(
     private val observationRepository: AgentInvocationObservationRepository,
-    private val agentService: AgentService,
     private val clock: Clock,
 ) {
     companion object {
@@ -44,16 +42,15 @@ class ProviderMetricService(
     }
 
     @Transactional
-    fun start(stepId: UUID, agentVersionId: UUID) {
+    fun start(stepId: UUID, agentVersionId: UUID, functionContractId: UUID?) {
         if (observationRepository.findByExecutionStepId(stepId) != null) {
             return
         }
-        val version = agentService.requireVersion(agentVersionId)
         val observation = AgentInvocationObservation(
             UUID.randomUUID(),
             stepId,
             agentVersionId,
-            version.capabilityId,
+            functionContractId,
             clock.instant(),
         )
         try {
@@ -109,7 +106,12 @@ class ProviderMetricService(
             .sorted()
         return ProviderPerformanceDto(
             observationCount = attributable.size,
-            reliabilityPercent = percent(value = wilsonLowerBound(successes, attributable.size)),
+            reliabilityPercent = percent(
+                value = wilsonLowerBound(
+                    successes = successes,
+                    total = attributable.size,
+                ),
+            ),
             p95LatencyMillis = percentile95(latencies = latencies),
             contractCompliancePercent = percent(value = compliant.toDouble() / attributable.size),
         )
@@ -135,7 +137,10 @@ class ProviderMetricService(
         val margin = WILSON_Z * sqrt(
             (sample * (1.0 - sample) + zSquared / (4.0 * total)) / total,
         )
-        return max(0.0, (center - margin) / denominator)
+        return max(
+            a = 0.0,
+            b = (center - margin) / denominator,
+        )
     }
 
     private fun percentile95(latencies: List<Long>): Long? {

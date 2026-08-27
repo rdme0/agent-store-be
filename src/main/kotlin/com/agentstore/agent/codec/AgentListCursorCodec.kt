@@ -3,7 +3,7 @@ package com.agentstore.agent.codec
 import com.agentstore.agent.dto.internal.AgentListCursorPayloadDto
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.vo.AgentListSort
-import com.agentstore.agent.model.vo.AgentView
+import com.agentstore.agent.model.vo.AgentUsageType
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -27,11 +27,11 @@ class AgentListCursorCodec(
 
     private val signingKey = properties.runtimeTokenSecret.toByteArray(StandardCharsets.UTF_8)
 
-    fun encode(agent: Agent, query: String?, sort: AgentListSort, view: AgentView): String {
+    fun encode(agent: Agent, query: String?, sort: AgentListSort, usageType: AgentUsageType?): String {
         val payload = AgentListCursorPayloadDto(
             sort = sort,
             query = query,
-            view = view,
+            usageType = usageType,
             id = agent.id.toString(),
             createdAt = agent.createdAt,
             nameKey = agent.name.lowercase(Locale.ROOT),
@@ -46,7 +46,7 @@ class AgentListCursorCodec(
         return "$encodedPayload.$signature"
     }
 
-    fun decode(cursor: String, query: String?, sort: AgentListSort, view: AgentView): AgentListCursorPayloadDto {
+    fun decode(cursor: String, query: String?, sort: AgentListSort, usageType: AgentUsageType?): AgentListCursorPayloadDto {
         val parts = cursor.split('.', limit = 2)
         if (parts.size != 2 || parts.any { value -> value.isBlank() }) {
             throw DomainClientException(errorCode = ErrorCode.INVALID_INPUT_VALUE)
@@ -71,7 +71,7 @@ class AgentListCursorCodec(
         } catch (_: Exception) {
             throw DomainClientException(errorCode = ErrorCode.INVALID_INPUT_VALUE)
         }
-        if (payload.sort != sort || payload.query != query || payload.view != view || payload.id.isBlank()) {
+        if (payload.sort != sort || payload.query != query || payload.usageType != usageType || payload.id.isBlank()) {
             throw DomainClientException(errorCode = ErrorCode.INVALID_INPUT_VALUE)
         }
 

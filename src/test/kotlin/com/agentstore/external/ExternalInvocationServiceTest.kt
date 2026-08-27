@@ -1,6 +1,6 @@
 package com.agentstore.external
 
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -336,7 +336,7 @@ class ExternalInvocationServiceTest {
             saleRepository = saleRepository,
             quoteService = quoteService,
             executionService = executionService,
-            capabilityService = mock(AgentCapabilityService::class.java),
+            functionContractService = mock(FunctionContractService::class.java),
             x402PaymentService = x402PaymentService,
             objectMapper = objectMapper,
             transactionTemplate = transactionTemplate(),
@@ -359,7 +359,7 @@ class ExternalInvocationServiceTest {
     ): ExternalPaymentRequirementDto {
         val requirement = objectMapper.createObjectNode()
         return ExternalPaymentRequirementDto(
-            resourceUrl = "https://api.example.com/v1/invocation-intents/test/execute",
+            resourceUrl = "https://api.example.com/v1/invocations",
             amountAtomic = "125",
             payTo = properties.payTo,
             header = "payment-required",

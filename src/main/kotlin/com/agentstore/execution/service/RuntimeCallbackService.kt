@@ -1,7 +1,7 @@
 package com.agentstore.execution.service
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
@@ -41,7 +41,7 @@ class RuntimeCallbackService(
     private val paymentOrchestrator: ExecutionPaymentOrchestrator,
     private val eventService: ExecutionEventService,
     private val mutationReadiness: ExecutionMutationReadiness,
-    private val capabilityService: AgentCapabilityService,
+    private val functionContractService: FunctionContractService,
     private val objectMapper: ObjectMapper,
     private val providerMetricService: ProviderMetricService,
 ) {
@@ -237,7 +237,7 @@ class RuntimeCallbackService(
         if (!schema.isObject) {
             return
         }
-        capabilityService.validateInstance(
+        functionContractService.validateInstance(
             schema = schema,
             value = objectMapper.valueToTree(input),
             errorCode = ErrorCode.AGENT_INPUT_SCHEMA_INVALID,
@@ -249,7 +249,7 @@ class RuntimeCallbackService(
         if (!schema.isObject) {
             return
         }
-        capabilityService.validateInstance(
+        functionContractService.validateInstance(
             schema = schema,
             value = output,
             errorCode = ErrorCode.AGENT_OUTPUT_SCHEMA_INVALID,

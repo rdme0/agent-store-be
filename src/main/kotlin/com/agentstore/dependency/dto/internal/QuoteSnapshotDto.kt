@@ -28,7 +28,7 @@ data class ResolvedVersionSnapshotDto(
 
 data class FunctionContractSnapshotDto(
     val id: UUID,
-    val key: String,
+    @field:JsonAlias("key") val code: String,
     val contractVersion: String,
     @field:Schema(implementation = JsonNode::class) val inputSchema: JsonNode,
     @field:Schema(implementation = JsonNode::class) val outputSchema: JsonNode,

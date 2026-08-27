@@ -26,7 +26,7 @@ data class ResolvedNode(val version: ResolvedVersion, val dependencies: List<Res
                 functionContract = version.functionContract?.let { contract ->
                     FunctionContractSnapshotDto(
                         id = contract.id,
-                        key = contract.key,
+                        code = contract.code,
                         contractVersion = contract.contractVersion,
                         inputSchema = contract.inputSchema,
                         outputSchema = contract.outputSchema,

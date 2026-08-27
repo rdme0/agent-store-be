@@ -1,6 +1,6 @@
 package com.agentstore.external.service
 
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
@@ -47,7 +47,7 @@ class ExternalInvocationService(
     private val saleRepository: ExternalApiSaleRepository,
     private val quoteService: QuoteService,
     private val executionService: ExecutionService,
-    private val capabilityService: AgentCapabilityService,
+    private val functionContractService: FunctionContractService,
     private val x402PaymentService: ExternalX402PaymentService,
     private val objectMapper: ObjectMapper,
     private val transactionTemplate: TransactionTemplate,
@@ -103,7 +103,10 @@ class ExternalInvocationService(
                 properties.payTo,
                 request.question,
                 input,
-                minOf(quote.expiresAt, now.plus(properties.intentTtl)),
+                minOf(
+                    a = quote.expiresAt,
+                    b = now.plus(properties.intentTtl),
+                ),
             )
             intentRepository.save(intent)
 
@@ -123,6 +126,7 @@ class ExternalInvocationService(
             signatureHeader = signatureHeader,
         )
         return ExternalInvocationResultDto(
+            invocationId = created.response.id,
             receiptToken = created.receiptToken,
             paymentRequiredHeader = result.paymentRequiredHeader,
             paymentResponseHeader = result.paymentResponseHeader,
@@ -272,7 +276,7 @@ class ExternalInvocationService(
         question?.let { value -> context.put("question", value) }
         val schema = snapshot.path("version").path("functionContract").path("inputSchema")
         if (schema.isObject) {
-            capabilityService.validateInstance(
+            functionContractService.validateInstance(
                 schema = schema,
                 value = context,
                 errorCode = ErrorCode.AGENT_INPUT_SCHEMA_INVALID,

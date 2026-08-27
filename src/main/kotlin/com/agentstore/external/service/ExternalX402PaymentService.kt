@@ -128,12 +128,12 @@ class ExternalX402PaymentService(
             root.path("resource").path("url").asText() != requirement.resourceUrl ||
             accepted.path("scheme").asText() != "exact" ||
             accepted.path("network").asText() != BASE_SEPOLIA ||
-            accepted.path("asset").asText().equals(BASE_SEPOLIA_USDC, ignoreCase = true).not() ||
+            accepted.path("asset").asText().lowercase() != BASE_SEPOLIA_USDC.lowercase() ||
             accepted.path("amount").asText() != requirement.amountAtomic ||
-            accepted.path("payTo").asText().equals(requirement.payTo, ignoreCase = true).not() ||
+            accepted.path("payTo").asText().lowercase() != requirement.payTo.lowercase() ||
             accepted.path("extra").path("assetTransferMethod").asText() != "eip3009" ||
             root.path("payload").path("signature").asText().isBlank() ||
-            authorization.path("to").asText().equals(requirement.payTo, ignoreCase = true).not() ||
+            authorization.path("to").asText().lowercase() != requirement.payTo.lowercase() ||
             authorization.path("value").asText() != requirement.amountAtomic ||
             authorization.path("from").asText().matches(EVM_ADDRESS).not() ||
             authorizationExpiresAt == null ||

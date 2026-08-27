@@ -1,7 +1,7 @@
 package com.agentstore.execution
 
-import com.agentstore.agent.service.AgentCapabilityService
-import com.agentstore.agent.repository.AgentCapabilityRepository
+import com.agentstore.agent.service.FunctionContractService
+import com.agentstore.agent.repository.FunctionContractRepository
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
 import com.agentstore.common.exception.client.DomainClientException
@@ -17,6 +17,7 @@ import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
 import com.agentstore.execution.runner.ExecutionRunner
 import com.agentstore.execution.service.ExecutionService
+import com.agentstore.execution.service.ProviderMetricService
 import com.agentstore.payment.service.KrwEstimateService
 import com.agentstore.payment.service.PaymentService
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -31,17 +32,18 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 
-class ExecutionCapabilitySchemaTest {
+class ExecutionFunctionContractSchemaTest {
     @Test
     fun `invalid root input is rejected before execution persistence`() {
         val objectMapper = jacksonObjectMapper()
         val executionRepository = mock(ExecutionRepository::class.java)
         val quoteService = mock(QuoteService::class.java)
-        val capabilityService = AgentCapabilityService(
-            mock(AgentCapabilityRepository::class.java),
-            mock(AgentVersionRepository::class.java),
-            mock(AgentRepository::class.java),
-            objectMapper,
+        val functionContractService = FunctionContractService(
+            functionContractRepository = mock(FunctionContractRepository::class.java),
+            versionRepository = mock(AgentVersionRepository::class.java),
+            agentRepository = mock(AgentRepository::class.java),
+            objectMapper = objectMapper,
+            providerMetricService = mock(ProviderMetricService::class.java),
         )
         val quoteId = UUID.randomUUID()
         val snapshot = objectMapper.readTree(
@@ -68,7 +70,7 @@ class ExecutionCapabilitySchemaTest {
             mock(ExecutionRunner::class.java),
             mock(ExecutionMutationReadiness::class.java),
             mock(KrwEstimateService::class.java),
-            capabilityService,
+            functionContractService,
         )
 
         val exception = assertThrows(DomainClientException::class.java) {
@@ -144,7 +146,7 @@ class ExecutionCapabilitySchemaTest {
             mock(ExecutionRunner::class.java),
             mock(ExecutionMutationReadiness::class.java),
             mock(KrwEstimateService::class.java),
-            mock(AgentCapabilityService::class.java),
+            mock(FunctionContractService::class.java),
         )
 
         val response = service.get(executionId)

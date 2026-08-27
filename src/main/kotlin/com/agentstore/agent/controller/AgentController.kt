@@ -4,7 +4,6 @@ import com.agentstore.agent.dto.request.AgentListRequest
 import com.agentstore.agent.dto.request.CreateAgentRequest
 import com.agentstore.agent.dto.request.CreateAgentVersionRequest
 import com.agentstore.agent.dto.request.UpdateAgentRequest
-import com.agentstore.agent.model.vo.AgentView
 import com.agentstore.agent.dto.response.AgentListResponse
 import com.agentstore.agent.dto.response.AgentResponse
 import com.agentstore.agent.dto.response.AgentVersionResponse
@@ -44,7 +43,7 @@ class AgentController(private val service: AgentService) {
                 cursor = request.cursor,
                 query = request.q,
                 sort = request.sortType(),
-                view = request.viewType(),
+                usageType = request.usageTypeValue(),
             ),
         )
     }
@@ -52,14 +51,10 @@ class AgentController(private val service: AgentService) {
     @GetMapping("/agents/{code}")
     @Operation(operationId = "getApiAgentsByCode", summary = "Get agent by code")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun getByCode(
-        @PathVariable code: String,
-        @RequestParam(defaultValue = "easy") @Pattern(regexp = "easy|developer") view: String,
-    ): CommonResponse<AgentResponse> {
+    fun getByCode(@PathVariable code: String): CommonResponse<AgentResponse> {
         return CommonResponse.success(
             result = service.getByCode(
                 code = code,
-                view = AgentView.from(value = view),
             ),
         )
     }

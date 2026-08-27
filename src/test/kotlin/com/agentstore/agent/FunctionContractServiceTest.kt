@@ -2,12 +2,13 @@ package com.agentstore.agent
 
 import com.agentstore.agent.dto.request.CreateFunctionContractRequest
 import com.agentstore.agent.model.vo.AgentResponseFormat
-import com.agentstore.agent.repository.AgentCapabilityRepository
+import com.agentstore.agent.repository.FunctionContractRepository
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
+import com.agentstore.execution.service.ProviderMetricService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import jakarta.validation.Validation
@@ -17,13 +18,14 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 
-class AgentCapabilityServiceTest {
+class FunctionContractServiceTest {
     private val objectMapper = jacksonObjectMapper()
-    private val service = AgentCapabilityService(
-        mock(AgentCapabilityRepository::class.java),
-        mock(AgentVersionRepository::class.java),
-        mock(AgentRepository::class.java),
-        objectMapper,
+    private val service = FunctionContractService(
+        functionContractRepository = mock(FunctionContractRepository::class.java),
+        versionRepository = mock(AgentVersionRepository::class.java),
+        agentRepository = mock(AgentRepository::class.java),
+        objectMapper = objectMapper,
+        providerMetricService = mock(ProviderMetricService::class.java),
     )
 
     @Test
@@ -36,7 +38,7 @@ class AgentCapabilityServiceTest {
             val exception = assertThrows(DomainClientException::class.java) {
                 service.create(request(inputSchema = inputSchema))
             }
-            assertEquals(ErrorCode.INVALID_CAPABILITY_SCHEMA, exception.errorCode)
+            assertEquals(ErrorCode.INVALID_FUNCTION_CONTRACT_SCHEMA, exception.errorCode)
         }
     }
 
@@ -64,7 +66,7 @@ class AgentCapabilityServiceTest {
             val exception = assertThrows(DomainClientException::class.java) {
                 service.create(request(inputSchema = inputSchema))
             }
-            assertEquals(ErrorCode.INVALID_CAPABILITY_SCHEMA, exception.errorCode)
+            assertEquals(ErrorCode.INVALID_FUNCTION_CONTRACT_SCHEMA, exception.errorCode)
         }
     }
 
@@ -93,7 +95,7 @@ class AgentCapabilityServiceTest {
     }
 
     @Test
-    fun `structured capability schema must match the runtime title and sections contract`() {
+    fun `structured function contract schema must match the runtime title and sections contract`() {
         val invalidSchemas = listOf(
             schema(
                 """
@@ -127,7 +129,7 @@ class AgentCapabilityServiceTest {
                     ),
                 )
             }
-            assertEquals(ErrorCode.INVALID_CAPABILITY_SCHEMA, exception.errorCode)
+            assertEquals(ErrorCode.INVALID_FUNCTION_CONTRACT_SCHEMA, exception.errorCode)
         }
     }
 

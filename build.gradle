@@ -44,6 +44,7 @@ dependencies {
     implementation 'org.jetbrains.kotlin:kotlin-reflect'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
     implementation 'me.paulschwarz:springboot4-dotenv:5.1.0'
     implementation 'org.semver4j:semver4j:6.0.0'
     implementation 'com.networknt:json-schema-validator:2.0.4'

@@ -10,7 +10,7 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
     private val developerIds = linkedSetOf<UUID>()
     private val agentIds = linkedSetOf<UUID>()
     private val agentVersionIds = linkedSetOf<UUID>()
-    private val capabilityIds = linkedSetOf<UUID>()
+    private val functionContractIds = linkedSetOf<UUID>()
     private val dependencyIds = linkedSetOf<UUID>()
     private val quoteIds = linkedSetOf<UUID>()
     private val executionIds = linkedSetOf<UUID>()
@@ -43,8 +43,8 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
         return agentVersionIds.add(id)
     }
 
-    fun trackCapability(id: UUID): Boolean {
-        return capabilityIds.add(id)
+    fun trackFunctionContract(id: UUID): Boolean {
+        return functionContractIds.add(id)
     }
 
     fun trackDependency(id: UUID): Boolean {
@@ -113,7 +113,7 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
         deleteTracked("execution_quotes", quoteIds)
         deleteTracked("agent_dependencies", dependencyIds)
         deleteTracked("agent_versions", agentVersionIds)
-        deleteTracked("agent_capabilities", capabilityIds)
+        deleteTracked("function_contracts", functionContractIds)
         deleteTracked("agents", agentIds)
         deleteTracked("developers", developerIds)
         deleteTracked("users", userIds)

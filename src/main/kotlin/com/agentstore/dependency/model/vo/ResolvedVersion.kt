@@ -23,7 +23,7 @@ data class ResolvedVersion(
 
 data class ResolvedFunctionContract(
     val id: UUID,
-    val key: String,
+    val code: String,
     val contractVersion: String,
     val inputSchema: JsonNode,
     val outputSchema: JsonNode,

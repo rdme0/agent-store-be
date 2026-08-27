@@ -13,7 +13,7 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -47,7 +47,7 @@ class AgentMarketplaceListTest {
         )
             .thenReturn(emptyList())
 
-        val firstResult = fixture.service.list(2, null, " risk ", AgentListSort.NEWEST)
+        val firstResult = fixture.service.list(limit = 2, cursor = null, query = " risk ", sort = AgentListSort.NEWEST, usageType = null)
         val lastVisible = fixture.newest[1]
         `when`(
             fixture.agentRepository.findMarketplaceAgentsByCreatedAtDesc(
@@ -64,7 +64,7 @@ class AgentMarketplaceListTest {
             .thenReturn(emptyList())
 
         val secondResult =
-            fixture.service.list(2, firstResult.nextCursor, "risk", AgentListSort.NEWEST)
+            fixture.service.list(limit = 2, cursor = firstResult.nextCursor, query = "risk", sort = AgentListSort.NEWEST, usageType = null)
 
         assertEquals(listOf("newest-a", "newest-b"), firstResult.items.map { it.code })
         assertEquals(
@@ -84,13 +84,13 @@ class AgentMarketplaceListTest {
         ).thenReturn(fixture.newest.take(2))
         `when`(fixture.agentRepository.countDistinctDependenciesByAgentIds(listOf(fixture.newest[0].id)))
             .thenReturn(emptyList())
-        val cursor = fixture.service.list(1, null, "risk", AgentListSort.NEWEST).nextCursor!!
+        val cursor = fixture.service.list(limit = 1, cursor = null, query = "risk", sort = AgentListSort.NEWEST, usageType = null).nextCursor!!
 
         assertThrows(DomainClientException::class.java) {
-            fixture.service.list(1, cursor, "other", AgentListSort.NEWEST)
+            fixture.service.list(limit = 1, cursor = cursor, query = "other", sort = AgentListSort.NEWEST, usageType = null)
         }
         assertThrows(DomainClientException::class.java) {
-            fixture.service.list(1, cursor, "risk", AgentListSort.NAME_ASC)
+            fixture.service.list(limit = 1, cursor = cursor, query = "risk", sort = AgentListSort.NAME_ASC, usageType = null)
         }
     }
 
@@ -99,7 +99,7 @@ class AgentMarketplaceListTest {
         val fixture = fixture()
 
         assertThrows(DomainClientException::class.java) {
-            fixture.service.list(20, "invalid.cursor", null, AgentListSort.NEWEST)
+            fixture.service.list(limit = 20, cursor = "invalid.cursor", query = null, sort = AgentListSort.NEWEST, usageType = null)
         }
     }
 
@@ -119,7 +119,7 @@ class AgentMarketplaceListTest {
             listOf(count)
         )
 
-        val result = fixture.service.list(20, null, null, AgentListSort.NAME_ASC)
+        val result = fixture.service.list(limit = 20, cursor = null, query = null, sort = AgentListSort.NAME_ASC, usageType = null)
 
         assertEquals(3, result.items.single().dependencyCount)
     }
@@ -129,7 +129,7 @@ class AgentMarketplaceListTest {
         val fixture = fixture()
 
         assertThrows(DomainClientException::class.java) {
-            fixture.service.list(20, null, "x".repeat(101), AgentListSort.NEWEST)
+            fixture.service.list(limit = 20, cursor = null, query = "x".repeat(101), sort = AgentListSort.NEWEST, usageType = null)
         }
     }
 
@@ -196,7 +196,7 @@ class AgentMarketplaceListTest {
                 developerRepository,
                 policy,
                 cursorCodec,
-                mock(AgentCapabilityService::class.java),
+                mock(FunctionContractService::class.java),
             ),
             agentRepository,
             newest,

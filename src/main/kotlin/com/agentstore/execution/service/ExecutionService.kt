@@ -1,7 +1,7 @@
 package com.agentstore.execution.service
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
-import com.agentstore.agent.service.AgentCapabilityService
+import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.service.QuoteService
@@ -44,7 +44,7 @@ class ExecutionService(
     private val runner: ExecutionRunner,
     private val mutationReadiness: ExecutionMutationReadiness,
     private val krwEstimateService: KrwEstimateService,
-    private val capabilityService: AgentCapabilityService,
+    private val functionContractService: FunctionContractService,
 ) {
     @Transactional
     fun create(request: CreateExecutionRequest): ExecutionResponse {
@@ -172,12 +172,22 @@ class ExecutionService(
             status = execution.status.name,
             maxBudgetAtomic = execution.maxBudgetAtomic.toString(),
             maxBudgetKrwEstimate = quoteEstimate
-                ?.let { estimate -> krwEstimateService.estimateAtRate(execution.maxBudgetAtomic, estimate) }
+                ?.let { estimate ->
+                    krwEstimateService.estimateAtRate(
+                        amountAtomic = execution.maxBudgetAtomic,
+                        estimate = estimate,
+                    )
+                }
                 ?.let(KrwEstimateResponse::from),
             reservedCostAtomic = execution.reservedCostAtomic.toString(),
             actualCostAtomic = execution.actualCostAtomic.toString(),
             actualCostKrwEstimate = quoteEstimate
-                ?.let { estimate -> krwEstimateService.estimateAtRate(execution.actualCostAtomic, estimate) }
+                ?.let { estimate ->
+                    krwEstimateService.estimateAtRate(
+                        amountAtomic = execution.actualCostAtomic,
+                        estimate = estimate,
+                    )
+                }
                 ?.let(KrwEstimateResponse::from),
             question = execution.question,
             input = jsonValue(value = execution.input),
@@ -235,7 +245,7 @@ class ExecutionService(
         if (!schema.isObject) {
             return
         }
-        capabilityService.validateInstance(
+        functionContractService.validateInstance(
             schema = schema,
             value = input,
             errorCode = ErrorCode.AGENT_INPUT_SCHEMA_INVALID,

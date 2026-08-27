@@ -27,8 +27,10 @@ Read the relevant skill before changing its scope. `AGENTS.md` is only the entry
 
 ## Repository contract
 
-This repository is the Kotlin/Spring AgentStore runtime. Preserve the existing REST/SSE paths and
-status codes, while
+This repository is the Kotlin/Spring AgentStore runtime. Preserve public REST/SSE paths and status
+codes unless the current approved HIGH_RISK plan explicitly replaces a public contract before
+deployment; in that case, remove the old contract without a compatibility alias and regenerate
+OpenAPI and generated clients together. Keep
 using the intentional `CommonResponse<T>` JSON envelope (`isSuccess`, `message`, `errorCode`,
 `result`) for every
 public JSON response. Trace correlation is an `X-Trace-Id` response header and MDC value, never a

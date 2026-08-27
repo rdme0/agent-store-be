@@ -40,6 +40,7 @@ class ExternalInvocationController(
         private const val PAYMENT_RESPONSE_HEADER = "PAYMENT-RESPONSE"
         private const val PAYMENT_SIGNATURE_HEADER = "PAYMENT-SIGNATURE"
         private const val RECEIPT_HEADER = "X-AgentStore-Invocation-Receipt"
+        private const val INVOCATION_ID_HEADER = "X-AgentStore-Invocation-Id"
         private const val LAST_EVENT_ID_HEADER = "Last-Event-ID"
     }
 
@@ -52,7 +53,7 @@ class ExternalInvocationController(
         content = [Content(schema = Schema(implementation = CommonResponse::class))],
     )
     fun invoke(
-        @RequestHeader(IDEMPOTENCY_KEY_HEADER, required = false) idempotencyKey: String?,
+        @RequestHeader(IDEMPOTENCY_KEY_HEADER) idempotencyKey: String,
         @RequestHeader(PAYMENT_SIGNATURE_HEADER, required = false) signatureHeader: String?,
         @Valid @RequestBody request: CreateExternalInvocationIntentRequest,
         servletRequest: HttpServletRequest,
@@ -66,6 +67,8 @@ class ExternalInvocationController(
         if (result.response == null) {
             return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
                 .header(RECEIPT_HEADER, result.receiptToken)
+                .header(INVOCATION_ID_HEADER, result.invocationId.toString())
+                .header("Location", "/v1/invocations/${result.invocationId}")
                 .header(PAYMENT_REQUIRED_HEADER, requireNotNull(result.paymentRequiredHeader))
                 .body(
                     CommonResponse(
@@ -79,6 +82,8 @@ class ExternalInvocationController(
 
         return ResponseEntity.accepted()
             .header(RECEIPT_HEADER, result.receiptToken)
+            .header(INVOCATION_ID_HEADER, result.invocationId.toString())
+            .header("Location", "/v1/invocations/${result.invocationId}")
             .header(PAYMENT_RESPONSE_HEADER, requireNotNull(result.paymentResponseHeader))
             .body(CommonResponse.success(result = requireNotNull(result.response)))
     }

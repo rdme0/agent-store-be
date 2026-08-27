@@ -31,7 +31,7 @@ public class AgentVersion extends BaseEntity {
     @Column(nullable = false)
     private UUID agentId;
 
-    private UUID capabilityId;
+    private UUID functionContractId;
 
     @Column(nullable = false, length = 32)
     private String semver;
@@ -79,12 +79,12 @@ public class AgentVersion extends BaseEntity {
                 responseFormat);
     }
 
-    public AgentVersion(UUID id, UUID agentId, UUID capabilityId, String semver, String endpoint,
+    public AgentVersion(UUID id, UUID agentId, UUID functionContractId, String semver, String endpoint,
             BigInteger priceAtomic, String network, String asset, String payTo,
             AgentResponseFormat responseFormat) {
         this.id = id;
         this.agentId = agentId;
-        this.capabilityId = capabilityId;
+        this.functionContractId = functionContractId;
         this.semver = semver;
         this.endpoint = endpoint;
         this.priceAtomic = priceAtomic;

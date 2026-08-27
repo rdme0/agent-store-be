@@ -36,7 +36,42 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
             String::class.java,
         )
-        assertEquals("23", version)
+        assertEquals("25", version)
+        assertEquals(
+            1,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'function_contracts'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'agent_capabilities'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            1,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'function_contracts' and column_name = 'code'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'agent_versions' and column_name = 'capability_id'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            1,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'agent_versions' and column_name = 'function_contract_id'",
+                Int::class.java,
+            ),
+        )
         assertEquals(
             1,
             jdbcTemplate.queryForObject(
@@ -79,10 +114,13 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
         )
         requireNotNull(dependencyProviderConstraint)
         assertEquals(true, dependencyProviderConstraint.contains("function_contract_id IS NOT NULL"))
-        assertEquals(false, dependencyProviderConstraint.contains("target_capability_id"))
+        assertEquals(false, dependencyProviderConstraint.contains("target_function_contract_id"))
         assertEquals(false, dependencyProviderConstraint.contains("selection_policy"))
         assertEquals(true, dependencyProviderConstraint.contains("provider_scope IS NOT NULL"))
-        assertEquals(true, dependencyProviderConstraint.contains("exploration_percent"))
+        assertEquals(false, dependencyProviderConstraint.contains("exploration_percent"))
+        assertEquals(false, dependencyProviderConstraint.contains("reliability_weight"))
+        assertEquals(false, dependencyProviderConstraint.contains("price_weight"))
+        assertEquals(false, dependencyProviderConstraint.contains("speed_weight"))
         assertEquals(
             1,
             jdbcTemplate.queryForObject(
@@ -214,6 +252,122 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
     }
 
     @Test
+    fun `V25 preserves populated function contract references while renaming schema objects`() {
+        val schema = "v25_function_contract_" + UUID.randomUUID().toString().replace("-", "")
+        val migration = ClassPathResource(
+            "db/migration/V25__20260827010000_rename_capability_to_function_contract.sql",
+        ).inputStream.bufferedReader().use { reader -> reader.readText() }
+        val contractId = UUID.randomUUID()
+        val versionId = UUID.randomUUID()
+        jdbcTemplate.execute("create schema $schema")
+        val dataSource = requireNotNull(jdbcTemplate.dataSource)
+        try {
+            dataSource.connection.use { connection ->
+                connection.createStatement().use { statement ->
+                    try {
+                        statement.execute(
+                            """
+                            create table $schema.agent_capabilities (
+                                id uuid constraint agent_capabilities_pkey primary key,
+                                key varchar(160) not null,
+                                contract_version varchar(32) not null,
+                                constraint agent_capabilities_key_contract_version_key unique (key, contract_version)
+                            )
+                            """.trimIndent(),
+                        )
+                        statement.execute(
+                            """
+                            create table $schema.agent_versions (
+                                id uuid primary key,
+                                capability_id uuid,
+                                status varchar(16) not null,
+                                constraint agent_versions_capability_id_fkey
+                                    foreign key (capability_id) references $schema.agent_capabilities (id)
+                            )
+                            """.trimIndent(),
+                        )
+                        statement.execute(
+                            "create index agent_versions_capability_id_status_idx on $schema.agent_versions (capability_id, status)",
+                        )
+                        statement.execute(
+                            """
+                            create table $schema.agent_dependencies (
+                                id integer primary key,
+                                provider_scope varchar(16) not null,
+                                function_contract_id uuid,
+                                target_agent_id uuid,
+                                constraint agent_dependencies_function_contract_id_fkey
+                                    foreign key (function_contract_id) references $schema.agent_capabilities (id)
+                            )
+                            """.trimIndent(),
+                        )
+                        statement.execute(
+                            "insert into $schema.agent_capabilities (id, key, contract_version) values ('$contractId', 'finance.market', '1.0.0')",
+                        )
+                        statement.execute(
+                            "insert into $schema.agent_versions (id, capability_id, status) values ('$versionId', '$contractId', 'ACTIVE')",
+                        )
+                        statement.execute(
+                            """
+                            insert into $schema.agent_dependencies (id, provider_scope, function_contract_id, target_agent_id) values
+                                (1, 'DIRECT', null, '${UUID.randomUUID()}'),
+                                (2, 'PINNED', '$contractId', '${UUID.randomUUID()}'),
+                                (3, 'ALLOWLIST', '$contractId', null),
+                                (4, 'MARKETPLACE', '$contractId', null)
+                            """.trimIndent(),
+                        )
+                        statement.execute("set search_path to $schema")
+                        statement.execute(migration)
+
+                        statement.executeQuery(
+                            """
+                            select contract.code, version.function_contract_id
+                            from function_contracts contract
+                            join agent_versions version on version.function_contract_id = contract.id
+                            where version.id = '$versionId'
+                            """.trimIndent(),
+                        ).use { result ->
+                            check(result.next())
+                            assertEquals("finance.market", result.getString("code"))
+                            assertEquals(contractId, result.getObject("function_contract_id", UUID::class.java))
+                        }
+                        statement.executeQuery(
+                            "select provider_scope from agent_dependencies order by id",
+                        ).use { result ->
+                            val scopes = generateSequence {
+                                if (result.next()) result.getString("provider_scope") else null
+                            }.toList()
+                            assertEquals(listOf("DIRECT", "PINNED", "ALLOWLIST", "MARKETPLACE"), scopes)
+                        }
+                        statement.executeQuery(
+                            "select conname from pg_constraint where conrelid = 'agent_versions'::regclass",
+                        ).use { result ->
+                            val constraintNames = generateSequence {
+                                if (result.next()) result.getString("conname") else null
+                            }.toSet()
+                            assertEquals(true, constraintNames.contains("agent_versions_function_contract_id_fkey"))
+                            assertEquals(false, constraintNames.contains("agent_versions_capability_id_fkey"))
+                        }
+                        statement.executeQuery(
+                            "select indexname from pg_indexes where schemaname = '$schema' and tablename = 'agent_versions'",
+                        ).use { result ->
+                            val indexNames = generateSequence {
+                                if (result.next()) result.getString("indexname") else null
+                            }.toSet()
+                            assertEquals(true, indexNames.contains("agent_versions_function_contract_id_status_idx"))
+                            assertEquals(false, indexNames.contains("agent_versions_capability_id_status_idx"))
+                        }
+                    } finally {
+                        statement.execute("set search_path to public")
+                    }
+                }
+            }
+        } finally {
+            jdbcTemplate.execute("drop schema if exists $schema cascade")
+        }
+    }
+
+    @Test
     fun `fixture cleanup deletes only the registered standalone user`() {
         val fixtureId = fixtureCleaner.createStandaloneUser()
         assertEquals(
@@ -333,18 +487,18 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
     }
 
     @Test
-    fun `capability key and contract version are unique under concurrent ownership boundary`() {
+    fun `function contract code and contract version are unique under concurrent ownership boundary`() {
         val firstId = UUID.randomUUID()
         val secondId = UUID.randomUUID()
-        val key = "test.concurrent.${UUID.randomUUID()}"
+        val code = "test.concurrent.${UUID.randomUUID()}"
         try {
-            insertCapability(id = firstId, key = key)
+            insertFunctionContract(id = firstId, code = code)
 
             assertThrows(DataIntegrityViolationException::class.java) {
-                insertCapability(id = secondId, key = key)
+                insertFunctionContract(id = secondId, code = code)
             }
         } finally {
-            jdbcTemplate.update("delete from agent_capabilities where id in (?, ?)", firstId, secondId)
+            jdbcTemplate.update("delete from function_contracts where id in (?, ?)", firstId, secondId)
         }
     }
 
@@ -373,23 +527,23 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
 
     @Test
     fun `function marketplace dependency cannot retain a pinned agent target`() {
-        val registry = runtimeFixture.createCapabilityMarketplaceRegistry()
+        val registry = runtimeFixture.createFunctionContractMarketplaceRegistry()
 
         assertThrows(DataIntegrityViolationException::class.java) {
             jdbcTemplate.update(
                 """
                 insert into agent_dependencies
                     (id, source_version_id, target_agent_id, function_contract_id, provider_scope,
-                        selection_strategy, exploration_percent, version_constraint, required,
+                        selection_strategy, version_constraint, required,
                         max_price_atomic, max_calls, created_at, updated_at)
                 values (?, ?, ?, ?, 'MARKETPLACE'::"ProviderScope",
-                    'LOWEST_PRICE'::"ProviderSelectionStrategy", 0, '*', true,
+                    'LOWEST_PRICE'::"ProviderSelectionStrategy", '*', true,
                     1000, 1, current_timestamp, current_timestamp)
                 """.trimIndent(),
                 UUID.randomUUID(),
                 registry.rootVersionId,
                 registry.excludedProviderAgentId,
-                registry.capabilityId,
+                registry.functionContractId,
             )
         }
     }
@@ -398,10 +552,10 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
     fun `function marketplace dependency persists as a function-only declaration`() {
         val runtime = runtimeFixture.create()
         val contractId = UUID.randomUUID()
-        insertCapability(id = contractId, key = "test-function-$contractId")
-        fixtureCleaner.trackCapability(contractId)
+        insertFunctionContract(id = contractId, code = "test-function-$contractId")
+        fixtureCleaner.trackFunctionContract(contractId)
         jdbcTemplate.update(
-            "update agent_versions set status = 'DRAFT'::\"AgentVersionStatus\", capability_id = ? where id = ?",
+            "update agent_versions set status = 'DRAFT'::\"AgentVersionStatus\", function_contract_id = ? where id = ?",
             contractId,
             runtime.agentVersionId,
         )
@@ -439,15 +593,15 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
         val agentCode = "manifest-rollback-${UUID.randomUUID()}"
         jdbcTemplate.update(
             """
-            insert into agent_capabilities
-                (id, key, contract_version, name, description, response_format, input_schema, output_schema)
+            insert into function_contracts
+                (id, code, contract_version, name, description, response_format, input_schema, output_schema)
             values (?, ?, '1.0.0', 'Test', 'Test contract', 'JSON',
                 '{"type":"object"}'::jsonb, '{"type":"object"}'::jsonb)
             """.trimIndent(),
             contractId,
             contractCode,
         )
-        fixtureCleaner.trackCapability(contractId)
+        fixtureCleaner.trackFunctionContract(contractId)
 
         assertThrows(DomainClientException::class.java) {
             manifestService.import(
@@ -471,15 +625,15 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
         )
     }
 
-    private fun insertCapability(id: UUID, key: String) {
+    private fun insertFunctionContract(id: UUID, code: String) {
         jdbcTemplate.update(
             """
-            insert into agent_capabilities
-                (id, key, contract_version, name, description, response_format, input_schema, output_schema)
+            insert into function_contracts
+                (id, code, contract_version, name, description, response_format, input_schema, output_schema)
             values (?, ?, '1.0.0', 'Test', 'Test contract', 'JSON', '{"type":"object"}'::jsonb, '{"type":"object"}'::jsonb)
             """.trimIndent(),
             id,
-            key,
+            code,
         )
     }
 
@@ -588,8 +742,6 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
                   required: true
                   maxPriceAtomic: "1000"
                   maxCalls: 1
-                resolution:
-                  explorationPercent: 0
         """.trimIndent()
     }
 }

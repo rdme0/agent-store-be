@@ -1,6 +1,6 @@
 package com.agentstore.agent.dto.response
 
-import com.agentstore.agent.model.entity.AgentCapability
+import com.agentstore.agent.model.entity.FunctionContract
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.fasterxml.jackson.databind.JsonNode
 import io.swagger.v3.oas.annotations.media.Schema
@@ -21,10 +21,10 @@ data class FunctionContractResponse(
     val updatedAt: Instant,
 ) {
     companion object {
-        fun from(contract: AgentCapability): FunctionContractResponse {
+        fun from(contract: FunctionContract): FunctionContractResponse {
             return FunctionContractResponse(
                 id = contract.id,
-                code = contract.key,
+                code = contract.code,
                 contractVersion = contract.contractVersion,
                 name = contract.name,
                 description = contract.description,
