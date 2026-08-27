@@ -4,11 +4,11 @@
 
 ## 저장소 역할
 
-- 경로: `C:\work\project\agent-store-be`
+- 경로: 이 저장소 루트
 - Kotlin/Spring 기반 AgentStore runtime이다. Spring만 PostgreSQL을 쓴다.
-- 프론트엔드는 `C:\work\project\agent-store-fe`, demo 공급자는
-  `C:\work\project\demo-agent`, Compose는
-  `C:\work\project\agent-store-infra`가 소유한다.
+- 프론트엔드는 `../agent-store-fe`, demo 공급자는
+  `../demo-agent`, Compose는
+  `../agent-store-infra`가 소유한다.
 - Spring은 Base Sepolia USDC의 x402 v2 `exact` / EIP-3009만 처리한다. private key, typed
   data, signature, raw payment header는 절대 영속화·로그 기록하지 않는다.
 

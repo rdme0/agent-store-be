@@ -1,6 +1,6 @@
 # AgentStore Spring 스타일 감사표
 
-기준 저장소는 `C:\Users\we6610\IdeaProjects\eco-knock-be-central`이며, 기준 production 선례는
+기준 저장소는 별도 외부 기준 저장소이며, 기준 production 선례는
 `common/model/entity/BaseEntity`,
 `group/model/entity`, `group/service`, `group/controller`다. 기능, REST/SSE, PostgreSQL, 결제 상태 계약은 변경하지
 않는다.
