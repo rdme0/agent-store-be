@@ -32,7 +32,7 @@ class AgentManifestService(
     private val agentService: AgentService,
     private val functionContractService: FunctionContractService,
     private val dependencyService: DependencyService,
-    @Qualifier(AgentManifestConfiguration.MANIFEST_YAML_MAPPER)
+    @param:Qualifier(AgentManifestConfiguration.MANIFEST_YAML_MAPPER)
     private val yamlMapper: ObjectMapper,
     private val validator: Validator,
 ) {
