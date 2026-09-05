@@ -6,6 +6,8 @@ import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
 import com.agentstore.payment.exception.PaymentOutcomeUnknownException
 import com.agentstore.x402.client.X402AgentClient
 import com.agentstore.x402.codec.X402HeaderCodec
+import com.agentstore.x402.dto.internal.X402ProviderVerificationRequestDto
+import com.agentstore.x402.exception.ProviderCertificationRejectedException
 import com.agentstore.x402.registry.X402PaymentCorrelationRegistry
 import com.agentstore.x402.signer.X402Eip3009Signer
 import com.fasterxml.jackson.databind.node.ObjectNode
@@ -17,6 +19,7 @@ import java.net.InetSocketAddress
 import java.security.SecureRandom
 import java.time.Clock
 import java.time.Duration
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -42,6 +45,123 @@ class X402PaymentServiceTest {
             assertThat(result.transactionHash).isEqualTo(TRANSACTION)
             assertThat(result.output.path("answer").intValue()).isEqualTo(42)
             assertThat(calls).hasValue(2)
+        }
+    }
+
+    @Test
+    fun `provider certification classifies a settled non OK response as known paid failure`() {
+        withAgent(paidStatus = 503, paidBody = "upstream unavailable") { endpoint, calls ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(ProviderCertificationRejectedException::class.java)
+            assertThat(calls).hasValueGreaterThanOrEqualTo(2)
+        }
+    }
+
+    @Test
+    fun `provider certification keeps a non OK response without receipt unknown`() {
+        withAgent(paidStatus = 503, includeReceipt = false) { endpoint, _ ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(PaymentOutcomeUnknownException::class.java)
+        }
+    }
+
+    @Test
+    fun `provider certification keeps a successful response without receipt unknown`() {
+        withAgent(paidStatus = 200, includeReceipt = false) { endpoint, _ ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(PaymentOutcomeUnknownException::class.java)
+        }
+    }
+
+    @Test
+    fun `provider certification rejects malformed terms before signing`() {
+        withAgent(challenge = challenge(amount = "2")) { endpoint, calls ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(IllegalArgumentException::class.java)
+            assertThat(calls).hasValue(1)
+        }
+    }
+
+    @Test
+    fun `provider certification keeps an incomplete receipt unknown`() {
+        val malformedReceipt = objectMapper.createObjectNode().apply {
+            put("success", true)
+            put("network", X402PaymentService.BASE_SEPOLIA)
+        }
+        withAgent(receipt = malformedReceipt) { endpoint, _ ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(PaymentOutcomeUnknownException::class.java)
+        }
+    }
+
+    @Test
+    fun `provider certification keeps an unreadable receipt unknown`() {
+        withAgent(receiptHeader = "not-a-payment-receipt") { endpoint, _ ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(PaymentOutcomeUnknownException::class.java)
+        }
+    }
+
+    @Test
+    fun `provider certification keeps a wrong receipt network unknown`() {
+        val receipt = receipt().apply {
+            put("network", "eip155:1")
+        }
+        withAgent(receipt = receipt) { endpoint, _ ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(PaymentOutcomeUnknownException::class.java)
+        }
+    }
+
+    @Test
+    fun `provider certification timeout after signing remains unknown`() {
+        withAgent(paidDelayMillis = 1_000) { endpoint, _ ->
+            assertThatThrownBy {
+                client(deadline = Duration.ofMillis(300)).certify(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(PaymentOutcomeUnknownException::class.java)
+        }
+    }
+
+    @Test
+    fun `provider certification wraps verification input in public invocation contract`() {
+        val receivedBodies = Collections.synchronizedList(mutableListOf<String>())
+        val input = objectMapper.readTree("""{"query":"base sepolia"}""")
+
+        withAgent(receivedBodies = receivedBodies) { endpoint, calls ->
+            client(deadline = DEFAULT_DEADLINE).certify(
+                verificationRequest(endpoint = endpoint).copy(input = input),
+            )
+
+            assertThat(calls).hasValue(2)
+            assertThat(receivedBodies).containsExactly(
+                """{"input":{"query":"base sepolia"}}""",
+                """{"input":{"query":"base sepolia"}}""",
+            )
+        }
+    }
+
+    @Test
+    fun `provider preflight stops after the unsigned payment challenge`() {
+        withAgent { endpoint, calls ->
+            client(deadline = DEFAULT_DEADLINE).preflightProvider(verificationRequest(endpoint = endpoint))
+            assertThat(calls).hasValue(1)
+        }
+    }
+
+    @Test
+    fun `provider preflight rejects malformed terms without signing`() {
+        withAgent(challenge = challenge(amount = "2")) { endpoint, calls ->
+            assertThatThrownBy {
+                client(deadline = DEFAULT_DEADLINE).preflightProvider(verificationRequest(endpoint = endpoint))
+            }.isInstanceOf(IllegalArgumentException::class.java)
+            assertThat(calls).hasValue(1)
         }
     }
 
@@ -224,6 +344,17 @@ class X402PaymentServiceTest {
         )
     }
 
+    private fun verificationRequest(endpoint: String): X402ProviderVerificationRequestDto {
+        return X402ProviderVerificationRequestDto(
+            endpoint = endpoint,
+            amountAtomic = "1",
+            network = X402PaymentService.BASE_SEPOLIA,
+            asset = X402PaymentService.BASE_SEPOLIA_USDC,
+            payTo = PAY_TO,
+            input = objectMapper.createObjectNode(),
+        )
+    }
+
     private fun challenge(
         amount: String = "1",
         method: String = "eip3009"
@@ -255,17 +386,21 @@ class X402PaymentServiceTest {
         challenge: (String) -> ObjectNode = challenge(),
         includeReceipt: Boolean = true,
         receipt: ObjectNode = receipt(),
+        receiptHeader: String? = null,
         paidStatus: Int = 200,
         paidBody: String = "{}",
         unpaidBody: String = "",
         paidDelayMillis: Long = 0,
         paidChunkDelayMillis: Long = 0,
+        receivedBodies: MutableList<String>? = null,
         assertion: (String, AtomicInteger) -> Unit,
     ) {
         val calls = AtomicInteger()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/invoke") { exchange ->
-            exchange.requestBody.use { it.readAllBytes() }
+            exchange.requestBody.use { input ->
+                receivedBodies?.add(input.readAllBytes().toString(Charsets.UTF_8))
+            }
             calls.incrementAndGet()
             val endpoint = "http://127.0.0.1:${server.address.port}/invoke"
             if (exchange.requestHeaders.getFirst("PAYMENT-SIGNATURE") == null) {
@@ -274,7 +409,10 @@ class X402PaymentServiceTest {
             } else {
                 if (paidDelayMillis > 0) Thread.sleep(paidDelayMillis)
                 if (includeReceipt) {
-                    exchange.responseHeaders.add("PAYMENT-RESPONSE", codec.encode(receipt))
+                    exchange.responseHeaders.add(
+                        "PAYMENT-RESPONSE",
+                        receiptHeader ?: codec.encode(receipt),
+                    )
                 }
                 if (paidChunkDelayMillis > 0) {
                     exchange.sendResponseHeaders(paidStatus, 0)

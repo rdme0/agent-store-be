@@ -19,6 +19,8 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
     private val paymentAttemptIds = linkedSetOf<UUID>()
     private val paymentJournalIds = linkedSetOf<UUID>()
     private val revenueEntryIds = linkedSetOf<UUID>()
+    private val externalIntentIds = linkedSetOf<UUID>()
+    private val externalSaleIds = linkedSetOf<UUID>()
 
     fun createStandaloneUser(): UUID {
         val id = UUID.randomUUID()
@@ -79,6 +81,14 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
         return revenueEntryIds.add(id)
     }
 
+    fun trackExternalInvocationIntent(id: UUID): Boolean {
+        return externalIntentIds.add(id)
+    }
+
+    fun trackExternalSale(id: UUID): Boolean {
+        return externalSaleIds.add(id)
+    }
+
     fun cleanup() {
         // A test may create revenue through the real settlement path; its generated
         // UUID is not known to the fixture builder, but it is still scoped to a
@@ -103,8 +113,13 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
                     "delete from revenue_entries where execution_step_id = ?",
                     id
                 )
-            }
+        }
         deleteTracked("revenue_entries", revenueEntryIds)
+        externalIntentIds.forEach { intentId ->
+            jdbcTemplate.update("delete from external_api_sales where external_intent_id = ?", intentId)
+        }
+        deleteTracked("external_api_sales", externalSaleIds)
+        deleteTracked("external_invocation_intents", externalIntentIds)
         deleteTracked("payment_settlement_journals", paymentJournalIds)
         deleteTracked("payment_attempts", paymentAttemptIds)
         deleteTracked("execution_events", eventIds)

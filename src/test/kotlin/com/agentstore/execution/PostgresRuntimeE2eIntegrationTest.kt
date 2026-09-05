@@ -1,5 +1,6 @@
 package com.agentstore.execution
 
+import com.agentstore.common.security.dto.InvocationPrincipal
 import com.agentstore.execution.dto.request.RuntimeDependencyInvocationRequest
 import com.agentstore.execution.dto.response.ExecutionEventResponse
 import com.agentstore.execution.event.ExecutionEventService
@@ -15,6 +16,7 @@ import com.agentstore.support.DependencyRuntimeFixture
 import com.agentstore.support.PostgresIntegrationTestSupport
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -575,7 +577,13 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
                                 callPath = dependency.path("callPath").map { node -> node.asText() },
                                 input = input,
                             ),
-                            authorization = "Bearer ${request.invocationToken}",
+                            principal = InvocationPrincipal(
+                                executionId = claims.executionId,
+                                stepId = claims.stepId,
+                                agentVersionId = claims.agentVersionId,
+                                callPath = claims.callPath,
+                                expiresAt = Instant.ofEpochSecond(claims.expiresAtEpochSeconds),
+                            ),
                             idempotencyKey = "fixture-root-dependency-$index",
                         )
                     }

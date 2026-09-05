@@ -36,7 +36,7 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
             String::class.java,
         )
-        assertEquals("25", version)
+        assertEquals("26", version)
         assertEquals(
             1,
             jdbcTemplate.queryForObject(

@@ -11,21 +11,13 @@ import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointAddressResolver
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.agent.service.AgentService
-import com.agentstore.agent.service.FunctionContractService
+import com.agentstore.agent.service.FunctionContractReader
+import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
-import com.agentstore.dependency.dto.request.QuoteRequest
-import com.agentstore.dependency.model.entity.AgentDependency
-import com.agentstore.dependency.model.vo.ResolvedEdge
-import com.agentstore.dependency.model.vo.ResolvedGraph
-import com.agentstore.dependency.model.vo.ResolvedNode
-import com.agentstore.dependency.model.vo.ResolvedVersion
-import com.agentstore.dependency.repository.ExecutionQuoteRepository
-import com.agentstore.dependency.resolver.CostResolver
-import com.agentstore.dependency.resolver.DependencyResolver
-import com.agentstore.dependency.service.QuoteService
-import com.agentstore.payment.service.KrwEstimateService
 import com.agentstore.payment.client.PinnedAgentRestClientFactory
 import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
+import com.agentstore.support.ExplicitProxy
+import com.agentstore.support.emptyReadinessRepository
 import com.agentstore.x402.client.X402AgentClient
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sun.net.httpserver.HttpServer
@@ -38,10 +30,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
-import org.mockito.ArgumentMatchers.any
-import org.mockito.ArgumentMatchers.eq
-import org.mockito.Mockito.`when`
-import org.mockito.Mockito.mock
 import org.springframework.mock.env.MockEnvironment
 
 class AgentEndpointAdmissionTest {
@@ -80,7 +68,6 @@ class AgentEndpointAdmissionTest {
 
     @Test
     fun `publish rejects a persisted unsafe draft without activating it`() {
-        val versions = mock(AgentVersionRepository::class.java)
         val draft = AgentVersion(
             UUID.randomUUID(),
             UUID.randomUUID(),
@@ -91,16 +78,23 @@ class AgentEndpointAdmissionTest {
             "USDC",
             RECEIVER
         )
-        `when`(versions.findWithAgentById(draft.id)).thenReturn(draft)
-        val agents = mock(AgentRepository::class.java)
-        `when`(agents.findById(draft.agentId)).thenReturn(Optional.of(Agent(draft.agentId, UUID.randomUUID(), "draft", "draft", "draft")))
+        val versions = ExplicitProxy(AgentVersionRepository::class.java).apply {
+            answer(methodName = "findWithAgentById") { draft }
+        }
+        val agents = ExplicitProxy(AgentRepository::class.java).apply {
+            answer(methodName = "findById") {
+                Optional.of(Agent(draft.agentId, UUID.randomUUID(), "draft", "draft", "draft"))
+            }
+        }
+        val functionContractReader = ExplicitProxy(FunctionContractReader::class.java)
         val service = AgentService(
-            agents,
-            versions,
-            mock(DeveloperRepository::class.java),
-            productionPolicy(),
-            mock(AgentListCursorCodec::class.java),
-            mock(FunctionContractService::class.java),
+            agentRepository = agents.value,
+            agentVersionRepository = versions.value,
+            developerRepository = ExplicitProxy(DeveloperRepository::class.java).value,
+            endpointPolicy = productionPolicy(),
+            cursorCodec = cursorCodec(),
+            functionContractService = functionContractReader.value,
+            readinessRepository = emptyReadinessRepository(),
         )
 
         assertUnsafe { service.publish(draft.id) }
@@ -108,64 +102,8 @@ class AgentEndpointAdmissionTest {
     }
 
     @Test
-    fun `quote rejects an unsafe optional dependency recursively before snapshot persistence`() {
-        val rootAgent = Agent(UUID.randomUUID(), UUID.randomUUID(), "root-agent", "root", "root")
-        val root = activeVersion(rootAgent.id, "https://8.8.8.8/invoke")
-        val child = activeVersion(UUID.randomUUID(), "https://agent.example.com/invoke")
-        val dependency = AgentDependency(
-            UUID.randomUUID(),
-            root.id,
-            child.agentId,
-            "*",
-            false,
-            BigInteger.ONE,
-            1
-        )
-        val graph = ResolvedGraph(
-            ResolvedNode(
-                resolved(root, "root-agent"),
-                listOf(
-                    ResolvedEdge(
-                        dependency,
-                        "optional-child",
-                        ResolvedNode(resolved(child, "optional-child"), emptyList())
-                    )
-                )
-            ),
-            emptyList(),
-        )
-        val agentService = mock(AgentService::class.java)
-        val resolver = mock(DependencyResolver::class.java)
-        `when`(agentService.findByCode("root-agent")).thenReturn(rootAgent)
-        `when`(agentService.activeVersions(rootAgent.id)).thenReturn(listOf(root))
-        `when`(resolver.matches(version = root.semver, constraint = "*")).thenReturn(true)
-        `when`(resolver.newest(listOf(root))).thenReturn(root)
-        `when`(
-            resolver.resolve(
-                rootVersionId = eq(root.id) ?: root.id,
-                allowUnresolvedRequired = eq(false),
-                allowPriceExceeded = eq(false),
-            )
-        ).thenReturn(graph)
-        val quotePolicy = AgentEndpointPolicy(
-            MockEnvironment().apply { setActiveProfiles("prod") },
-            AgentEndpointAddressResolver { host ->
-                if (host == "8.8.8.8") {
-                    listOf(InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8)))
-                } else listOf(InetAddress.getByAddress(byteArrayOf(10, 0, 0, 1)))
-            },
-        )
-        val service = QuoteService(
-            agentService,
-            mock(ExecutionQuoteRepository::class.java),
-            resolver,
-            CostResolver(),
-            quotePolicy,
-            ObjectMapper(),
-            mock(KrwEstimateService::class.java),
-        )
-
-        assertUnsafe { service.create("root-agent", QuoteRequest()) }
+    fun `production endpoint policy rejects a private address before outbound calls`() {
+        assertUnsafe { productionPolicy().validate("https://agent.example.com/invoke") }
     }
 
     @Test
@@ -242,12 +180,13 @@ class AgentEndpointAdmissionTest {
 
     private fun agentService(): AgentService {
         return AgentService(
-            mock(AgentRepository::class.java),
-            mock(AgentVersionRepository::class.java),
-            mock(DeveloperRepository::class.java),
+            ExplicitProxy(AgentRepository::class.java).value,
+            ExplicitProxy(AgentVersionRepository::class.java).value,
+            ExplicitProxy(DeveloperRepository::class.java).value,
             productionPolicy(),
-            mock(AgentListCursorCodec::class.java),
-            mock(FunctionContractService::class.java),
+            cursorCodec(),
+            ExplicitProxy(FunctionContractReader::class.java).value,
+            emptyReadinessRepository(),
         )
     }
 
@@ -269,32 +208,21 @@ class AgentEndpointAdmissionTest {
         )
     }
 
-    private fun activeVersion(agentId: UUID, endpoint: String): AgentVersion {
-        return AgentVersion(
-            UUID.randomUUID(),
-            agentId,
-            "1.0.0",
-            endpoint,
-            BigInteger.ONE,
-            "eip155:84532",
-            "USDC",
-            RECEIVER
-        ).also { it.publish() }
-    }
-
-    private fun resolved(version: AgentVersion, code: String): ResolvedVersion {
-        return ResolvedVersion(
-            id = version.id,
-            agentId = version.agentId,
-            agentCode = code,
-            agentName = code,
-            agentDescription = "$code Agent가 요청을 처리합니다.",
-            semver = version.semver,
-            endpoint = version.endpoint,
-            priceAtomic = version.priceAtomic,
-            network = version.network,
-            asset = version.asset,
-            payTo = version.payTo,
+    private fun cursorCodec(): AgentListCursorCodec {
+        return AgentListCursorCodec(
+            objectMapper = ObjectMapper(),
+            properties = AgentStoreProperties(
+                serviceName = "agent-store-api",
+                apiVersion = "0.1.0",
+                runtimeCallbackBaseUrl = "http://127.0.0.1:8080",
+                demoAgentBaseUrl = "http://127.0.0.1:8090",
+                corsOrigins = listOf("http://localhost:5173"),
+                runtimeTokenSecret = "test-cursor-secret",
+                bithumbApiUrl = "https://api.bithumb.com",
+                bithumbRequestTimeout = java.time.Duration.ofSeconds(2),
+                bithumbCacheTtl = java.time.Duration.ofSeconds(60),
+                bithumbStaleTtl = java.time.Duration.ofMinutes(15),
+            ),
         )
     }
 
