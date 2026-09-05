@@ -10,22 +10,18 @@ import com.agentstore.agent.dto.response.AgentResponse
 import com.agentstore.agent.dto.response.AgentVersionResponse
 import com.agentstore.agent.exception.AgentNotFoundException
 import com.agentstore.agent.model.entity.Agent
-import com.agentstore.agent.model.entity.AgentVersionReadiness
 import com.agentstore.agent.model.entity.AgentVersion
 import com.agentstore.agent.model.entity.Developer
 import com.agentstore.agent.model.vo.AgentListSort
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
 import com.agentstore.agent.model.vo.AgentVersionStatus
-import com.agentstore.agent.model.vo.AgentVersionReadinessStatus
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
-import com.agentstore.agent.repository.AgentVersionReadinessRepository
 import com.agentstore.agent.repository.DeveloperRepository
 import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
-import com.fasterxml.jackson.databind.JsonNode
 import jakarta.transaction.Transactional
 import java.math.BigInteger
 import java.util.UUID
@@ -42,7 +38,6 @@ class AgentService @Autowired constructor(
     private val endpointPolicy: AgentEndpointPolicy,
     private val cursorCodec: AgentListCursorCodec,
     private val functionContractService: FunctionContractReader,
-    private val readinessRepository: AgentVersionReadinessRepository,
 ) {
     companion object {
         private val SEMVER = Regex(
@@ -74,10 +69,9 @@ class AgentService @Autowired constructor(
     }
 
     fun activeVersions(agentId: UUID): List<AgentVersion> {
-        return agentVersionRepository.findAllReadyByAgentId(
+        return agentVersionRepository.findAllByAgentIdAndStatus(
             agentId = agentId,
-            versionStatus = AgentVersionStatus.ACTIVE,
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
+            status = AgentVersionStatus.ACTIVE,
         )
     }
 
@@ -120,12 +114,16 @@ class AgentService @Autowired constructor(
         return developerIdForAgent(requireVersion(versionId).agentId)
     }
 
-    /** Compatibility bridge for legacy callers; paid certification is owned by readinessService. */
-    @Deprecated("Use ProviderReadinessService.publish for paid certification")
+    @Transactional
     fun publish(versionId: UUID): AgentVersionResponse {
         val version = agentVersionRepository.findWithAgentById(versionId)
             ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
-        endpointPolicy.validate(version.endpoint)
+        if (version.status != AgentVersionStatus.DRAFT) {
+            throw DomainClientException(ErrorCode.INVALID_VERSION_TRANSITION)
+        }
+        val functionContractId = version.functionContractId
+            ?: throw DomainClientException(ErrorCode.FUNCTION_CONTRACT_NOT_FOUND)
+        functionContractService.requireFunctionContract(functionContractId)
         version.publish()
         return AgentVersionResponse.from(version)
     }
@@ -202,10 +200,6 @@ class AgentService @Autowired constructor(
             functionContractId = request.functionContractId,
             responseFormat = request.responseFormat,
         )
-        validateVerificationInput(
-            functionContractId = request.functionContractId,
-            verificationInput = request.verificationInput,
-        )
         val developer = requireDeveloper(requireNotNull(request.developerId))
         val agent =
             Agent(
@@ -230,16 +224,13 @@ class AgentService @Autowired constructor(
                     request.asset,
                     request.payTo,
                     request.responseFormat,
-                    request.verificationInput,
                 )
             )
-            readinessRepository.save(AgentVersionReadiness(version.id))
             AgentResponse.from(
                 agent = saved,
                 developerName = developer.displayName,
                 dependencyCount = 0,
                 versions = versions(agentId = saved.id),
-                readinessByVersionId = readinessByVersionId(versions(agentId = saved.id)),
             )
         } catch (exception: DataIntegrityViolationException) {
             throw DomainClientException(ErrorCode.AGENT_ALREADY_EXISTS)
@@ -286,10 +277,6 @@ class AgentService @Autowired constructor(
             functionContractId = request.functionContractId,
             responseFormat = request.responseFormat,
         )
-        validateVerificationInput(
-            functionContractId = request.functionContractId,
-            verificationInput = request.verificationInput,
-        )
         val agent = requireAgent(agentId)
         if (versionBySemver(agentId = agentId, semver = request.semver) != null) {
             throw DomainClientException(ErrorCode.AGENT_VERSION_ALREADY_EXISTS)
@@ -306,10 +293,8 @@ class AgentService @Autowired constructor(
                 request.asset,
                 request.payTo,
                 request.responseFormat,
-                request.verificationInput,
             )
         )
-        readinessRepository.save(AgentVersionReadiness(version.id))
         return AgentVersionResponse.from(version)
     }
 
@@ -371,10 +356,9 @@ class AgentService @Autowired constructor(
     }
 
     fun activeVersionsForFunctionContract(functionContractId: UUID): List<AgentVersion> {
-        return agentVersionRepository.findAllReadyByFunctionContractId(
+        return agentVersionRepository.findAllByFunctionContractIdAndStatus(
             functionContractId = functionContractId,
-            versionStatus = AgentVersionStatus.ACTIVE,
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
+            status = AgentVersionStatus.ACTIVE,
         )
     }
 
@@ -407,7 +391,6 @@ class AgentService @Autowired constructor(
             AgentListSort.NEWEST -> agentRepository.findMarketplaceAgentsByCreatedAtDesc(
                 query = query,
                 status = AgentVersionStatus.ACTIVE,
-                readinessStatus = AgentVersionReadinessStatus.VERIFIED,
                 usageType = usageType,
                 hasCursor = cursor != null,
                 cursorCreatedAt = cursor?.createdAt,
@@ -418,7 +401,6 @@ class AgentService @Autowired constructor(
             AgentListSort.NAME_ASC -> agentRepository.findMarketplaceAgentsByNameAsc(
                 query = query,
                 status = AgentVersionStatus.ACTIVE,
-                readinessStatus = AgentVersionReadinessStatus.VERIFIED,
                 usageType = usageType,
                 hasCursor = cursor != null,
                 cursorNameKey = cursor?.nameKey,
@@ -461,7 +443,6 @@ class AgentService @Autowired constructor(
             developerName = developerName(id = agent.developerId),
             dependencyCount = dependencyCount,
             versions = versions,
-            readinessByVersionId = readinessByVersionId(versions),
         )
     }
 
@@ -472,49 +453,11 @@ class AgentService @Autowired constructor(
             developerName = developerName(id = agent.developerId),
             dependencyCount = dependencyCount,
             versions = versions,
-            readinessByVersionId = readinessByVersionId(versions),
         )
     }
 
     private fun developerName(id: UUID): String {
         return requireDeveloper(id).displayName
-    }
-
-    @Transactional
-    fun backfillVerificationInput(versionId: UUID, verificationInput: JsonNode) {
-        val version = requireVersion(versionId)
-        val readiness = readinessRepository.findById(versionId).orElseThrow {
-            DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
-        } ?: throw DomainClientException(ErrorCode.AGENT_VERSION_NOT_FOUND)
-        if (
-            version.status != AgentVersionStatus.ACTIVE ||
-            readiness.status != AgentVersionReadinessStatus.UNVERIFIED ||
-            version.verificationInput != null
-        ) {
-            throw DomainClientException(ErrorCode.INVALID_VERSION_TRANSITION)
-        }
-        validateVerificationInput(
-            functionContractId = version.functionContractId,
-            verificationInput = verificationInput,
-        )
-        version.backfillVerificationInput(verificationInput)
-    }
-
-    private fun validateVerificationInput(functionContractId: UUID?, verificationInput: JsonNode?) {
-        val contractId = functionContractId ?: throw DomainClientException(ErrorCode.PROVIDER_VERIFICATION_REQUIRED)
-        val input = verificationInput ?: throw DomainClientException(ErrorCode.PROVIDER_VERIFICATION_REQUIRED)
-        val contract = functionContractService.requireFunctionContract(id = contractId)
-        functionContractService.validateInstance(
-            schema = contract.inputSchema,
-            value = input,
-            errorCode = ErrorCode.AGENT_INPUT_SCHEMA_INVALID,
-        )
-    }
-
-    private fun readinessByVersionId(versions: List<AgentVersion>): Map<UUID, AgentVersionReadiness> {
-        return readinessRepository.findAllById(versions.map(AgentVersion::getId)).associateBy { readiness ->
-            readiness.versionId
-        }
     }
 
 }

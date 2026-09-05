@@ -2,7 +2,6 @@ package com.agentstore.agent.dto.request
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
-import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
@@ -21,7 +20,6 @@ data class CreateAgentRequest(
     @field:NotBlank @field:Size(max = 128) val payTo: String,
     val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
     val functionContractId: UUID? = null,
-    val verificationInput: JsonNode? = null,
     val usageType: AgentUsageType = AgentUsageType.INTERNAL_COMPONENT,
 )
 
@@ -44,5 +42,4 @@ data class CreateAgentVersionRequest(
     @field:NotBlank @field:Size(max = 128) val payTo: String,
     val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
     val functionContractId: UUID? = null,
-    val verificationInput: JsonNode? = null,
 )

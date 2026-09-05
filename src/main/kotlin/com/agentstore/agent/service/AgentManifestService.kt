@@ -19,7 +19,6 @@ import com.agentstore.dependency.model.vo.ProviderScope
 import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
 import com.agentstore.dependency.service.DependencyService
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.Validator
 import jakarta.transaction.Transactional
 import java.nio.charset.StandardCharsets
@@ -78,7 +77,6 @@ class AgentManifestService(
                 payTo = manifest.payTo,
                 responseFormat = contract.responseFormat,
                 functionContractId = contract.id,
-                verificationInput = manifest.verificationInput,
                 usageType = manifest.usageType,
             ),
         )
@@ -248,7 +246,6 @@ class AgentManifestService(
             network = agent.payment.network,
             asset = agent.payment.asset,
             payTo = agent.payment.payTo,
-            verificationInput = agent.verificationInput,
             dependencies = manifest.dependencies.map { dependency ->
                 ParsedDependencyDto(
                     functionCode = dependency.function.code,
@@ -306,7 +303,6 @@ private data class ParsedManifestDto(
     val network: String,
     val asset: String,
     val payTo: String,
-    val verificationInput: JsonNode?,
     val dependencies: List<ParsedDependencyDto>,
 )
 

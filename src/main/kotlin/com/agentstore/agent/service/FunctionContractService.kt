@@ -7,7 +7,6 @@ import com.agentstore.agent.dto.response.FunctionProviderMetricResponse
 import com.agentstore.agent.model.entity.FunctionContract
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentVersionStatus
-import com.agentstore.agent.model.vo.AgentVersionReadinessStatus
 import com.agentstore.agent.repository.FunctionContractRepository
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
@@ -93,10 +92,9 @@ class FunctionContractService(
 
     fun providers(id: UUID): List<FunctionProviderDto> {
         requireFunctionContract(id = id)
-        return versionRepository.findAllReadyByFunctionContractId(
+        return versionRepository.findAllByFunctionContractIdAndStatus(
             functionContractId = id,
-            versionStatus = AgentVersionStatus.ACTIVE,
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
+            status = AgentVersionStatus.ACTIVE,
         ).map { version ->
             val agent = agentRepository.findById(version.agentId).orElseThrow {
                 DomainClientException(ErrorCode.AGENT_NOT_FOUND)

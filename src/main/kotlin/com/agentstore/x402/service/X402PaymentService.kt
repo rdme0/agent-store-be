@@ -11,9 +11,6 @@ import com.agentstore.x402.client.X402AgentClient
 import com.agentstore.x402.codec.X402HeaderCodec
 import com.agentstore.x402.dto.internal.X402PaymentRequiredDto
 import com.agentstore.x402.dto.internal.X402AgentResponseDto
-import com.agentstore.x402.dto.internal.X402ProviderCertificationResultDto
-import com.agentstore.x402.dto.internal.X402ProviderVerificationRequestDto
-import com.agentstore.x402.exception.ProviderCertificationRejectedException
 import com.agentstore.x402.registry.X402PaymentCorrelationRegistry
 import com.agentstore.x402.signer.X402Eip3009Signer
 import com.fasterxml.jackson.databind.JsonNode
@@ -68,73 +65,6 @@ class X402PaymentService(
     override fun reconcile(attempt: PaymentAttempt): PaymentReconciliationResultDto {
         val key = attempt.id.toString()
         return correlations.reconcile(paymentAttemptId = key, idempotencyKey = key)
-    }
-
-    fun certify(request: X402ProviderVerificationRequestDto): X402ProviderCertificationResultDto {
-        val invocation = verificationInvocation(request = request)
-        val body = objectMapper.writeValueAsBytes(invocation.body)
-        preflight(request = invocation, body = body)
-        val deadline = System.nanoTime() + invocationDeadline.toNanos()
-        val connection = agentClient.prepare(endpoint = invocation.endpoint)
-        val unpaid = agentClient.post(
-            connection = connection,
-            request = invocation,
-            body = body,
-            paymentSignature = null,
-            deadline = deadline,
-        )
-        require(unpaid.status == 402) { "x402_payment_required_response_missing" }
-        val requiredHeader = unpaid.headers.getFirst(PAYMENT_REQUIRED)
-            ?: throw IllegalStateException("x402_payment_required_header_missing")
-        val required = selectRequirement(
-            root = headerCodec.decodeObject(value = requiredHeader),
-            request = invocation,
-        )
-        val signatureHeader = headerCodec.encode(signer.createPaymentPayload(required))
-        val paid = try {
-            agentClient.post(
-                connection = connection,
-                request = invocation,
-                body = body,
-                paymentSignature = signatureHeader,
-                deadline = deadline,
-            )
-        } catch (_: Exception) {
-            throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
-        }
-        val transactionHash = settledTransactionHash(paid = paid)
-        if (paid.status != 200) {
-            throw ProviderCertificationRejectedException(
-                failureCode = "provider_certification_http_status_invalid",
-                paymentSettled = true,
-            )
-        }
-        return X402ProviderCertificationResultDto(
-            output = parseAgentOutput(body = paid.body),
-            transactionHash = transactionHash,
-        )
-    }
-
-    fun preflightProvider(request: X402ProviderVerificationRequestDto) {
-        val invocation = verificationInvocation(request = request)
-        val body = objectMapper.writeValueAsBytes(invocation.body)
-        preflight(request = invocation, body = body)
-        val deadline = System.nanoTime() + invocationDeadline.toNanos()
-        val connection = agentClient.prepare(endpoint = invocation.endpoint)
-        val unpaid = agentClient.post(
-            connection = connection,
-            request = invocation,
-            body = body,
-            paymentSignature = null,
-            deadline = deadline,
-        )
-        require(unpaid.status == 402) { "x402_payment_required_response_missing" }
-        val requiredHeader = unpaid.headers.getFirst(PAYMENT_REQUIRED)
-            ?: throw IllegalStateException("x402_payment_required_header_missing")
-        selectRequirement(
-            root = headerCodec.decodeObject(value = requiredHeader),
-            request = invocation,
-        )
     }
 
     private fun invokeOnce(
@@ -205,21 +135,6 @@ class X402PaymentService(
             throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
         }
         return transactionHash
-    }
-
-    private fun verificationInvocation(request: X402ProviderVerificationRequestDto): PaymentInvocationRequestDto {
-        return PaymentInvocationRequestDto(
-            paymentAttemptId = UUID.randomUUID().toString(),
-            idempotencyKey = UUID.randomUUID().toString(),
-            invocationToken = "",
-            endpoint = request.endpoint,
-            amountAtomic = request.amountAtomic,
-            maxPriceAtomic = request.amountAtomic,
-            network = request.network,
-            asset = request.asset,
-            payTo = request.payTo,
-            body = objectMapper.createObjectNode().set<JsonNode>("input", request.input),
-        )
     }
 
     private fun selectRequirement(

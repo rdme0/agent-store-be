@@ -8,9 +8,6 @@ import com.agentstore.agent.dto.response.AgentListResponse
 import com.agentstore.agent.dto.response.AgentResponse
 import com.agentstore.agent.dto.response.AgentVersionResponse
 import com.agentstore.agent.service.AgentService
-import com.agentstore.agent.service.ProviderReadinessService
-import com.agentstore.agent.dto.response.AgentVersionReadinessResponse
-import com.agentstore.agent.dto.request.VerificationInputRequest
 import com.agentstore.common.dto.response.CommonResponse
 import com.agentstore.common.security.dto.DemoDeveloperPrincipal
 import com.agentstore.common.web.AgentStoreErrorResponses
@@ -40,7 +37,6 @@ import org.springframework.web.bind.annotation.RestController
 @AgentStoreErrorResponses
 class AgentController(
     private val service: AgentService,
-    private val readinessService: ProviderReadinessService,
     private val demoDeveloperAccessService: DemoDeveloperAccessService,
 ) {
     @GetMapping("/agents")
@@ -119,39 +115,7 @@ class AgentController(
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun publish(@AuthenticationPrincipal principal: DemoDeveloperPrincipal, @PathVariable id: UUID): CommonResponse<AgentVersionResponse> {
         demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
-        return CommonResponse.success(result = readinessService.publish(versionId = id))
-    }
-
-    @PostMapping("/agent-versions/{id}/verify")
-    @Operation(operationId = "postApiAgentVersionsByIdVerify", summary = "Verify active agent version")
-    @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun verify(@AuthenticationPrincipal principal: DemoDeveloperPrincipal, @PathVariable id: UUID): CommonResponse<AgentVersionResponse> {
-        demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
-        return CommonResponse.success(result = readinessService.verify(versionId = id))
-    }
-
-    @PostMapping("/agent-versions/{id}/verification-input/backfill")
-    @Operation(operationId = "postApiAgentVersionsByIdVerificationInputBackfill", summary = "Backfill legacy verification input")
-    @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun backfillVerificationInput(
-        @AuthenticationPrincipal principal: DemoDeveloperPrincipal,
-        @PathVariable id: UUID,
-        @Valid @RequestBody request: VerificationInputRequest,
-    ): CommonResponse<Void> {
-        demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
-        service.backfillVerificationInput(versionId = id, verificationInput = request.verificationInput)
-        return CommonResponse.emptySuccess()
-    }
-
-    @GetMapping("/agent-versions/{id}/readiness")
-    @Operation(operationId = "getApiAgentVersionsByIdReadiness", summary = "Get provider readiness")
-    @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun readiness(
-        @AuthenticationPrincipal principal: DemoDeveloperPrincipal,
-        @PathVariable id: UUID,
-    ): CommonResponse<AgentVersionReadinessResponse> {
-        demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
-        return CommonResponse.success(result = readinessService.readiness(versionId = id))
+        return CommonResponse.success(result = service.publish(versionId = id))
     }
 
     @PostMapping("/agent-versions/{id}/disable")

@@ -96,7 +96,6 @@ class SecurityConfig(
                         .authenticated()
                     .requestMatchers(
                         HttpMethod.GET,
-                        "/api/agent-versions/*/readiness",
                         "/api/agent-versions/*/dependencies",
                         "/api/agent-versions/*/manifest",
                         "/api/agent-manifests/agent-versions/*",
@@ -111,9 +110,7 @@ class SecurityConfig(
                     .requestMatchers(
                         HttpMethod.POST,
                         "/api/agent-versions/*/publish",
-                        "/api/agent-versions/*/verify",
                         "/api/agent-versions/*/disable",
-                        "/api/agent-versions/*/verification-input/backfill",
                         "/api/agent-versions/*/dependencies/**",
                         "/api/function-contracts",
                         "/api/agent-manifests",

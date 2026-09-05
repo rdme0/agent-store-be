@@ -41,10 +41,6 @@ enum class ErrorCode(
         6,
         "Function Contract와 응답 형식이 일치하지 않습니다.",
     ),
-    PROVIDER_VERIFICATION_REQUIRED(Domain.AGENT, HttpStatus.CONFLICT, 7, "공급자 x402 검증이 필요합니다."),
-    PROVIDER_VERIFICATION_IN_PROGRESS(Domain.AGENT, HttpStatus.CONFLICT, 8, "공급자 x402 검증이 진행 중입니다."),
-    PROVIDER_NOT_READY(Domain.AGENT, HttpStatus.SERVICE_UNAVAILABLE, 9, "공급자 Agent가 현재 검증되지 않았습니다."),
-
     DEPENDENCY_INVALID_PRICE(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 1, "Dependency maxPriceAtomic이 올바르지 않습니다."),
     INVALID_MAX_CALLS(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 2, "maxCalls는 1 이상 5 이하이어야 합니다."),
     INVALID_VERSION_CONSTRAINT(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 3, "version constraint가 올바르지 않습니다."),
