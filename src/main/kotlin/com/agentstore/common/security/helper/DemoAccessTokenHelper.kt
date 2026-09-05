@@ -19,7 +19,7 @@ class DemoAccessTokenHelper(
     private val clock: Clock,
 ) {
     companion object {
-        val ACCESS_TTL: Duration = Duration.ofDays(365)
+        val ACCESS_TTL: Duration = Duration.ofHours(6)
         private const val HMAC_ALGORITHM = "HmacSHA256"
         private const val TOKEN_PURPOSE = "demo-access"
     }
