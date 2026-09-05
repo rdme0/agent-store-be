@@ -14,6 +14,7 @@ import com.agentstore.dependency.model.vo.ProviderCandidate
 import com.agentstore.dependency.model.vo.ProviderScope
 import com.agentstore.dependency.model.vo.ProviderSelection
 import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
+import com.agentstore.dependency.model.vo.ExecutionGraphLimits
 import com.agentstore.dependency.model.vo.ResolvedFunctionContract
 import com.agentstore.dependency.model.vo.ResolvedEdge
 import com.agentstore.dependency.model.vo.ResolvedGraph
@@ -70,7 +71,7 @@ class DependencyResolver(
                 path = emptyList(),
                 warnings = warnings,
                 depth = 0,
-                stepBudget = 32,
+                stepBudget = ExecutionGraphLimits.MAX_STEPS,
                 resolutionBudget = ProviderResolutionBudget(MAX_PROVIDER_RESOLUTIONS),
                 allowUnresolvedRequired = allowUnresolvedRequired,
                 allowPriceExceeded = allowPriceExceeded,
@@ -111,7 +112,7 @@ class DependencyResolver(
             currentPath = emptyList(),
             warnings = warnings,
             depth = -1,
-            remainingSteps = 32,
+            remainingSteps = ExecutionGraphLimits.MAX_STEPS,
             resolutionBudget = ProviderResolutionBudget(MAX_PROVIDER_RESOLUTIONS),
             allowUnresolvedRequired = false,
             allowPriceExceeded = false,
@@ -185,7 +186,7 @@ class DependencyResolver(
         allowPriceExceeded: Boolean,
     ): ResolvedNode {
         val agent = agentService.requireAgent(version.agentId)
-        if (depth > 4) {
+        if (depth >= ExecutionGraphLimits.MAX_DEPTH) {
             throw DomainClientException(ErrorCode.DEPENDENCY_DEPTH_EXCEEDED)
         }
         if (stepBudget < 1) {
@@ -669,7 +670,7 @@ class DependencyResolver(
         node.dependencies.forEach { edge ->
             val child = edge.resolved ?: return@forEach
             steps += edge.dependency.maxCalls.toLong() * expandedStepCount(node = child)
-            if (steps > 32) {
+            if (steps > ExecutionGraphLimits.MAX_STEPS) {
                 return 33
             }
         }

@@ -6,6 +6,7 @@ import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.common.security.dto.InvocationPrincipal
 import com.agentstore.dependency.service.QuoteService
+import com.agentstore.dependency.model.vo.ExecutionGraphLimits
 import com.agentstore.execution.dto.request.RuntimeDependencyInvocationRequest
 import com.agentstore.execution.dto.response.RuntimeDependencyInvocationResponse
 import com.agentstore.execution.event.ExecutionEventService
@@ -104,7 +105,7 @@ class RuntimeCallbackService(
             ?: throw DomainClientException(ErrorCode.UNDECLARED_DEPENDENCY)
         val target = dependency.path("resolved").path("version")
         val expectedPath = parent.callPath.map { it.asText() } + target.path("agentCode").asText()
-        if (requestedPath != expectedPath || requestedPath.size > 5) {
+        if (requestedPath != expectedPath || requestedPath.size > ExecutionGraphLimits.MAX_DEPTH) {
             throw DomainClientException(ErrorCode.INVALID_CALL_PATH)
         }
         try {

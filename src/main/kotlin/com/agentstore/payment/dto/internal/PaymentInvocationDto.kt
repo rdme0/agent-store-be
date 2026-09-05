@@ -1,6 +1,7 @@
 package com.agentstore.payment.dto.internal
 
 import com.fasterxml.jackson.databind.JsonNode
+import java.time.Duration
 
 data class PaymentInvocationRequestDto(
     val paymentAttemptId: String,
@@ -13,6 +14,7 @@ data class PaymentInvocationRequestDto(
     val asset: String,
     val payTo: String,
     val body: Any?,
+    val invocationDeadline: Duration,
 )
 
 data class PaymentInvocationResultDto(

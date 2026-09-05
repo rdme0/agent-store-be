@@ -5,6 +5,7 @@ import com.agentstore.execution.guard.BudgetGuard
 import com.agentstore.execution.service.ExecutionStepService
 import com.agentstore.execution.service.ProviderMetricService
 import com.agentstore.execution.token.InvocationTokenService
+import com.agentstore.payment.config.X402ClientProperties
 import com.agentstore.execution.model.vo.AgentInvocationOutcome
 import com.agentstore.payment.client.PaymentClient
 import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
@@ -28,6 +29,7 @@ class ExecutionPaymentOrchestrator(
     private val invocationTokenService: InvocationTokenService,
     private val providerMetricService: ProviderMetricService,
     private val agentService: AgentService,
+    private val x402ClientProperties: X402ClientProperties,
 ) {
     fun invoke(
         executionId: UUID,
@@ -61,6 +63,7 @@ class ExecutionPaymentOrchestrator(
                 callPath = stepService.callPath(stepId = stepId),
             )
             val functionContractId = agentService.requireVersion(id = agentVersionId).functionContractId
+            val callPathSize = stepService.callPath(stepId = stepId).size
             providerMetricService.start(
                 stepId = stepId,
                 agentVersionId = agentVersionId,
@@ -78,6 +81,9 @@ class ExecutionPaymentOrchestrator(
                     asset = asset,
                     payTo = payTo,
                     body = body,
+                    invocationDeadline = x402ClientProperties.invocationTimeout(
+                        callPathSize = callPathSize,
+                    ),
                 )
             )
             externalPaymentObserved = true

@@ -58,7 +58,11 @@ class X402PaymentService(
             idempotencyKey = request.idempotencyKey,
             fingerprint = fingerprint,
         ) {
-            invokeOnce(request = request, body = body)
+            invokeOnce(
+                request = request,
+                body = body,
+                invocationDeadline = request.invocationDeadline,
+            )
         }
     }
 
@@ -69,7 +73,8 @@ class X402PaymentService(
 
     private fun invokeOnce(
         request: PaymentInvocationRequestDto,
-        body: ByteArray
+        body: ByteArray,
+        invocationDeadline: Duration,
     ): PaymentInvocationResultDto {
         val deadline = System.nanoTime() + invocationDeadline.toNanos()
         val connection = agentClient.prepare(request.endpoint)

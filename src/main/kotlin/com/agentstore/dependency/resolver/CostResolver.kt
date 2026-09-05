@@ -3,6 +3,7 @@ package com.agentstore.dependency.resolver
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.dependency.model.vo.CostCalculation
+import com.agentstore.dependency.model.vo.ExecutionGraphLimits
 import com.agentstore.dependency.model.vo.ResolvedNode
 import java.math.BigInteger
 import org.springframework.stereotype.Component
@@ -23,7 +24,7 @@ class CostResolver {
                 cost += edge.dependency.maxCalls.toBigInteger() * calculation.maxCostAtomic
                 steps += edge.dependency.maxCalls * calculation.steps
                 maxDepth = maxOf(a = maxDepth, b = calculation.maxDepth)
-                if (steps > 32) {
+                if (steps > ExecutionGraphLimits.MAX_STEPS) {
                     throw DomainClientException(ErrorCode.EXECUTION_STEPS_EXCEEDED)
                 }
             }

@@ -9,17 +9,12 @@ import com.agentstore.x402.signer.X402Eip3009Signer
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.security.SecureRandom
 import java.time.Clock
-import java.time.Duration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
 
 @Configuration
 class PaymentClientConfiguration {
-    companion object {
-        private val X402_INVOCATION_DEADLINE = Duration.ofSeconds(30)
-    }
-
     @Bean
     fun x402PaymentCorrelationRegistry(): X402PaymentCorrelationRegistry {
         return X402PaymentCorrelationRegistry()
@@ -32,6 +27,7 @@ class PaymentClientConfiguration {
         objectMapper: ObjectMapper,
         environment: Environment,
         correlations: X402PaymentCorrelationRegistry,
+        properties: X402ClientProperties,
     ): X402PaymentService {
         return X402PaymentService(
             agentClient = X402AgentClient(
@@ -46,7 +42,7 @@ class PaymentClientConfiguration {
                 secureRandom = SecureRandom(),
             ),
             correlations = correlations,
-            invocationDeadline = X402_INVOCATION_DEADLINE,
+            invocationDeadline = properties.aggregateInvocationTimeout(),
         )
     }
 }
