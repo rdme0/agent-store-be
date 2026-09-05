@@ -1,8 +1,10 @@
 package com.agentstore.common.config
 
+import com.agentstore.external.config.ExternalApiProperties
 import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
+import io.swagger.v3.oas.models.servers.Server
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.security.SecurityScheme
 import org.springdoc.core.customizers.OpenApiCustomizer
@@ -14,6 +16,17 @@ import org.springframework.http.HttpMethod
 class OpenApiConfiguration {
     companion object {
         private const val DEMO_BEARER_SCHEME = "demoBearer"
+    }
+
+    @Bean
+    fun publicOpenApi(properties: ExternalApiProperties): OpenAPI {
+        return OpenAPI().servers(
+            listOf(
+                Server()
+                    .url(properties.publicBaseUrl)
+                    .description("Configured public API URL"),
+            ),
+        )
     }
 
     @Bean
@@ -63,10 +76,10 @@ class OpenApiConfiguration {
         if (path.matches(Regex("/api/agent-manifests/agent-versions/[^/]+"))) {
             return httpMethod == HttpMethod.GET
         }
-        if (path.matches(Regex("/api/agent-versions/[^/]+/(readiness|dependencies)"))) {
+        if (path.matches(Regex("/api/agent-versions/[^/]+/dependencies"))) {
             return httpMethod == HttpMethod.GET || httpMethod == HttpMethod.POST
         }
-        if (path.matches(Regex("/api/agent-versions/[^/]+/(publish|verify|disable|verification-input/backfill)"))) {
+        if (path.matches(Regex("/api/agent-versions/[^/]+/(publish|disable)"))) {
             return httpMethod == HttpMethod.POST
         }
         if (path.matches(Regex("/api/agent-versions/[^/]+/dependencies(?:/[^/]+)?"))) {
