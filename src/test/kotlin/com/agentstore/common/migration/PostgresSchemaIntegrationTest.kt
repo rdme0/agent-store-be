@@ -36,7 +36,7 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
             String::class.java,
         )
-        assertEquals("26", version)
+        assertEquals("27", version)
         assertEquals(
             1,
             jdbcTemplate.queryForObject(
@@ -48,6 +48,20 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             0,
             jdbcTemplate.queryForObject(
                 "select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'agent_capabilities'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'agent_version_readiness'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'agent_versions' and column_name = 'verification_input'",
                 Int::class.java,
             ),
         )
