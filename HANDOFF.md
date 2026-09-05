@@ -1,14 +1,21 @@
 # AgentStore BE 인수인계서
 
-최종 갱신: 2026-09-05 — 원클릭 365일 Bearer 전환 및 실제 HTTP·PostgreSQL E2E 완료
+최종 갱신: 2026-09-06 — provider readiness 제거와 즉시 공개 경계
 
-## 최신 로컬 실행 상태 — 2026-09-04
+## 최신 로컬 실행 상태 — 2026-09-05
 
-- 기존 `agent_store` DB와 PostgreSQL volume은 보존했다. 이번 작업에서는 전용
-  `agent_store_integration` 데이터베이스만 생성해 opt-in 통합 테스트에 사용한다.
-- Spring dev 기동으로 V1~V26 migration 상태를 확인했다. V26은 제3자 공급자 readiness 테이블과
-  Version별 `verification_input`을 추가하며 기존 Agent·실행·결제 데이터를 삭제하지 않는다.
-- 이 인수인계 시점에 Spring·Go 개발 서버는 종료되어 있으며 PostgreSQL Compose 상태는 별도로 확인한다.
+- 기존 `agent_store` DB와 PostgreSQL volume은 보존했다. 이번 복구에서 삭제한 것은 사용자가
+  명시적으로 승인한, 이번 bootstrap 실패로 남은 정확한 DRAFT catalog Agent 행뿐이다.
+  shared demo identity, Function Contract, 기존 실행·결제 데이터는 삭제하지 않았다.
+- Spring `:8080`과 Go fixture `:8090` health를 실제 HTTP로 확인한 뒤, `POST /api/demo/access`로
+  발급한 Bearer token을 프로세스 환경변수에만 보관해 `cmd/catalog-bootstrap`을 실행했다.
+- `price-comparison` fixture의 잘못된 YAML key(`priceText: ₩100` + `000:`)를
+  `priceText: "₩100,000"`으로 고쳐 output schema 검증을 통과시켰다.
+- 복구 후 실제 `agent_store` 상태는 Function Contract 12개, Agent 13개, Version 13개이며
+  13개 모두 ACTIVE다. `GET /api/agents?limit=20`도 13개를
+  반환하고 `nextCursor`는 없다. Marketplace가 읽는 공개 조건을 실제 DB·HTTP 경로로 확인했다.
+- V27은 provider readiness table/type과 Version `verification_input`만 제거한다. 기존 Agent,
+  Version, execution, payment, revenue 데이터와 ACTIVE 상태는 보존한다.
 
 ## 저장소 역할
 
@@ -20,11 +27,11 @@
 - Spring은 Base Sepolia USDC의 x402 v2 `exact` / EIP-3009만 처리한다. private key, typed
   data, signature, raw payment header는 절대 영속화·로그 기록하지 않는다.
 
-## 현재 작업: 제3자 x402 공급자 온보딩·Readiness 검증
+## 현재 작업: ACTIVE 공개와 실제 실행 결제 경계
 
 이 작업은 HIGH_RISK다. 실패 행과 회귀 검증 매핑은
 [`docs/phase-9-snowball-removal-failure-matrix.md`](./docs/phase-9-snowball-removal-failure-matrix.md)를
-기준으로 하며, provider readiness 행(PR-01~PR-07)을 추가했다. 최신 fresh verifier는 PASS를 보고했다.
+기준으로 하며, 공개 전 사전 인증이 아닌 실제 실행 결제 경계를 기록한다. 이전 라운드의 verifier 결과와 현재 로컬 게이트를 구분해 기록한다.
 
 - V24는 이미 존재한 provider selection 정리 migration이다. 수정하지 않는다.
 - V25는 `agent_capabilities` / `capability_id`를 `function_contracts` /
@@ -51,37 +58,64 @@
 
 ### 이번 작업의 확정 계약
 
-- `POST /api/agent-versions/{id}/publish`는 단순 상태 변경이 아니라 paid certification이다.
-  Function Contract가 있는 DRAFT Version과 schema-valid `verificationInput`만 대상이다.
-- unsigned probe는 등록 endpoint에 요청해 `402 + PAYMENT-REQUIRED`의 Base Sepolia USDC,
-  x402 v2 `exact` / EIP-3009 terms가 Version의 endpoint·가격·asset·network·`payTo`와 정확히
-  일치하는지 확인한다. 이후 플랫폼 testnet wallet이 한 번만 결제해 200, receipt transaction hash,
-  response format 및 Function Contract output schema를 검증해야 ACTIVE + VERIFIED가 된다.
-- `agent_version_readiness`의 상태는 `UNVERIFIED`, `VERIFYING`, `VERIFIED`, `UNAVAILABLE`, `UNKNOWN`이다.
-  Marketplace, 직접 실행, dependency 및 function-contract provider 후보는 반드시 `ACTIVE + VERIFIED`여야 한다.
-- 15분 scheduler는 VERIFIED Version에 unsigned preflight만 하고, 실패하면 즉시 `UNAVAILABLE`로 제외한다.
-  preflight는 payment journal·settlement를 만들지 않는다. 기존 Quote snapshot은 readiness 변경으로 수정하지 않는다.
+- `POST /api/agent-versions/{id}/publish`는 소유자의 DRAFT Version과 존재하는 Function Contract만 확인하고 즉시
+  ACTIVE로 전환한다. 공개 전 endpoint 호출, x402 요청, 지갑/facilitator 호출, testnet 결제는 하지 않는다.
+- Marketplace, 직접 실행, dependency 및 function-contract provider 후보는 ACTIVE Version만 선택한다.
+- provider readiness, verification input, preflight scheduler, `/readiness`, `/verify`, backfill route는 제공하지 않는다.
+- Function Contract 입력 schema 사전 검사와 output format/schema 사후 검사는 실제 실행에서 계속 강제한다.
 - private key, payment header, signature, typed payload, 원본 provider body는 DB·API·로그에 남기지 않는다.
 
 ## 현재 검증 상태
 
-- 현재 변경에 대해 `detektMain` 0 findings, `classes`, 전체 `test`, `bootJar`, `git diff --check`가 통과했으며
-  fresh verifier도 PASS를 보고했다.
+- 2026-09-06 paid readiness 제거 변경에 대해 `detektMain` 0 findings, 전체 `test`, 전용
+  `agent_store_integration`의 `integrationTest`가 통과했다. integration report는 65 tests,
+  0 failures/errors, 1 intended skip이다.
+- random-port Spring + Vite + 전용 PostgreSQL + local HTTP provider를 연결한 browser gate도 통과했다.
+  이 gate는 DRAFT publish 후 ACTIVE Marketplace 노출을 실제 HTTP 경로로 확인한다.
+- fresh read-only verifier가 현재 diff와 테스트 매핑을 재검토하여 blocking finding 0으로 PASS를 기록했다.
+  테스트를 위해 띄운 Spring/Vite/provider 프로세스는 모두 종료했다.
 - 별도 `agent_store_integration` 데이터베이스와 random-port Spring HTTP 서버를 사용하는
-  `PostgresMarketplaceHttpE2eIntegrationTest`가 Bearer access, ownership, readiness, local x402 흐름을 검증한다.
+  `PostgresMarketplaceHttpE2eIntegrationTest`가 Bearer access, ownership, direct publish/Marketplace, local x402 실행 흐름을 검증한다.
   `integrationTest` 실행은 전용 PostgreSQL 환경변수만 요구하며 다른 DB로의 실행을 거부한다.
 - Go catalog bootstrap은 사용자가 발급한 Bearer token을 명시적으로 받아 사용하며, token 없이는 실행하지 않는다.
 - FE는 원클릭 발급 access token을 localStorage에 저장하고 만료·401·종료 시 삭제한다. `/`는 랜딩, `/marketplace`는
   catalog이며 `/agents`는 `/marketplace`로 redirect한다.
 
+### 실행 실패·최종 결과 복구 — 2026-09-05
+
+- `execution 854c9a59-d176-40f0-96e9-89a9387f8d8b`는 생성 뒤 정확히 30초에 Spring의 outbound x402 HTTP deadline이
+  끝나 Go root request context가 취소된 사례다. 이는 `context canceled` 뒤 receipt가 없는 signed payment를
+  `PAYMENT_RECONCILIATION_REQUIRED`로 보존한 안전 경로이며, 성공·재결제·수동 DB 변경으로 우회하지 않는다.
+- 이전의 “facilitator pending nonce 경쟁” 원인 추정은 철회했다. x402 `exact`의 EIP-3009 nonce는 요청별 random
+  authorization nonce이고, 현재 SDK의 facilitator signer가 settlement transaction을 제출한다. independent sibling
+  callback은 병렬 실행한다.
+- 한 노드의 처리 예산은 30초다. 그러나 callback HTTP transport와 Spring outbound x402 request는 각 target call path에서
+  `남은 depth × 30초`를 계산한다. 따라서 root(depth 1)는 150초, depth 2 callback은 120초, leaf(depth 5)는 30초까지
+  열려 있어 유효한 nested subtree가 30초에 취소되지 않는다. Spring `ExecutionGraphLimits`는 resolver·cost·callback
+  admission·outbound x402 deadline에 사용하며, Go는 `maxDependencyDepth`가 이 cross-service 계약인 정확히 5와 다르면
+  기동을 거부한다.
+- 새 quote와 `POST /api/executions`를 실제 Spring `:8080` → Go fixture `:8090` → Base Sepolia x402 경로로 재실행했다.
+  execution `59b32eb0-43a8-47aa-9163-55d6e543a43a`는 `COMPLETED`, 4/4 step 완료, actual cost `3400`, 모든 payment
+  `SETTLED` 및 transaction hash 유효 상태다. FE `/runs/:id` 브라우저 화면에도 root Markdown 답변이 표시된다.
+- FE는 `null`을 최종 출력으로 렌더링하지 않도록 별도 순수 helper와 회귀 테스트를 추가했다. 진행/실패 상태에서는 결과
+  영역을 숨기고 결제·실패 안내를 유지한다.
+- 첫 fresh verifier는 nested callback transport가 여전히 30초에 잘릴 수 있고 Go depth 설정이 임의값을 받을 수 있음을
+  차단 결함으로 지적했다. 두 결함을 보정해 depth-2 local nested HTTP fixture, Go depth mismatch rejection, Spring
+  call-path timeout regression을 추가했다. Go `go test ./...`·`go vet ./...`·`go build ./...`, Spring
+  `detektMain`·`classes`·`test`·`bootJar`, 그리고 전용 `agent_store_integration` PostgreSQL과 random-port Spring
+  HTTP fixture를 쓰는 `integrationTest`가 통과했다. integrationTest의 Spring test server는 graceful shutdown까지 확인했다.
+  새 실제 paid execution은 추가 지출이므로 자동으로 실행하지 않았다. 보정 후 verifier 재호출은 계정 usage limit으로
+  시작되지 않아, maintainer verifier checklist를 직접 재확인한 상태이며 외부 verifier PASS로 표기하지 않는다.
+
 ### 검증 이력
 
-- 이전 verifier 라운드에서 지적된 readiness·OpenAPI·CORS·설정·integration gate·mock 격리·Kotlin 스타일·handoff
-  항목을 보정했다. 최신 fresh verifier는 수정된 BE/FE/Go 트리와 회귀 테스트를 다시 읽고 PASS를 보고했다.
+- 이전 verifier 라운드에서 지적된 OpenAPI·CORS·설정·integration gate·mock 격리·Kotlin 스타일·handoff
+  항목을 보정했다. 현재 변경에 대한 외부 verifier 재실행 결과는 아직 없다.
 
-### 원클릭 무로그인 데모 랜딩·365일 Bearer 인증 — 2026-09-05
+### 무로그인 데모 랜딩·6시간 Bearer 인증 — 2026-09-05
 
-- `POST /api/demo/access`는 본문 없이 shared developer의 domain-separated HMAC Bearer token과 정확히 365일 뒤 `expiresAt`을 반환한다.
+- `POST /api/demo/access`는 요청 본문 없이 shared developer의 domain-separated HMAC Bearer token과 정확히 6시간 뒤
+  `expiresAt`을 반환한다.
 - 모든 demo developer read/mutation은 `Authorization: Bearer`만 받는다. token 없음·위조·만료는 `401` CommonResponse와 `X-Trace-Id`로 반환한다. cookie credential/CSRF와 Vite proxy는
   사용하지 않으며 CORS는 credential-less `Authorization` preflight만 허용한다.
 - OpenAPI revenue query는 `@ParameterObject`로 flat `cursor`/`limit`을 발행한다. 따라서 generated frontend client가
@@ -89,8 +123,18 @@
 - `/`는 원클릭 demo CTA가 있는 랜딩이고 catalog는 `/marketplace`이다. `/agents`는 `/marketplace`로 redirect한다. 성공 token은
   browser localStorage에만 보관하며 만료·401·데모 종료 시 지우고 landing으로 돌아간다.
 - `PostgresMarketplaceHttpE2eIntegrationTest`는 real PostgreSQL + random-port Spring + local x402 fixture로
-  본문 없는 demo success, missing bearer `401`, foreign owner `403`, legacy backfill and paid verify를 검증한다.
+  bodyless demo access, missing bearer `401`, foreign owner `403`, DRAFT publish와 ACTIVE Marketplace 노출을 검증한다.
   dedicated `agent_store_integration` DB에서 `integrationTest`를 실행한다.
+
+### 심사위원 중심 프론트 UX 계약 — 2026-09-05
+
+- FE `/`는 bodyless access 발급 뒤 `/marketplace`·`/agents/:code`·`/runs/:id` 직접 접근도 목적지를 보존한
+  landing guard를 거친다. 실제 catalog가 비어 있으면 fixture 성공 화면 대신 원인·복구·개발자 이동을 표시한다.
+- 쉬운 사용 모드는 비용 확인, 현재 단계, reconciliation 재결제 금지와 결과/실패 복구를 우선 표시한다. 기술 ID·graph·failure code는
+  개발자 모드 또는 접힘 상세에서만 보인다. dashboard Agent 관리와 수익 query는 섹션별 오류/재시도를 독립적으로 표시한다.
+- BE/FE 새 회귀 범위는 `docs/phase-9-snowball-removal-failure-matrix.md`와 FE `docs/capability-marketplace-failure-matrix.md`의
+  AC-FE-07~13, DA-BE-01, DA-FE-01에 매핑한다. 검증에는 FE `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`,
+  `npm run test:e2e`, BE `detektMain`, `classes`, `test`, `bootJar`, `git diff --check`를 사용했다.
 
 ## 불변식
 

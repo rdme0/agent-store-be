@@ -65,7 +65,7 @@ Spring API는 `8080`, 선택적인 Go demo-agent는 `8090`입니다. 운영 결�
 - `Agent`는 이름, 설명, URL용 `code`, 소유 개발자를 가집니다.
 - 실제 endpoint, 가격, 결제 계약은 `AgentVersion`에 있습니다.
 - Version 상태는 `DRAFT → ACTIVE → DISABLED`입니다.
-- Marketplace와 Quote resolver는 `ACTIVE + VERIFIED` Version만 사용합니다.
+- Marketplace와 Quote resolver는 `ACTIVE` Version만 사용합니다. 공개 전 사전 결제·readiness 인증은 하지 않습니다.
 - `code`는 소문자 영숫자와 하이픈 조합이며 최대 80자입니다.
 - `priceAtomic`은 숫자로만 된 문자열입니다. 부동소수점 반올림을 피하려고 JSON number를 쓰지 않습니다.
 - `responseFormat`은 Version이 반환할 결과 표현을 선언합니다. `TEXT`, `MARKDOWN`, `STRUCTURED`, `JSON` 중 하나이며, 생략된
@@ -251,9 +251,7 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 | POST           | `/api/demo/access`                                     | shared demo Bearer access 발급 |
 | GET            | `/api/developer/me`, `/api/developer/agents`           | Bearer principal과 소유 Agent |
 | GET            | `/api/developer/revenue`                                | Bearer principal 수익 |
-| POST           | `/api/agent-versions/{id}/publish`                     | DRAFT paid certification 후 활성화 |
-| POST           | `/api/agent-versions/{id}/verify`                      | ACTIVE UNVERIFIED/UNAVAILABLE 재검증 |
-| POST           | `/api/agent-versions/{id}/verification-input/backfill` | legacy ACTIVE input 한 번 backfill |
+| POST           | `/api/agent-versions/{id}/publish`                     | DRAFT를 즉시 ACTIVE로 공개 |
 | POST           | `/api/agent-versions/{id}/disable`                     | 비활성화               |
 | GET / POST     | `/api/agent-versions/{id}/dependencies`                | dependency 조회 / 추가 |
 | PATCH / DELETE | `/api/agent-versions/{id}/dependencies/{dependencyId}` | 수정 / 삭제            |
@@ -263,15 +261,15 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 | GET            | `/api/developers/{id}/revenue`                         | 수익                 |
 
 runtime callback은 일반 사용자용 API가 아닙니다.
-개발자 기능은 `POST /api/demo/access`에서 발급한 365일
+개발자 기능은 `POST /api/demo/access`에서 발급한 6시간
 `Authorization: Bearer` access token이 필요합니다. token 없음·위조·만료는 `401`의
 `CommonResponse`와 `X-Trace-Id`로 반환됩니다. 다른 소유자 변경은 `403`입니다. 이 데모
 identity는 모든 방문자가 공유하며 실제 계정 인증이 아닙니다. Marketplace, `/v1`, runtime callback은 demo Bearer를
 요구하거나 이를 해당 인증으로 오인하지 않습니다.
 
-`POST /api/demo/access`는 별도 challenge나 환경변수 없이 공개적으로 365일 demo Bearer를
-발급합니다. production에서도 동일한 bodyless 계약을 사용하며, 서명 비밀키가 교체되면 기존
-토큰은 즉시 무효화됩니다.
+`POST /api/demo/access`는 요청 본문 없이 호출하며 shared demo developer에 대한 6시간
+domain-separated HMAC Bearer와 `expiresAt`을 반환합니다. 발급 응답은 기존
+`CommonResponse` envelope를 유지하고, 서명 비밀키가 교체되면 기존 토큰은 즉시 무효화됩니다.
 
 Spring Security는 demo Bearer, callback invocation token과 external receipt token의 인증, stateless session, credential-less CORS 정책을
 담당합니다. `TraceIdFilter`가 인증 필터보다 먼저 실행되어 실패 응답·로그·MDC가 같은 `X-Trace-Id`를 사용합니다.
@@ -293,6 +291,7 @@ AgentStore가 받는 EVM 지갑입니다.
 | `agent-store.external-api.pay-to` | 외부 x402 USDC를 받는 AgentStore EVM 지갑 |
 | `agent-store.external-api.facilitator-url` | `/verify`, `/settle`을 제공하는 HTTPS facilitator base URL |
 | `agent-store.external-api.facilitator-request-timeout` | facilitator 요청 timeout (`PT5S` 형식) |
+
 | `agent-store.external-api.authorization-timeout` | EIP-3009 authorization 유효 시간 (`PT60S` 형식) |
 | `agent-store.external-api.fee-basis-points` | 공급자 Quote 비용에 더할 플랫폼 수수료 basis point |
 | `agent-store.external-api.intent-ttl` | 결제 전 intent 유효 시간 |
