@@ -33,6 +33,7 @@ detekt {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.apache.httpcomponents.client5:httpclient5'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -58,7 +59,40 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-tasks.named('test') { useJUnitPlatform() }
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    exclude '**/*IntegrationTest.class'
+}
+
+tasks.register('integrationTest', Test) {
+    group = 'verification'
+    description = 'Runs opt-in PostgreSQL and actual HTTP integration tests.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    shouldRunAfter tasks.named('test')
+    include '**/*IntegrationTest.class'
+    useJUnitPlatform()
+    // This gate must evaluate its safety checks on every invocation. A skipped
+    // up-to-date task must never bypass the dedicated database/fixture guard.
+    outputs.upToDateWhen { false }
+
+    doFirst {
+        ['RUN_POSTGRES_INTEGRATION_TESTS', 'SPRING_EXCLUSIVE_MAINTENANCE'].each { name ->
+            if (System.getenv(name) != 'true') {
+                throw new GradleException("integrationTest requires $name=true")
+            }
+        }
+        ['INTEGRATION_DATASOURCE_URL', 'INTEGRATION_DATASOURCE_PASSWORD'].each { name ->
+            if (!System.getenv(name)?.trim()) {
+                throw new GradleException("integrationTest requires environment variable: $name")
+            }
+        }
+        def integrationUrl = System.getenv('INTEGRATION_DATASOURCE_URL')
+        if (!(integrationUrl ==~ /(?i).*\/agent_store_integration(?:\?.*)?/)) {
+            throw new GradleException('integrationTest requires INTEGRATION_DATASOURCE_URL to target agent_store_integration')
+        }
+    }
+}
 
 tasks.withType(JavaCompile).configureEach { options.release = 25 }
 
