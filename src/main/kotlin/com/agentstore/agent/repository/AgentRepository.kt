@@ -2,6 +2,7 @@ package com.agentstore.agent.repository
 
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.vo.AgentVersionStatus
+import com.agentstore.agent.model.vo.AgentVersionReadinessStatus
 import com.agentstore.agent.model.vo.AgentUsageType
 import java.time.Instant
 import java.util.UUID
@@ -11,6 +12,7 @@ import org.springframework.data.jpa.repository.Query
 
 interface AgentRepository : JpaRepository<Agent, UUID> {
     fun findByCode(code: String): Agent?
+    fun findAllByDeveloperIdOrderByCreatedAtDesc(developerId: UUID): List<Agent>
 
     @Query(
         """
@@ -21,6 +23,15 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
             from AgentVersion version
             where version.agentId = agent.id
               and version.status = :status
+              and (
+                  cast(:readinessStatus as string) is null
+                  or exists (
+                  select readiness
+                  from AgentVersionReadiness readiness
+                  where readiness.versionId = version.id
+                    and readiness.status = :readinessStatus
+                  )
+              )
         )
           and (cast(:usageType as string) is null or agent.usageType = :usageType)
           and (
@@ -47,6 +58,7 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
         cursorCreatedAt: Instant?,
         cursorId: UUID?,
         pageable: Pageable,
+        readinessStatus: AgentVersionReadinessStatus? = null,
     ): List<Agent>
 
     @Query(
@@ -58,6 +70,15 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
             from AgentVersion version
             where version.agentId = agent.id
               and version.status = :status
+              and (
+                  cast(:readinessStatus as string) is null
+                  or exists (
+                  select readiness
+                  from AgentVersionReadiness readiness
+                  where readiness.versionId = version.id
+                    and readiness.status = :readinessStatus
+                  )
+              )
         )
           and (cast(:usageType as string) is null or agent.usageType = :usageType)
           and (
@@ -84,6 +105,7 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
         cursorNameKey: String?,
         cursorId: UUID?,
         pageable: Pageable,
+        readinessStatus: AgentVersionReadinessStatus? = null,
     ): List<Agent>
 
     @Query(

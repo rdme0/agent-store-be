@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.math.BigInteger;
 import java.util.UUID;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -66,6 +67,10 @@ public class AgentVersion extends BaseEntity {
 
     private String manifestSha256;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private JsonNode verificationInput;
+
     public AgentVersion(UUID id, UUID agentId, String semver, String endpoint,
             BigInteger priceAtomic, String network, String asset, String payTo) {
         this(id, agentId, semver, endpoint, priceAtomic, network, asset, payTo,
@@ -82,6 +87,13 @@ public class AgentVersion extends BaseEntity {
     public AgentVersion(UUID id, UUID agentId, UUID functionContractId, String semver, String endpoint,
             BigInteger priceAtomic, String network, String asset, String payTo,
             AgentResponseFormat responseFormat) {
+        this(id, agentId, functionContractId, semver, endpoint, priceAtomic, network, asset, payTo,
+                responseFormat, null);
+    }
+
+    public AgentVersion(UUID id, UUID agentId, UUID functionContractId, String semver, String endpoint,
+            BigInteger priceAtomic, String network, String asset, String payTo,
+            AgentResponseFormat responseFormat, JsonNode verificationInput) {
         this.id = id;
         this.agentId = agentId;
         this.functionContractId = functionContractId;
@@ -92,6 +104,7 @@ public class AgentVersion extends BaseEntity {
         this.asset = asset;
         this.payTo = payTo;
         this.responseFormat = responseFormat == null ? AgentResponseFormat.JSON : responseFormat;
+        this.verificationInput = verificationInput;
         this.status = AgentVersionStatus.DRAFT;
     }
 
@@ -115,5 +128,12 @@ public class AgentVersion extends BaseEntity {
         }
         this.manifestContent = manifestContent;
         this.manifestSha256 = manifestSha256;
+    }
+
+    public void backfillVerificationInput(JsonNode verificationInput) {
+        if (status != AgentVersionStatus.ACTIVE || this.verificationInput != null) {
+            throw new IllegalStateException("Only legacy ACTIVE versions without verification input can be backfilled");
+        }
+        this.verificationInput = verificationInput;
     }
 }
