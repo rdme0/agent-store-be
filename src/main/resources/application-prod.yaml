@@ -1,0 +1,3 @@
+agent-store:
+  cors-origins:
+    - ${FRONTEND_ORIGIN}
