@@ -78,6 +78,19 @@ prefer a versioned manifest, generated client, or another single source of truth
 handwritten copies. Read `COMPLEXITY_AUDIT.md` before adding a new platform abstraction, selection
 policy, execution state representation, or infrastructure boundary.
 
+## Symptom masking is technical debt
+
+Do not add a Vite/dev-server proxy, local-only auth or CORS bypass, hidden retry/fallback, generated-client
+bypass, or manual API/DB data mutation merely to make a screen appear to work, silence an error, or pass a
+test. These are technical debt, not a fix, when they change the transport, identity, state, or data path
+instead of correcting the product contract that failed.
+
+First reproduce the intended user path end-to-end and identify the authoritative failing contract. Fix that
+owner with the smallest change, then add a regression test through the same transport and lifecycle. A
+development-only proxy or operator data repair is allowed only when it is an explicit product/operations
+requirement, has a named owner and documented deployment behavior, and the user authorized that scope.
+Never present a different local path or manually repaired state as verification of the ordinary user flow.
+
 ## Kotlin readability
 
 - Every function uses a block body and explicit `return` for returned values. Expression bodies
@@ -161,6 +174,18 @@ that express real nullability, uniqueness, column definition, or a genuinely dif
   client, payment-mode database field, REST/SSE payment-mode field, or synthetic settlement hash.
   Tests may use an explicitly named test double that returns a valid-shaped transaction hash, but
   it must not create a production runtime branch or alter recovery semantics.
+
+## Test isolation
+
+- New tests and any test changed for a feature or regression must not use Mockito, MockK,
+  `@MockBean`, spies, or a framework-generated mock. Keep existing mock-based tests outside the
+  scope of an unrelated change; when one is changed, replace its affected collaboration with a
+  real object, a tracked PostgreSQL fixture, a local HTTP fixture, or an explicitly named test
+  fake whose deterministic behavior is visible in the test source.
+- A database query, transaction/lock boundary, public controller contract, security filter, SSE
+  lifecycle, payment/recovery transition, or external transport contract requires an executable
+  PostgreSQL or local HTTP integration test. A mocked repository/service test cannot stand in for
+  that boundary.
 
 ## Verification and handoff
 

@@ -65,7 +65,7 @@ Spring API는 `8080`, 선택적인 Go demo-agent는 `8090`입니다. 운영 결�
 - `Agent`는 이름, 설명, URL용 `code`, 소유 개발자를 가집니다.
 - 실제 endpoint, 가격, 결제 계약은 `AgentVersion`에 있습니다.
 - Version 상태는 `DRAFT → ACTIVE → DISABLED`입니다.
-- Marketplace와 Quote resolver는 `ACTIVE` Version만 사용합니다.
+- Marketplace와 Quote resolver는 `ACTIVE + VERIFIED` Version만 사용합니다.
 - `code`는 소문자 영숫자와 하이픈 조합이며 최대 80자입니다.
 - `priceAtomic`은 숫자로만 된 문자열입니다. 부동소수점 반올림을 피하려고 JSON number를 쓰지 않습니다.
 - `responseFormat`은 Version이 반환할 결과 표현을 선언합니다. `TEXT`, `MARKDOWN`, `STRUCTURED`, `JSON` 중 하나이며, 생략된
@@ -166,7 +166,10 @@ Agent output이 Version의 `responseFormat`과 맞지 않으면 결제 기록을
 
 내부 callback은 `POST /api/runtime/executions/{id}/dependencies/invoke`입니다.
 
-- Bearer invocation token과 `Idempotency-Key`가 모두 필요합니다.
+- Bearer invocation token과 `Idempotency-Key`가 모두 필요합니다. Bearer token의 parsing·HMAC·만료 검증은
+  `common.security`의 filter/helper가 수행하고, callback service에는 검증된 invocation principal만 전달합니다.
+- Spring이 외부 Agent를 호출할 때도 같은 `Authorization: Bearer ...` header를 사용하며, Go demo-agent는 이를
+  runtime callback에 그대로 전달합니다.
 - token의 execution, parent step, Version, call path가 DB와 일치해야 합니다.
 - Execution은 `RUNNING`, parent step은 활성 상태여야 합니다.
 - dependency가 Quote의 frozen snapshot에 있어야 합니다.
@@ -245,7 +248,12 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 | GET            | `/api/agents/{code}`                                   | 상세                 |
 | PATCH / DELETE | `/api/agents/{id}`                                     | 수정 / 삭제            |
 | POST           | `/api/agents/{id}/versions`                            | Version 생성         |
-| POST           | `/api/agent-versions/{id}/publish`                     | 활성화                |
+| POST           | `/api/demo/access`                                     | shared demo Bearer access 발급 |
+| GET            | `/api/developer/me`, `/api/developer/agents`           | Bearer principal과 소유 Agent |
+| GET            | `/api/developer/revenue`                                | Bearer principal 수익 |
+| POST           | `/api/agent-versions/{id}/publish`                     | DRAFT paid certification 후 활성화 |
+| POST           | `/api/agent-versions/{id}/verify`                      | ACTIVE UNVERIFIED/UNAVAILABLE 재검증 |
+| POST           | `/api/agent-versions/{id}/verification-input/backfill` | legacy ACTIVE input 한 번 backfill |
 | POST           | `/api/agent-versions/{id}/disable`                     | 비활성화               |
 | GET / POST     | `/api/agent-versions/{id}/dependencies`                | dependency 조회 / 추가 |
 | PATCH / DELETE | `/api/agent-versions/{id}/dependencies/{dependencyId}` | 수정 / 삭제            |
@@ -255,6 +263,19 @@ event는 DB에 먼저 저장한 후 publish합니다. `GET /api/executions/{id}/
 | GET            | `/api/developers/{id}/revenue`                         | 수익                 |
 
 runtime callback은 일반 사용자용 API가 아닙니다.
+개발자 기능은 `POST /api/demo/access`에서 발급한 365일
+`Authorization: Bearer` access token이 필요합니다. token 없음·위조·만료는 `401`의
+`CommonResponse`와 `X-Trace-Id`로 반환됩니다. 다른 소유자 변경은 `403`입니다. 이 데모
+identity는 모든 방문자가 공유하며 실제 계정 인증이 아닙니다. Marketplace, `/v1`, runtime callback은 demo Bearer를
+요구하거나 이를 해당 인증으로 오인하지 않습니다.
+
+`POST /api/demo/access`는 별도 challenge나 환경변수 없이 공개적으로 365일 demo Bearer를
+발급합니다. production에서도 동일한 bodyless 계약을 사용하며, 서명 비밀키가 교체되면 기존
+토큰은 즉시 무효화됩니다.
+
+Spring Security는 demo Bearer, callback invocation token과 external receipt token의 인증, stateless session, credential-less CORS 정책을
+담당합니다. `TraceIdFilter`가 인증 필터보다 먼저 실행되어 실패 응답·로그·MDC가 같은 `X-Trace-Id`를 사용합니다.
+execution/step/path/status/idempotency와 결제 권한은 각 도메인 service가 검증하며, 사용자 로그인·JWT/OAuth2는 아직 제공하지 않습니다.
 
 ## External x402 Invocation API
 
@@ -323,7 +344,8 @@ Invoke-RestMethod `
 ```
 
 상태는 `GET /v1/invocations/{invocationId}`, 실시간 진행은 `GET /v1/invocations/{invocationId}/events`에서 같은
-receipt header로 조회합니다. SSE는 기존 `Last-Event-ID` replay 규칙을 그대로 따릅니다. 최종 결과는 항상
+receipt header로 조회합니다. receipt 인증은 Spring Security filter/helper가 수행하며, 유효하지 않은 receipt는 invocation
+존재 여부를 노출하지 않는 응답으로 거절합니다. SSE는 기존 `Last-Event-ID` replay 규칙을 그대로 따릅니다. 최종 결과는 항상
 `CommonResponse.result.output`에 들어가므로 외부 서비스는 실행 그래프가 아닌 Agent output만 간단히 소비할 수 있습니다.
 
 ## 8. 로컬 실행
@@ -352,7 +374,7 @@ validate합니다. 이미 적용한 migration을 수정하지 말고 새 migrati
 | `X402_PRIVATE_KEY` | 필수 저잔액 payer key, `0x` + 64자리 hex |
 | `POSTGRES_PORT` | `agent-store-infra` Docker Compose가 직접 읽는 PostgreSQL host port |
 
-credentials를 허용하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
+Bearer 인증은 credential-less CORS로 동작하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
 운영에서는 `application.yaml` 또는 운영용 YAML의 `agent-store.cors-origins`를 정확한 HTTPS origin으로 제한합니다.
 
 Demo Agent는 독립 Go 서비스다. Compose에서는 일반 service network를 사용하므로 API는 `api:8080`, demo-agent는
@@ -365,6 +387,7 @@ Function Contract 등록 → manifest import → Version publish 순서로 처�
 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet
 자금이 준비돼야 하며 funded Base Sepolia 성공을 보장하지 않습니다.
+
 
 ## 9. OpenAPI와 FE 계약
 
@@ -387,8 +410,20 @@ docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle
 git diff --check
 ```
 
-기본 Compose tools 검증은 unit test만 실행합니다. PostgreSQL을 직접 변경하는 opt-in integration suite는 기본 개발 환경에서
-제공하지 않습니다. 독립 Go demo-agent는 해당 프로젝트에서 `go test ./...`, `go vet ./...`, `go build ./...`로 확인합니다.
+기본 Compose tools 검증은 unit test만 실행합니다. 실제 PostgreSQL과 랜덤 포트 Spring HTTP 서버를 쓰는 E2E는 전용 DB에서
+별도로 실행합니다. `integrationTest`는 `RUN_POSTGRES_INTEGRATION_TESTS=true`,
+`SPRING_EXCLUSIVE_MAINTENANCE=true`, `INTEGRATION_DATASOURCE_URL`,
+`INTEGRATION_DATASOURCE_PASSWORD`를 요구하며 CI와 배포 전 gate에서 실행합니다.
+
+```powershell
+$env:RUN_POSTGRES_INTEGRATION_TESTS = 'true'
+$env:SPRING_EXCLUSIVE_MAINTENANCE = 'true'
+$env:INTEGRATION_DATASOURCE_URL = 'jdbc:postgresql://localhost:5432/agent_store_integration?currentSchema=public'
+$env:INTEGRATION_DATASOURCE_PASSWORD = 'postgres'
+.\gradlew.bat integrationTest
+```
+
+독립 Go demo-agent는 해당 프로젝트에서 `go test ./...`, `go vet ./...`, `go build ./...`로 확인합니다.
 
 ## Function Contract Marketplace
 

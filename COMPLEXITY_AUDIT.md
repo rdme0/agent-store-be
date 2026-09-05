@@ -22,7 +22,7 @@
 | 우선 적용 | quote snapshot 소비 | typed DTO가 있는데 실행 경로가 다시 `JsonNode.path(...)`로 읽음 | 저장 시 JSONB를 유지하고 읽기 경계를 `QuoteSnapshotDto`로 통일 |
 | 우선 적용 | PostgreSQL integration test | 전용 DB와 환경변수를 개발자가 미리 준비해야 함 | Testcontainers `PostgreSQLContainer`와 Spring Boot `@ServiceConnection` 사용 |
 | 적용 가치 있음 | Version constraint | parser·정규화·비교가 748줄 resolver에 함께 있음 | `VersionConstraint` immutable value object로 파싱 책임 분리 |
-| 조건부 적용 | runtime callback 인증 | controller가 header를 받고 service가 Bearer parsing과 HMAC 검증까지 수행 | Spring Security filter chain에서 인증하고 typed principal만 service에 전달 |
+| 완료 | runtime callback·external receipt 인증 | controller/service가 raw credential parsing과 HMAC/hash 검증을 직접 수행 | `common.security` filter/helper/SecurityContext로 인증을 옮기고 typed principal만 도메인 service에 전달 |
 | 제한적 적용 | 단순 외부 HTTP API | JDK `HttpClient` request·JSON binding boilerplate | 안전 요구가 단순한 client만 Spring HTTP Service Client 또는 `RestClient` 사용 |
 | 요구 발생 후 | execution dispatch | 수동 `afterCommit`과 `@Async` 사이에 crash gap이 있음 | 실행 재개가 필요해질 때만 DB-backed job/outbox 또는 durable event publication 도입 |
 
@@ -74,12 +74,13 @@ framework를 추가하는 작업이 아니며, 현재 사용하는 `semver4j` �
 
 ### 4. Spring Security는 인증까지만 옮긴다
 
-`RuntimeCallbackController`는 `Authorization` 문자열을 받고, `RuntimeCallbackService`가 Bearer prefix 제거와 HMAC token
-검증까지 수행한다. 반면 Spring이 demo-agent를 호출할 때 `X402AgentClient`는 `X-AgentStore-Invocation-Token`을 보내고 Go는 원
-invocation의 `Authorization`을 callback에 전달한다. 먼저 한 가지 header 계약으로 통일해야 한다.
+이번 작업에서 `RuntimeCallbackController`와 external invocation 조회 controller는 raw credential을 받지 않고,
+`common.security` filter/helper가 각각 invocation token과 receipt token을 검증한 뒤 typed principal을 전달하도록 변경했다.
+ Spring이 demo-agent를 호출할 때 `X402AgentClient`는 `Authorization: Bearer ...`를 보내고 Go는 이 원 invocation
+`Authorization`을 callback에 전달한다. Spring과 Go 사이의 callback header 계약은 이 표준 header 하나로 통일한다.
 
-그 뒤 callback 경로에만 작은 `SecurityFilterChain`을 적용하면 header parsing, credential 검증, 인증 실패 응답과 principal 전달을
-request boundary로 모을 수 있다. Spring Security의 servlet 인증은
+callback과 외부 receipt 조회/SSE 경로에 `SecurityFilterChain`을 적용해 header parsing, credential 검증, 인증 실패 응답과
+principal 전달을 request boundary로 모았다. Spring Security의 servlet 인증은
 [`SecurityFilterChain`, `AuthenticationManager`, `Authentication`](https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html)
 경계로 이 책임을 분리한다.
 
@@ -90,9 +91,8 @@ Spring Security가 다음 도메인 검증을 대신하면 안 된다.
 - 선언된 dependency, budget, idempotency와 terminal race
 - x402 signature·challenge·settlement 검증
 
-현재 보호할 endpoint가 callback 하나뿐이면 starter, filter, provider, entry point가 기존 몇 줄보다 많아질 수 있다. header 불일치는
-즉시 수정하되, 외부 receipt 인증이나 사용자 인증까지 공통 보안 경계가 두 곳 이상 생길 때 Spring Security를 도입한다. JWT/OAuth2
-resource server로 token 형식을 바꾸는 것은 별도 요구가 없는 한 하지 않는다.
+인증 실패는 기존 CommonResponse와 invocation 존재 은닉 의미를 유지하며, 사용자 로그인·JWT/OAuth2 resource server는 별도
+요구가 없는 한 도입하지 않는다. Security는 인증까지만 담당하고 invocation/step/path/state/idempotency 검증은 도메인 service에 남긴다.
 
 ### 5. 선언형 HTTP client는 안전 경계가 단순한 호출에만 사용한다
 
@@ -117,6 +117,20 @@ publication을 기록하고 incomplete publication을 다시 제출할 수 있�
 
 payment journal과 reconciliation은 generic outbox나 retry로 대체하지 않는다. 결제 결과가 불명확한 상태에서 자동 재호출하면 이중 결제로
 이어질 수 있기 때문이다.
+
+### 7. Go catalog에 섞인 등록 정보와 실행 설정을 분리한다 — 구현 보류
+
+2026-09-04 후속 수정사항으로 기록했다. `catalog/agents.yaml`은 Go runtime과 bootstrap이 직접 읽으며,
+Spring은 bootstrap이 등록 API로 전달한 값을 DB에서 읽는다. 개발자 identity·공개 계약·결제 조건·prompt·fixture를
+한 파일이 소유해 양쪽 변경을 함께 맞춰야 하는 부담이 있다.
+
+개발자 identity는 Spring 인증에서 결정하고, 공개 Agent 등록은 Spring 화면/API, 실행 설정은 Go가 담당하도록
+정리한다. 결제 조건은 등록 시 확인해 Version에 고정하며 quote/challenge 일치 검증은 유지한다. bootstrap은
+등록 보조 도구로 제한한다. 중복 Schema 설정을 줄이되 자체 DSL이나 검증 생략으로 대체하지 않는다.
+현재 사용자 로그인은 미구현이므로 이 방향을 구현 완료 상태로 해석하지 않는다.
+
+범위와 완료 기준은 [`ROADMAP.md`](./ROADMAP.md#후속-개선--agent-등록과-go-실행-설정-분리)에 기록했다.
+현재 catalog나 DB를 즉시 변경하는 작업은 아니다.
 
 ## 도입하지 않을 기술
 
@@ -150,12 +164,10 @@ payment journal과 reconciliation은 generic outbox나 retry로 대체하지 않
 1. quote snapshot read boundary를 typed DTO로 통일한다.
 2. PostgreSQL integration suite를 Testcontainers service connection으로 자급식으로 만든다.
 3. `VersionConstraint` 값 객체를 분리한 뒤 `DependencyResolver`가 graph/provider 선택만 소유하게 정리한다.
-4. invocation token header 계약을 먼저 통일하고, 인증 경계가 확장될 때 Spring Security를 도입한다.
-5. crash 후 execution 재개가 제품 요구가 될 때 durable dispatch를 별도 HIGH_RISK 작업으로 설계한다.
+4. crash 후 execution 재개가 제품 요구가 될 때 durable dispatch를 별도 HIGH_RISK 작업으로 설계한다.
 
 각 변경은 한 번에 묶지 않는다. typed snapshot은 quote/callback compatibility, Testcontainers는 migration·lock test 격리,
-Version constraint는 API/manifest/quote 의미 보존, Security는 401/403/CommonResponse와 callback race, durable dispatch는 중복 실행과
-payment recovery를 각각 독립적으로 검증한다.
+Version constraint는 API/manifest/quote 의미 보존, durable dispatch는 중복 실행과 payment recovery를 각각 독립적으로 검증한다.
 
 ## 새 기능 제안 전 판단 기준
 

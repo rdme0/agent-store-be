@@ -178,6 +178,32 @@ settlement, 내부 Execution 연결과 SSE 조회를 제공한다. SDK는 아직
 - 실제 사용 데이터로 가격, 성공률, 지연 시간과 사용자 만족도를 평가한다.
 - 새로운 network나 payment scheme은 기존 Base Sepolia EIP-3009 경계를 충분히 검증한 뒤 별도 설계한다.
 
+## 후속 개선 — Agent 등록과 Go 실행 설정 분리
+
+상태: 2026-09-04 논의 기록. 구현은 보류한다. Phase 6의 공급자 등록 경험 개선 항목이다.
+
+현재 Go 서버와 `catalog-bootstrap`이 `catalog/agents.yaml`을 읽고, bootstrap이 Spring 등록 API로 정보를
+전달한다. Spring은 YAML을 직접 읽지 않고 DB를 사용한다. 하나의 파일에 개발자 identity, 공개 등록 정보,
+입출력 계약, 결제 조건과 runtime prompt/fixture가 섞여 있어 설정 변경과 재등록 부담이 크다.
+
+후속 방향:
+
+- 개발자 소유권은 Spring이 인증된 등록 요청에서 결정한다. catalog의 `developer.id/name`으로 신원을 정하지 않는다.
+  현재 사용자 로그인은 미구현이므로 인증·소유권 정책을 먼저 설계해야 한다.
+- Agent 이름·설명·endpoint·기능 계약·Version·의존성은 Spring 등록 화면/API에서 관리한다.
+- Go는 Agent 실행 로직·프롬프트·모델·fixture와 공급자 결제 조건을 소유한다. YAML은 필요한 Go 실행 설정에 한해 사용한다.
+- 가격·`payTo`·network·asset은 등록 시 공급자의 결제 조건과 일치하는지 확인하고 Spring Version에 고정한다.
+  조건 확인 방법은 구현 계획에서 정하며, 이후 quote와 실제 challenge가 다르면 서명 전에 거절한다.
+- 데모 bootstrap은 일반 등록 API를 사용하는 보조 도구로 제한하고, 플랫폼의 등록 방식이 Go catalog에 종속되지 않게 한다.
+- MARKDOWN/TEXT의 `outputSchema: { type: string }`처럼 응답 형식에서 도출할 수 있는 중복 설정을 줄인다.
+  JSON은 개발자가 필요한 입출력 구조를 명시하며, `additionalProperties` 정책은 별도 검토한다.
+  표준 JSON Schema를 대체할 자체 DSL은 만들지 않는다.
+
+완료 기준은 Go 전용 catalog 없이 외부 개발자가 Agent를 등록할 수 있고, 공급자 runtime 설정과 플랫폼 등록 정보의
+책임이 구분되는 것이다. 기존 ACTIVE Version·quote snapshot·결제 journal은 보존한다. 이 항목을 기록하는 시점에는
+코드, YAML, DB, 인증과 공개 API를 변경하지 않는다. 관련 복잡도는
+[`COMPLEXITY_AUDIT.md`](./COMPLEXITY_AUDIT.md)의 catalog 항목에서 추적한다.
+
 ## 시연 시나리오
 
 대표 시연은 다음 질문에 순서대로 답해야 한다.
