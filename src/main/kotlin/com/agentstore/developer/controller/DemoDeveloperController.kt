@@ -27,9 +27,7 @@ class DemoDeveloperController(
     @Operation(operationId = "postApiDemoAccess", summary = "Issue shared demo developer access token")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun access(): CommonResponse<DemoAccessResponse> {
-        return CommonResponse.success(
-            result = demoAccessService.issue(),
-        )
+        return CommonResponse.success(result = demoAccessService.issue())
     }
 
     @GetMapping("/developer/me")
