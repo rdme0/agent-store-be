@@ -123,7 +123,6 @@ class PostgresRuntimeFixture(
             agentId,
             functionContractId,
         )
-        insertVerifiedReadiness(versionId)
         cleaner.trackAgentVersion(versionId)
         return versionId
     }
@@ -397,7 +396,6 @@ class PostgresRuntimeFixture(
             priceAtomic,
             payTo,
         )
-        insertVerifiedReadiness(versionId)
         cleaner.trackAgentVersion(versionId)
 
         return RegistryVersionFixture(
@@ -406,13 +404,6 @@ class PostgresRuntimeFixture(
             versionId = versionId,
             code = code,
             payTo = payTo,
-        )
-    }
-
-    private fun insertVerifiedReadiness(versionId: UUID) {
-        jdbcTemplate.update(
-            "insert into agent_version_readiness (version_id, status, created_at, updated_at) values (?, 'VERIFIED'::\"AgentVersionReadinessStatus\", current_timestamp, current_timestamp)",
-            versionId,
         )
     }
 

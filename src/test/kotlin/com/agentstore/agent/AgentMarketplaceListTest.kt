@@ -18,7 +18,6 @@ import com.agentstore.agent.service.FunctionContractReader
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.support.ExplicitProxy
-import com.agentstore.support.emptyReadinessRepository
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.math.BigInteger
 import java.net.InetAddress
@@ -163,7 +162,7 @@ class AgentMarketplaceListTest {
             }
         }
         val versionRepository = ExplicitProxy(AgentVersionRepository::class.java).apply {
-            answer(methodName = "findAllReadyByAgentId") { arguments ->
+            answer(methodName = "findAllByAgentIdAndStatus") { arguments ->
                 activeVersions[arguments?.first() as UUID]?.let(::listOf) ?: emptyList<AgentVersion>()
             }
             answer(methodName = "findAllByAgentId") { arguments ->
@@ -181,7 +180,6 @@ class AgentMarketplaceListTest {
             endpointPolicy = endpointPolicy(),
             cursorCodec = cursorCodec(),
             functionContractService = functionContractReader.value,
-            readinessRepository = emptyReadinessRepository(),
         )
         return Fixture(service = service)
     }

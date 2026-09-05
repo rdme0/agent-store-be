@@ -17,13 +17,13 @@ import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.payment.client.PinnedAgentRestClientFactory
 import com.agentstore.payment.dto.internal.PaymentInvocationRequestDto
 import com.agentstore.support.ExplicitProxy
-import com.agentstore.support.emptyReadinessRepository
 import com.agentstore.x402.client.X402AgentClient
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sun.net.httpserver.HttpServer
 import java.math.BigInteger
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.time.Duration
 import java.util.UUID
 import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
@@ -67,7 +67,7 @@ class AgentEndpointAdmissionTest {
     }
 
     @Test
-    fun `publish rejects a persisted unsafe draft without activating it`() {
+    fun `publish rejects a draft without a Function Contract without activating it`() {
         val draft = AgentVersion(
             UUID.randomUUID(),
             UUID.randomUUID(),
@@ -94,10 +94,10 @@ class AgentEndpointAdmissionTest {
             endpointPolicy = productionPolicy(),
             cursorCodec = cursorCodec(),
             functionContractService = functionContractReader.value,
-            readinessRepository = emptyReadinessRepository(),
         )
 
-        assertUnsafe { service.publish(draft.id) }
+        val exception = assertThrows(DomainClientException::class.java) { service.publish(draft.id) }
+        assertEquals("AGENT_404_004", exception.errorCode.code)
         assertEquals("DRAFT", draft.status.name)
     }
 
@@ -159,6 +159,7 @@ class AgentEndpointAdmissionTest {
                 asset = "USDC",
                 payTo = RECEIVER,
                 body = emptyMap<String, Any>(),
+                invocationDeadline = Duration.ofSeconds(30),
             )
 
             val response = client.post(
@@ -186,7 +187,6 @@ class AgentEndpointAdmissionTest {
             productionPolicy(),
             cursorCodec(),
             ExplicitProxy(FunctionContractReader::class.java).value,
-            emptyReadinessRepository(),
         )
     }
 

@@ -1,9 +1,6 @@
 package com.agentstore.support
 
-import com.agentstore.agent.model.entity.AgentVersionReadiness
-import com.agentstore.agent.repository.AgentVersionReadinessRepository
 import java.lang.reflect.Proxy
-import java.util.Optional
 
 /** Explicit in-memory boundary for isolated service tests; no mock framework is involved. */
 class ExplicitProxy<T : Any>(type: Class<T>) {
@@ -19,23 +16,6 @@ class ExplicitProxy<T : Any>(type: Class<T>) {
     fun answer(methodName: String, answer: (Array<Any?>?) -> Any?) {
         answers[methodName] = answer
     }
-}
-
-fun emptyReadinessRepository(): AgentVersionReadinessRepository {
-    return Proxy.newProxyInstance(
-        AgentVersionReadinessRepository::class.java.classLoader,
-        arrayOf(AgentVersionReadinessRepository::class.java),
-    ) { _, method, args ->
-        when (method.name) {
-            "save", "saveAndFlush" -> args?.firstOrNull()
-            "findById", "findOne" -> Optional.empty<AgentVersionReadiness>()
-            "findAllById", "findAllByStatus" -> emptyList<AgentVersionReadiness>()
-            "existsById" -> false
-            "count" -> 0L
-            "delete", "deleteById", "deleteAll", "flush" -> Unit
-            else -> defaultValue(method.returnType)
-        }
-    } as AgentVersionReadinessRepository
 }
 
 private fun defaultValue(type: Class<*>): Any? {

@@ -15,7 +15,6 @@ import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.support.ExplicitProxy
-import com.agentstore.support.emptyReadinessRepository
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.net.InetAddress
 import java.time.Duration
@@ -50,7 +49,6 @@ class AgentServiceFunctionContractTest {
             endpointPolicy = endpointPolicy(),
             cursorCodec = cursorCodec(),
             functionContractService = functionContractReader.value,
-            readinessRepository = emptyReadinessRepository(),
         )
 
         val exception = assertThrows(DomainClientException::class.java) {

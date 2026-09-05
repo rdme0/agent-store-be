@@ -4,9 +4,11 @@ import com.agentstore.agent.resolver.AgentEndpointPolicy
 import com.agentstore.payment.client.PaymentReconciliationClient
 import com.agentstore.payment.client.PinnedAgentRestClientFactory
 import com.agentstore.payment.config.PaymentClientConfiguration
+import com.agentstore.payment.config.X402ClientProperties
 import com.agentstore.x402.registry.X402PaymentCorrelationRegistry
 import com.agentstore.x402.service.X402PaymentService
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Duration
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -28,6 +30,7 @@ class X402PaymentConfigurationTest {
                 objectMapper = jacksonObjectMapper(),
                 environment = MockEnvironment(),
                 correlations = X402PaymentCorrelationRegistry(),
+                properties = x402ClientProperties(),
             )
         }.isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("X402_PRIVATE_KEY")
@@ -45,9 +48,40 @@ class X402PaymentConfigurationTest {
             objectMapper = jacksonObjectMapper(),
             environment = environment,
             correlations = X402PaymentCorrelationRegistry(),
+            properties = x402ClientProperties(),
         )
 
         assertThat(client).isInstanceOf(X402PaymentService::class.java)
         assertThat(client).isInstanceOf(PaymentReconciliationClient::class.java)
+    }
+
+    @Test
+    fun `native x402 payment rejects a non-positive aggregate invocation timeout`() {
+        assertThatThrownBy {
+            X402ClientProperties(perDepthInvocationTimeout = Duration.ZERO)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("agent-store.x402-client.per-depth-invocation-timeout is invalid")
+    }
+
+    @Test
+    fun `native x402 aggregate deadline follows the maximum execution graph depth`() {
+        val properties = x402ClientProperties()
+
+        assertThat(properties.aggregateInvocationTimeout()).isEqualTo(Duration.ofSeconds(150))
+        assertThat(properties.invocationTimeout(callPathSize = 1)).isEqualTo(Duration.ofSeconds(150))
+        assertThat(properties.invocationTimeout(callPathSize = 2)).isEqualTo(Duration.ofSeconds(120))
+        assertThat(properties.invocationTimeout(callPathSize = 5)).isEqualTo(Duration.ofSeconds(30))
+    }
+
+    @Test
+    fun `native x402 deadline rejects a call path beyond the execution graph limit`() {
+        assertThatThrownBy {
+            x402ClientProperties().invocationTimeout(callPathSize = 6)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("execution call path depth is invalid")
+    }
+
+    private fun x402ClientProperties(): X402ClientProperties {
+        return X402ClientProperties(perDepthInvocationTimeout = Duration.ofSeconds(30))
     }
 }

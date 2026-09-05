@@ -2,8 +2,6 @@ package com.agentstore.agent
 
 import com.agentstore.AgentStoreApplication
 import com.agentstore.agent.config.DevIdentityInitializer
-import com.agentstore.agent.model.vo.AgentVersionReadinessStatus
-import com.agentstore.agent.service.ProviderReadinessService
 import com.agentstore.external.client.FacilitatorIncomingPaymentGateway
 import com.agentstore.external.dto.internal.IncomingPaymentSettlementDto
 import com.agentstore.external.dto.internal.IncomingPaymentVerificationDto
@@ -20,6 +18,8 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Instant
+import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.Base64
 import java.util.Collections
 import java.util.UUID
@@ -66,9 +66,6 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     @Autowired
     private lateinit var facilitatorFixture: DeterministicFacilitatorFixture
 
-    @Autowired
-    private lateinit var readinessService: ProviderReadinessService
-
     @LocalServerPort
     private var port: Int = 0
 
@@ -94,6 +91,54 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
+    @EnabledIfEnvironmentVariable(named = "RUN_SPRING_BROWSER_E2E", matches = "true")
+    fun `browser completes public browse quote and execution against Spring PostgreSQL and local provider`() {
+        val provider = LocalX402CertificationFixture(
+            objectMapper = objectMapper,
+            paidBody = "{\"answer\":\"실제 Spring 브라우저 결과\"}",
+        )
+        val fixture = insertMarketplaceAgent(
+            code = "spring-browser-${UUID.randomUUID().toString().take(8)}",
+            name = "Spring Browser Agent",
+        )
+        jdbcTemplate.update("update agent_versions set endpoint = ? where id = ?", provider.endpoint, fixture.versionId)
+        var browserProcess: Process? = null
+        try {
+            val frontend = File("../agent-store-fe").canonicalFile
+            check(File(frontend, "e2e/spring-browser-gate.mjs").isFile)
+            val builder = ProcessBuilder("node", "e2e/spring-browser-gate.mjs")
+                .directory(frontend)
+                .inheritIO()
+            builder.environment()["SPRING_BROWSER_API_URL"] = "http://localhost:$port"
+            builder.environment()["SPRING_BROWSER_AGENT_CODE"] = fixture.code
+            browserProcess = builder.start()
+            check(browserProcess.waitFor(90, TimeUnit.SECONDS)) { "Spring browser gate exceeded 90 seconds" }
+            assertThat(browserProcess.exitValue()).isZero()
+            assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from executions where quote_id in (select id from execution_quotes where root_version_id = ?) and status = 'COMPLETED'",
+                Int::class.java,
+                fixture.versionId,
+            )).isEqualTo(1)
+            val paidRequests = provider.requests.filter { it.paymentSignature != null }
+            assertThat(paidRequests).hasSize(1)
+            assertThat(provider.requests.filter { it.idempotencyKey == paidRequests.single().idempotencyKey }).hasSize(2)
+        } finally {
+            browserProcess?.let { process ->
+                if (process.isAlive) {
+                    process.descendants().forEach { it.destroyForcibly() }
+                    process.destroyForcibly()
+                    process.waitFor(10, TimeUnit.SECONDS)
+                }
+            }
+            jdbcTemplate.queryForList("select id from executions where quote_id in (select id from execution_quotes where root_version_id = ?)", UUID::class.java, fixture.versionId)
+                .forEach { fixtureCleaner.trackExecution(requireNotNull(it)) }
+            jdbcTemplate.queryForList("select id from execution_quotes where root_version_id = ?", UUID::class.java, fixture.versionId)
+                .forEach { fixtureCleaner.trackQuote(requireNotNull(it)) }
+            provider.stop()
+        }
+    }
+
+    @Test
     fun `openapi documents demo bearer security and x402 CORS preflight allows payment signature`() {
         val openApi = httpClient.send(
             HttpRequest.newBuilder(URI("http://127.0.0.1:$port/openapi.json"))
@@ -103,6 +148,7 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         )
         assertThat(openApi.statusCode()).isEqualTo(200)
         val document = objectMapper.readTree(openApi.body())
+        assertThat(document.path("servers").first().path("url").textValue()).isEqualTo("https://api.example.com")
         assertThat(document.path("components").path("securitySchemes").path("demoBearer").path("scheme").textValue())
             .isEqualTo("bearer")
         assertThat(document.path("paths").path("/api/developer/me").path("get").path("security").toString())
@@ -248,12 +294,13 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
-    fun `demo access issues a one year bearer from an empty request`() {
+    fun `demo access issues a six hour bearer without a request body`() {
         val response = sendJson(method = "POST", path = "/api/demo/access", body = "", includeAccess = false)
 
         assertThat(response.statusCode()).isEqualTo(200)
         val expiresAt = Instant.parse(objectMapper.readTree(response.body()).path("result").path("expiresAt").textValue())
-        assertThat(expiresAt).isAfter(Instant.now().plusSeconds(364L * 24 * 60 * 60))
+        assertThat(expiresAt).isAfter(Instant.now().plusSeconds(6L * 60 * 60 - 30))
+        assertThat(expiresAt).isBefore(Instant.now().plusSeconds(6L * 60 * 60 + 30))
     }
 
     @Test
@@ -296,18 +343,17 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
-    fun `marketplace newest HTTP query returns only active verified agents`() {
-        val verifiedCode = "http-verified-${UUID.randomUUID()}"
+    fun `marketplace newest HTTP query returns only active agents`() {
+        val activeCode = "http-active-${UUID.randomUUID()}"
         insertMarketplaceAgent(
-            code = verifiedCode,
-            name = "Verified HTTP Agent",
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
+            code = activeCode,
+            name = "Active HTTP Agent",
         )
-        val unverifiedCode = "http-unverified-${UUID.randomUUID()}"
+        val draftCode = "http-draft-${UUID.randomUUID()}"
         insertMarketplaceAgent(
-            code = unverifiedCode,
-            name = "Unverified HTTP Agent",
-            readinessStatus = AgentVersionReadinessStatus.UNVERIFIED,
+            code = draftCode,
+            name = "Draft HTTP Agent",
+            versionStatus = "DRAFT",
         )
 
         val response = get(path = "/api/agents?sort=newest")
@@ -316,17 +362,16 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val body = objectMapper.readTree(response.body())
         assertThat(body.path("isSuccess").booleanValue()).isTrue()
         assertThat(body.path("result").path("items").map { item -> item.path("code").textValue() })
-            .contains(verifiedCode)
-            .doesNotContain(unverifiedCode)
+            .contains(activeCode)
+            .doesNotContain(draftCode)
     }
 
     @Test
-    fun `marketplace name HTTP query binds readiness enum on PostgreSQL`() {
-        val verifiedCode = "http-name-${UUID.randomUUID()}"
+    fun `marketplace name HTTP query returns active versions from PostgreSQL`() {
+        val activeCode = "http-name-${UUID.randomUUID()}"
         insertMarketplaceAgent(
-            code = verifiedCode,
+            code = activeCode,
             name = "Alpha HTTP Agent",
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
         )
 
         val response = get(path = "/api/agents?sort=name_asc&q=Alpha")
@@ -335,7 +380,7 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val body = objectMapper.readTree(response.body())
         assertThat(body.path("isSuccess").booleanValue()).isTrue()
         assertThat(body.path("result").path("items").map { item -> item.path("code").textValue() })
-            .contains(verifiedCode)
+            .contains(activeCode)
     }
 
     @Test
@@ -431,14 +476,12 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val secondVersionId = UUID.fromString(objectMapper.readTree(versionResponse.body()).path("result").path("id").textValue())
         fixtureCleaner.trackAgentVersion(secondVersionId)
 
-        val readinessResponse = get("/api/agent-versions/$firstVersionId/readiness")
-        assertThat(readinessResponse.statusCode()).isEqualTo(200)
-        assertThat(objectMapper.readTree(readinessResponse.body()).path("result").path("status").textValue()).isEqualTo("UNVERIFIED")
-
-        jdbcTemplate.update(
-            "update agent_versions set status = 'ACTIVE'::\"AgentVersionStatus\" where id = ?",
-            secondVersionId,
+        val publishSecondVersion = sendJson(
+            method = "POST",
+            path = "/api/agent-versions/$secondVersionId/publish",
+            body = "",
         )
+        assertThat(publishSecondVersion.statusCode()).describedAs(publishSecondVersion.body()).isEqualTo(200)
         val disableActiveResponse = sendJson(
             method = "POST",
             path = "/api/agent-versions/$secondVersionId/disable",
@@ -521,7 +564,7 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
-    fun `dependency CRUD and quote operations use real PostgreSQL ownership and readiness`() {
+    fun `dependency CRUD and quote operations use real PostgreSQL ownership and active versions`() {
         val contractId = insertFunctionContract()
         val source = createHttpAgent(contractId = contractId, codePrefix = "http-dependency-source")
         val target = createHttpAgent(contractId = contractId, codePrefix = "http-dependency-target")
@@ -559,7 +602,6 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val quoteFixture = insertMarketplaceAgent(
             code = "http-quote-${UUID.randomUUID().toString().take(8)}",
             name = "HTTP quote fixture",
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
         )
         val quote = sendJson(
             method = "POST",
@@ -579,7 +621,6 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val fixture = insertMarketplaceAgent(
             code = "http-execution-${UUID.randomUUID().toString().take(8)}",
             name = "HTTP execution fixture",
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
         )
         val quote = sendJson(
             method = "POST",
@@ -663,7 +704,6 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val provider = insertMarketplaceAgent(
             code = "http-external-${UUID.randomUUID().toString().take(8)}",
             name = "HTTP external fixture",
-            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
         )
         val external = httpClient.send(
             HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
@@ -708,7 +748,6 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
             val provider = insertMarketplaceAgent(
                 code = "http-external-paid-${UUID.randomUUID().toString().take(8)}",
                 name = "HTTP external paid fixture",
-                readinessStatus = AgentVersionReadinessStatus.VERIFIED,
             )
             jdbcTemplate.update(
                 "update agent_versions set endpoint = ? where id = ?",
@@ -824,262 +863,84 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
-    fun `legacy active version backfill and verify use local x402 signed retry then expose marketplace agent`() {
-        val x402Fixture = LocalX402CertificationFixture(objectMapper)
-        try {
-            val contractId = insertFunctionContract()
-            val code = "http-legacy-verify-${UUID.randomUUID().toString().take(8)}"
-            val createResponse = sendJson(
-                method = "POST",
-                path = "/api/agents",
-                body = agentPayload(
-                    developerId = DevIdentityInitializer.DEMO_DEVELOPER_ID,
-                    code = code,
-                    contractId = contractId,
-                    semver = "1.0.0",
-                ).replace("http://127.0.0.1:8090/agents/http-crud/invoke", x402Fixture.endpoint),
-            )
-            assertThat(createResponse.statusCode()).describedAs(createResponse.body()).isEqualTo(201)
-            val created = objectMapper.readTree(createResponse.body()).path("result")
-            val agentId = UUID.fromString(created.path("id").textValue())
-            val versionId = UUID.fromString(created.path("versions")[0].path("id").textValue())
-            fixtureCleaner.trackAgent(agentId)
-            fixtureCleaner.trackAgentVersion(versionId)
+    fun `draft publish activates the version without a paid provider request and exposes it in Marketplace`() {
+        val contractId = insertFunctionContract()
+        val code = "http-publish-${UUID.randomUUID().toString().take(8)}"
+        val created = sendJson(
+            method = "POST",
+            path = "/api/agents",
+            body = agentPayload(
+                developerId = DevIdentityInitializer.DEMO_DEVELOPER_ID,
+                code = code,
+                contractId = contractId,
+                semver = "1.0.0",
+            ),
+        )
+        assertThat(created.statusCode()).describedAs(created.body()).isEqualTo(201)
+        val result = objectMapper.readTree(created.body()).path("result")
+        val agentId = UUID.fromString(result.path("id").textValue())
+        val versionId = UUID.fromString(result.path("versions")[0].path("id").textValue())
+        fixtureCleaner.trackAgent(agentId)
+        fixtureCleaner.trackAgentVersion(versionId)
 
-            jdbcTemplate.update(
-                "update agent_versions set status = 'ACTIVE'::\"AgentVersionStatus\", verification_input = null where id = ?",
-                versionId,
-            )
+        assertThat(get(path = "/api/agents?sort=newest").body()).doesNotContain(code)
+        val paymentAttemptsBeforePublish = jdbcTemplate.queryForObject(
+            "select count(*) from payment_attempts",
+            Int::class.java,
+        )
 
-            val backfillResponse = sendJson(
-                method = "POST",
-                path = "/api/agent-versions/$versionId/verification-input/backfill",
-                body = "{\"verificationInput\":{\"query\":\"verify\"}}",
-            )
-            assertThat(backfillResponse.statusCode()).describedAs(backfillResponse.body()).isEqualTo(200)
-            assertThat(
-                jdbcTemplate.queryForObject(
-                    "select verification_input::text from agent_versions where id = ?",
-                    String::class.java,
-                    versionId,
-                ),
-            ).contains("verify")
-
-            val repeatedBackfill = sendJson(
-                method = "POST",
-                path = "/api/agent-versions/$versionId/verification-input/backfill",
-                body = "{\"verificationInput\":{\"query\":\"other\"}}",
-            )
-            assertCommonError(repeatedBackfill, expectedStatus = 409)
-
-            val verifyResponse = sendJson(method = "POST", path = "/api/agent-versions/$versionId/verify", body = "")
-            assertThat(verifyResponse.statusCode()).describedAs(verifyResponse.body()).isEqualTo(200)
-            assertThat(get(path = "/api/agent-versions/$versionId/readiness").body())
-                .contains("\"status\":\"VERIFIED\"")
-            assertThat(get(path = "/api/agents?sort=newest").body()).contains(code)
-
-            assertThat(x402Fixture.requests).hasSize(2)
-            assertThat(x402Fixture.requests.map { it.idempotencyKey }.distinct()).hasSize(1)
-            assertThat(x402Fixture.requests[0].paymentSignature).isNull()
-            assertThat(x402Fixture.requests[1].paymentSignature).isNotBlank()
-            assertThat(x402Fixture.requests.map { it.body }.distinct()).containsExactly("{\"input\":{\"query\":\"verify\"}}")
-            val verifiedRetry = sendJson(method = "POST", path = "/api/agent-versions/$versionId/verify", body = "")
-            assertCommonError(verifiedRetry, expectedStatus = 503)
-            assertThat(x402Fixture.requests).hasSize(2)
-        } finally {
-            x402Fixture.stop()
-        }
+        val published = sendJson(method = "POST", path = "/api/agent-versions/$versionId/publish", body = "")
+        assertThat(published.statusCode()).describedAs(published.body()).isEqualTo(200)
+        assertThat(objectMapper.readTree(published.body()).path("result").path("status").textValue()).isEqualTo("ACTIVE")
+        assertThat(get(path = "/api/agents?sort=newest").body()).contains(code)
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from payment_attempts",
+            Int::class.java,
+        )).isEqualTo(paymentAttemptsBeforePublish)
     }
 
     @Test
-    fun `draft publish performs paid certification before activating the version`() {
-        val x402Fixture = LocalX402CertificationFixture(objectMapper)
-        try {
-            val contractId = insertFunctionContract()
-            val code = "http-publish-${UUID.randomUUID().toString().take(8)}"
-            val createResponse = sendJson(
-                method = "POST",
-                path = "/api/agents",
-                body = agentPayload(
-                    developerId = DevIdentityInitializer.DEMO_DEVELOPER_ID,
-                    code = code,
-                    contractId = contractId,
-                    semver = "1.0.0",
-                ).replace("http://127.0.0.1:8090/agents/http-crud/invoke", x402Fixture.endpoint),
-            )
-            assertThat(createResponse.statusCode()).describedAs(createResponse.body()).isEqualTo(201)
-            val created = objectMapper.readTree(createResponse.body()).path("result")
-            val agentId = UUID.fromString(created.path("id").textValue())
-            val versionId = UUID.fromString(created.path("versions")[0].path("id").textValue())
-            fixtureCleaner.trackAgent(agentId)
-            fixtureCleaner.trackAgentVersion(versionId)
-
-            val published = sendJson(
-                method = "POST",
-                path = "/api/agent-versions/$versionId/publish",
-                body = "",
-            )
-            assertThat(published.statusCode()).describedAs(published.body()).isEqualTo(200)
-            assertThat(jdbcTemplate.queryForObject(
-                "select status from agent_versions where id = ?",
-                String::class.java,
-                versionId,
-            )).isEqualTo("ACTIVE")
-            assertThat(get(path = "/api/agent-versions/$versionId/readiness").body())
-                .contains("\"status\":\"VERIFIED\"")
-            assertThat(x402Fixture.requests).hasSize(2)
-        } finally {
-            x402Fixture.stop()
+    fun `removed readiness routes are not published and existing active versions remain candidates`() {
+        val active = insertMarketplaceAgent(
+            code = "http-existing-active-${UUID.randomUUID().toString().take(8)}",
+            name = "Existing active version",
+        )
+        assertThat(get(path = "/api/agents?sort=newest").body()).contains(active.code)
+        listOf(
+            "/api/agent-versions/${active.versionId}/readiness",
+            "/api/agent-versions/${active.versionId}/verify",
+            "/api/agent-versions/${active.versionId}/verification-input/backfill",
+        ).forEach { path ->
+            val response = if (path.endsWith("readiness")) get(path) else sendJson(method = "POST", path = path, body = "")
+            assertThat(response.statusCode()).isEqualTo(404)
         }
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'agent_version_readiness'",
+                Int::class.java,
+            ),
+        ).isZero()
     }
 
     @Test
-    fun `paid completion persistence failure transitions active version to unknown without retry`() {
-        val x402Fixture = LocalX402CertificationFixture(objectMapper)
-        val suffix = UUID.randomUUID().toString().replace("-", "")
-        val functionName = "block_verified_$suffix"
-        val triggerName = "block_verified_$suffix"
-        var triggerCreated = false
-        try {
-            val contractId = insertFunctionContract()
-            val code = "http-completion-$suffix"
-            val createResponse = sendJson(
-                method = "POST",
-                path = "/api/agents",
-                body = agentPayload(
-                    developerId = DevIdentityInitializer.DEMO_DEVELOPER_ID,
-                    code = code,
-                    contractId = contractId,
-                    semver = "1.0.0",
-                ).replace("http://127.0.0.1:8090/agents/http-crud/invoke", x402Fixture.endpoint),
-            )
-            assertThat(createResponse.statusCode()).describedAs(createResponse.body()).isEqualTo(201)
-            val created = objectMapper.readTree(createResponse.body()).path("result")
-            val agentId = UUID.fromString(created.path("id").textValue())
-            val versionId = UUID.fromString(created.path("versions")[0].path("id").textValue())
-            fixtureCleaner.trackAgent(agentId)
-            fixtureCleaner.trackAgentVersion(versionId)
-            jdbcTemplate.update(
-                "update agent_versions set status = 'ACTIVE'::\"AgentVersionStatus\" where id = ?",
-                versionId,
-            )
-            jdbcTemplate.execute(
-                """
-                create function $functionName() returns trigger language plpgsql as $$
-                begin
-                    if new.status = 'VERIFIED' then
-                        raise exception 'fixture blocks verified persistence';
-                    end if;
-                    return new;
-                end;
-                $$
-                """.trimIndent(),
-            )
-            jdbcTemplate.execute(
-                "create trigger $triggerName before update on agent_version_readiness for each row execute function $functionName()",
-            )
-            triggerCreated = true
+    fun `publish rejects a foreign owner and versions that are no longer drafts`() {
+        val other = insertMarketplaceAgent(
+            code = "http-foreign-${UUID.randomUUID().toString().take(8)}",
+            name = "Foreign active version",
+        )
+        val foreignPublish = sendJson(method = "POST", path = "/api/agent-versions/${other.versionId}/publish", body = "")
+        assertCommonError(foreignPublish, expectedStatus = 403)
 
-            val verifyResponse = sendJson(method = "POST", path = "/api/agent-versions/$versionId/verify", body = "")
-            assertCommonError(verifyResponse, expectedStatus = 503)
-            assertThat(get(path = "/api/agent-versions/$versionId/readiness").body())
-                .contains("\"status\":\"UNKNOWN\"")
-            assertThat(x402Fixture.requests).hasSize(2)
-            val retryResponse = sendJson(method = "POST", path = "/api/agent-versions/$versionId/verify", body = "")
-            assertCommonError(retryResponse, expectedStatus = 503)
-            assertThat(x402Fixture.requests).hasSize(2)
-        } finally {
-            if (triggerCreated) {
-                jdbcTemplate.execute("drop trigger if exists $triggerName on agent_version_readiness")
-                jdbcTemplate.execute("drop function if exists $functionName()")
-            }
-            x402Fixture.stop()
-        }
-    }
-
-    @Test
-    fun `verified readiness preflight failure is persisted as unavailable and restart recovery as unknown`() {
-        val failingFixture = LocalPreflightFailureFixture()
-        try {
-            val contractId = insertFunctionContract()
-            val agent = createHttpAgent(contractId = contractId, codePrefix = "http-preflight")
-            jdbcTemplate.update(
-                "update agent_versions set status = 'ACTIVE'::\"AgentVersionStatus\", endpoint = ?, verification_input = '{}'::jsonb where id = ?",
-                failingFixture.endpoint,
-                agent.versionId,
-            )
-            jdbcTemplate.update(
-                "update agent_version_readiness set status = 'VERIFIED'::\"AgentVersionReadinessStatus\" where version_id = ?",
-                agent.versionId,
-            )
-
-            readinessService.preflightVerifiedProviders()
-            val unavailable = get(path = "/api/agent-versions/${agent.versionId}/readiness")
-            assertThat(unavailable.statusCode()).isEqualTo(200)
-            assertThat(objectMapper.readTree(unavailable.body()).path("result").path("status").textValue())
-                .isEqualTo("UNAVAILABLE")
-
-            jdbcTemplate.update(
-                "update agent_version_readiness set status = 'VERIFYING'::\"AgentVersionReadinessStatus\" where version_id = ?",
-                agent.versionId,
-            )
-            readinessService.recoverInterruptedCertifications()
-            val recovered = get(path = "/api/agent-versions/${agent.versionId}/readiness")
-            assertThat(objectMapper.readTree(recovered.body()).path("result").path("status").textValue())
-                .isEqualTo("UNKNOWN")
-        } finally {
-            failingFixture.stop()
-        }
-    }
-
-    @Test
-    fun `known paid provider failure marks active version unknown without another payment`() {
-        val failingFixture = LocalX402CertificationFixture(objectMapper, paidStatus = 503)
-        try {
-            val contractId = insertFunctionContract()
-            val agent = createHttpAgent(contractId = contractId, codePrefix = "http-known-failure")
-            jdbcTemplate.update(
-                "update agent_versions set status = 'ACTIVE'::\"AgentVersionStatus\", endpoint = ? where id = ?",
-                failingFixture.endpoint,
-                agent.versionId,
-            )
-            val verify = sendJson(method = "POST", path = "/api/agent-versions/${agent.versionId}/verify", body = "")
-            assertCommonError(verify, expectedStatus = 503)
-            assertThat(objectMapper.readTree(get(path = "/api/agent-versions/${agent.versionId}/readiness").body()).path("result").path("status").textValue())
-                .isEqualTo("UNKNOWN")
-            assertThat(failingFixture.requests).hasSize(2)
-        } finally {
-            failingFixture.stop()
-        }
-    }
-
-    @Test
-    fun `concurrent active verification claims one certification and never double pays`() {
-        val x402Fixture = LocalX402CertificationFixture(objectMapper)
-        try {
-            val contractId = insertFunctionContract()
-            val agent = createHttpAgent(contractId = contractId, codePrefix = "http-concurrent")
-            jdbcTemplate.update(
-                "update agent_versions set status = 'ACTIVE'::\"AgentVersionStatus\", endpoint = ? where id = ?",
-                x402Fixture.endpoint,
-                agent.versionId,
-            )
-            val executor = java.util.concurrent.Executors.newFixedThreadPool(2)
-            val responses = try {
-                List(2) {
-                    executor.submit<HttpResponse<String>> {
-                        sendJson(method = "POST", path = "/api/agent-versions/${agent.versionId}/verify", body = "")
-                    }
-                }.map { future -> future.get() }
-            } finally {
-                executor.shutdownNow()
-            }
-            assertThat(responses.map(HttpResponse<String>::statusCode)).contains(200)
-            assertThat(responses.count { it.statusCode() != 200 }).isEqualTo(1)
-            assertThat(x402Fixture.requests).hasSize(2)
-        } finally {
-            x402Fixture.stop()
-        }
+        val contractId = insertFunctionContract()
+        val owned = createHttpAgent(contractId = contractId, codePrefix = "http-owned-publish")
+        val firstPublish = sendJson(method = "POST", path = "/api/agent-versions/${owned.versionId}/publish", body = "")
+        assertThat(firstPublish.statusCode()).isEqualTo(200)
+        val repeatedPublish = sendJson(method = "POST", path = "/api/agent-versions/${owned.versionId}/publish", body = "")
+        assertCommonError(repeatedPublish, expectedStatus = 409)
+        val disabled = sendJson(method = "POST", path = "/api/agent-versions/${owned.versionId}/disable", body = "")
+        assertThat(disabled.statusCode()).isEqualTo(200)
+        val disabledPublish = sendJson(method = "POST", path = "/api/agent-versions/${owned.versionId}/publish", body = "")
+        assertCommonError(disabledPublish, expectedStatus = 409)
     }
 
     private fun get(path: String): HttpResponse<String> {
@@ -1183,8 +1044,6 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
                 network: eip155:84532
                 asset: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
                 payTo: "0x0000000000000000000000000000000000000001"
-              verificationInput:
-                query: verify
             dependencies: []
         """.trimIndent()
     }
@@ -1212,20 +1071,20 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
 
     private fun agentPayload(developerId: UUID, code: String, contractId: UUID, semver: String): String {
         return """
-            {"developerId":"$developerId","code":"$code","name":"HTTP CRUD Agent","description":"Actual HTTP CRUD fixture","semver":"$semver","endpoint":"http://127.0.0.1:8090/agents/http-crud/invoke","priceAtomic":"1","network":"eip155:84532","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x0000000000000000000000000000000000000001","responseFormat":"JSON","functionContractId":"$contractId","verificationInput":{"query":"verify"},"usageType":"internal_component"}
+            {"developerId":"$developerId","code":"$code","name":"HTTP CRUD Agent","description":"Actual HTTP CRUD fixture","semver":"$semver","endpoint":"http://127.0.0.1:8090/agents/http-crud/invoke","priceAtomic":"1","network":"eip155:84532","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x0000000000000000000000000000000000000001","responseFormat":"JSON","functionContractId":"$contractId","usageType":"internal_component"}
         """.trimIndent()
     }
 
     private fun agentVersionPayload(contractId: UUID, semver: String): String {
         return """
-            {"semver":"$semver","endpoint":"http://127.0.0.1:8090/agents/http-crud/invoke","priceAtomic":"1","network":"eip155:84532","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x0000000000000000000000000000000000000001","responseFormat":"JSON","functionContractId":"$contractId","verificationInput":{"query":"verify"}}
+            {"semver":"$semver","endpoint":"http://127.0.0.1:8090/agents/http-crud/invoke","priceAtomic":"1","network":"eip155:84532","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x0000000000000000000000000000000000000001","responseFormat":"JSON","functionContractId":"$contractId"}
         """.trimIndent()
     }
 
     private fun insertMarketplaceAgent(
         code: String,
         name: String,
-        readinessStatus: AgentVersionReadinessStatus,
+        versionStatus: String = "ACTIVE",
     ): HttpAgentFixture {
         val userId = fixtureCleaner.createStandaloneUser()
         val developerId = UUID.randomUUID()
@@ -1249,16 +1108,12 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         )
         fixtureCleaner.trackAgent(agentId)
         jdbcTemplate.update(
-            "insert into agent_versions (id, agent_id, semver, status, endpoint, price_atomic, network, asset, pay_to, response_format, created_at, updated_at) values (?, ?, '1.0.0', 'ACTIVE'::\"AgentVersionStatus\", 'http://127.0.0.1:8090/agents/http/invoke', 1, 'eip155:84532', '0x036CbD53842c5426634e7929541eC2318f3dCF7e', '0x0000000000000000000000000000000000000001', 'JSON'::\"AgentResponseFormat\", current_timestamp, current_timestamp)",
+            "insert into agent_versions (id, agent_id, semver, status, endpoint, price_atomic, network, asset, pay_to, response_format, created_at, updated_at) values (?, ?, '1.0.0', ?::\"AgentVersionStatus\", 'http://127.0.0.1:8090/agents/http/invoke', 1, 'eip155:84532', '0x036CbD53842c5426634e7929541eC2318f3dCF7e', '0x0000000000000000000000000000000000000001', 'JSON'::\"AgentResponseFormat\", current_timestamp, current_timestamp)",
             versionId,
             agentId,
+            versionStatus,
         )
         fixtureCleaner.trackAgentVersion(versionId)
-        jdbcTemplate.update(
-            "insert into agent_version_readiness (version_id, status, created_at, updated_at) values (?, ?::\"AgentVersionReadinessStatus\", current_timestamp, current_timestamp)",
-            versionId,
-            readinessStatus.name,
-        )
         return HttpAgentFixture(agentId = agentId, versionId = versionId, code = code)
     }
 
@@ -1268,27 +1123,11 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val code: String,
     )
 
-    private class LocalPreflightFailureFixture {
-        private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        val endpoint = "http://127.0.0.1:${server.address.port}/preflight"
-
-        init {
-            server.createContext("/preflight") { exchange ->
-                exchange.sendResponseHeaders(503, -1)
-                exchange.close()
-            }
-            server.start()
-        }
-
-        fun stop() {
-            server.stop(0)
-        }
-    }
-
     private class LocalX402CertificationFixture(
         private val objectMapper: ObjectMapper,
         private val paidStatus: Int = 200,
         private val includeReceipt: Boolean = true,
+        private val paidBody: String = "{}",
     ) {
         private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         private val transactionHash = "0x${UUID.randomUUID().toString().replace("-", "")}${"1".repeat(32)}"
@@ -1313,8 +1152,9 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
                     if (includeReceipt) {
                         exchange.responseHeaders.add("PAYMENT-RESPONSE", encodedReceipt())
                     }
-                    exchange.sendResponseHeaders(paidStatus, 2)
-                    exchange.responseBody.use { it.write("{}".encodeToByteArray()) }
+                    val responseBody = paidBody.encodeToByteArray()
+                    exchange.sendResponseHeaders(paidStatus, responseBody.size.toLong())
+                    exchange.responseBody.use { it.write(responseBody) }
                 }
             }
             server.start()

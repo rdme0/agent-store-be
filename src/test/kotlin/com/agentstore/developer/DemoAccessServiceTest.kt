@@ -12,18 +12,20 @@ import org.junit.jupiter.api.Test
 
 class DemoAccessServiceTest {
     @Test
-    fun `issues shared demo access without a request challenge`() {
+    fun `issues shared demo access for the demo entry point`() {
         val now = Instant.parse("2026-09-05T00:00:00Z")
         val tokenHelper = DemoAccessTokenHelper(
             properties = properties(),
             clock = Clock.fixed(now, ZoneOffset.UTC),
         )
-        val service = DemoAccessService(tokenHelper = tokenHelper)
+        val service = DemoAccessService(
+            tokenHelper = tokenHelper,
+        )
 
         val response = service.issue()
 
         assertThat(response.accessToken).isNotBlank()
-        assertThat(response.expiresAt).isEqualTo(now.plus(Duration.ofDays(365)))
+        assertThat(response.expiresAt).isEqualTo(now.plus(Duration.ofHours(6)))
         assertThat(tokenHelper.authenticate("Bearer ${response.accessToken}")).isNotNull()
     }
 

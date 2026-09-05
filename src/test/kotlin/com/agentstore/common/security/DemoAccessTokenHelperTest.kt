@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 
 class DemoAccessTokenHelperTest {
     @Test
-    fun `issues a one year domain separated bearer access token`() {
+    fun `issues a six hour domain separated bearer access token`() {
         val now = Instant.parse("2026-09-04T12:00:00Z")
         val helper = DemoAccessTokenHelper(
             properties = properties(),
@@ -22,16 +22,16 @@ class DemoAccessTokenHelperTest {
 
         val issued = helper.issue(developerId)
 
-        assertThat(issued.expiresAt).isEqualTo(now.plus(Duration.ofDays(365)))
+        assertThat(issued.expiresAt).isEqualTo(now.plus(Duration.ofHours(6)))
         assertThat(helper.authenticate("Bearer ${issued.accessToken}")?.developerId).isEqualTo(developerId)
         val almostExpiredHelper = DemoAccessTokenHelper(
             properties = properties(),
-            clock = Clock.fixed(now.plus(Duration.ofDays(365)).minusSeconds(1), ZoneOffset.UTC),
+            clock = Clock.fixed(now.plus(Duration.ofHours(6)).minusSeconds(1), ZoneOffset.UTC),
         )
         assertThat(almostExpiredHelper.authenticate("Bearer ${issued.accessToken}")?.developerId).isEqualTo(developerId)
         val expiredHelper = DemoAccessTokenHelper(
             properties = properties(),
-            clock = Clock.fixed(now.plus(Duration.ofDays(365)), ZoneOffset.UTC),
+            clock = Clock.fixed(now.plus(Duration.ofHours(6)), ZoneOffset.UTC),
         )
         assertThat(expiredHelper.authenticate("Bearer ${issued.accessToken}")).isNull()
         assertThat(helper.authenticate("Bearer ${issued.accessToken}x")).isNull()
