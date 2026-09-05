@@ -40,7 +40,11 @@ class X402AgentClient(
             restClient.post()
                 .uri(connection.endpoint.uri)
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("X-AgentStore-Invocation-Token", request.invocationToken)
+                .headers { headers ->
+                    request.invocationToken.takeIf(String::isNotBlank)?.let { token ->
+                        headers.set(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    }
+                }
                 .header("Idempotency-Key", request.idempotencyKey)
                 .headers { headers -> paymentSignature?.let { headers.set(PAYMENT_SIGNATURE, it) } }
                 .body(body)

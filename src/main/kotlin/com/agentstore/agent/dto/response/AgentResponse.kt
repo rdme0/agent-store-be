@@ -2,6 +2,7 @@ package com.agentstore.agent.dto.response
 
 import com.agentstore.agent.model.entity.Agent
 import com.agentstore.agent.model.entity.AgentVersion
+import com.agentstore.agent.model.entity.AgentVersionReadiness
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
 import com.agentstore.agent.model.vo.AgentVersionStatus
@@ -25,11 +26,15 @@ data class AgentVersionResponse(
     val payTo: String,
     @field:Schema(allowableValues = ["TEXT", "MARKDOWN", "STRUCTURED", "JSON"])
     val responseFormat: AgentResponseFormat,
+    @field:Schema(nullable = true) val readiness: AgentVersionReadinessResponse? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
     companion object {
-        fun from(version: AgentVersion): AgentVersionResponse {
+        fun from(
+            version: AgentVersion,
+            readiness: AgentVersionReadiness? = null,
+        ): AgentVersionResponse {
             return AgentVersionResponse(
                 id = version.id,
                 agentId = version.agentId,
@@ -42,6 +47,7 @@ data class AgentVersionResponse(
                 asset = version.asset,
                 payTo = version.payTo,
                 responseFormat = version.responseFormat,
+                readiness = readiness?.let(AgentVersionReadinessResponse::from),
                 createdAt = version.createdAt,
                 updatedAt = version.updatedAt,
             )
@@ -68,7 +74,8 @@ data class AgentResponse(
             agent: Agent,
             developerName: String,
             dependencyCount: Int,
-            versions: List<AgentVersion>
+            versions: List<AgentVersion>,
+            readinessByVersionId: Map<UUID, AgentVersionReadiness> = emptyMap(),
         ): AgentResponse {
             return AgentResponse(
                 id = agent.id,
@@ -79,7 +86,12 @@ data class AgentResponse(
                 description = agent.description,
                 usageType = agent.usageType,
                 dependencyCount = dependencyCount,
-                versions = versions.sortedBy { version -> version.createdAt }.map(AgentVersionResponse::from),
+                versions = versions.sortedBy { version -> version.createdAt }.map { version ->
+                    AgentVersionResponse.from(
+                        version = version,
+                        readiness = readinessByVersionId[version.id],
+                    )
+                },
                 createdAt = agent.createdAt,
                 updatedAt = agent.updatedAt,
             )

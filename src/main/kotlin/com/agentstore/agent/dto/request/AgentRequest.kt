@@ -2,13 +2,14 @@ package com.agentstore.agent.dto.request
 
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentUsageType
+import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.util.UUID
 
 data class CreateAgentRequest(
-    val developerId: UUID,
+    val developerId: UUID? = null,
     @field:NotBlank @field:Size(max = 80) @field:Pattern(regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$") val code: String,
     @field:NotBlank @field:Size(max = 120) val name: String,
     @field:NotBlank @field:Size(max = 2000) val description: String,
@@ -20,6 +21,7 @@ data class CreateAgentRequest(
     @field:NotBlank @field:Size(max = 128) val payTo: String,
     val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
     val functionContractId: UUID? = null,
+    val verificationInput: JsonNode? = null,
     val usageType: AgentUsageType = AgentUsageType.INTERNAL_COMPONENT,
 )
 
@@ -42,4 +44,5 @@ data class CreateAgentVersionRequest(
     @field:NotBlank @field:Size(max = 128) val payTo: String,
     val responseFormat: AgentResponseFormat = AgentResponseFormat.JSON,
     val functionContractId: UUID? = null,
+    val verificationInput: JsonNode? = null,
 )

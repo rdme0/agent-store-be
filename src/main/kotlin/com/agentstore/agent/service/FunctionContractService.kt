@@ -7,6 +7,7 @@ import com.agentstore.agent.dto.response.FunctionProviderMetricResponse
 import com.agentstore.agent.model.entity.FunctionContract
 import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.model.vo.AgentVersionStatus
+import com.agentstore.agent.model.vo.AgentVersionReadinessStatus
 import com.agentstore.agent.repository.FunctionContractRepository
 import com.agentstore.agent.repository.AgentRepository
 import com.agentstore.agent.repository.AgentVersionRepository
@@ -29,7 +30,7 @@ class FunctionContractService(
     private val agentRepository: AgentRepository,
     private val objectMapper: ObjectMapper,
     private val providerMetricService: ProviderMetricService,
-) {
+) : FunctionContractReader {
     companion object {
         private const val MAX_SCHEMA_BYTES = 65_536
         private const val MAX_SCHEMA_DEPTH = 32
@@ -92,9 +93,10 @@ class FunctionContractService(
 
     fun providers(id: UUID): List<FunctionProviderDto> {
         requireFunctionContract(id = id)
-        return versionRepository.findAllByFunctionContractIdAndStatus(
+        return versionRepository.findAllReadyByFunctionContractId(
             functionContractId = id,
-            status = AgentVersionStatus.ACTIVE,
+            versionStatus = AgentVersionStatus.ACTIVE,
+            readinessStatus = AgentVersionReadinessStatus.VERIFIED,
         ).map { version ->
             val agent = agentRepository.findById(version.agentId).orElseThrow {
                 DomainClientException(ErrorCode.AGENT_NOT_FOUND)
@@ -138,13 +140,13 @@ class FunctionContractService(
         }
     }
 
-    fun requireFunctionContract(id: UUID): FunctionContract {
+    override fun requireFunctionContract(id: UUID): FunctionContract {
         return functionContractRepository.findById(id).orElseThrow {
             DomainClientException(ErrorCode.FUNCTION_CONTRACT_NOT_FOUND)
         }
     }
 
-    fun validateInstance(schema: JsonNode, value: JsonNode, errorCode: ErrorCode) {
+    override fun validateInstance(schema: JsonNode, value: JsonNode, errorCode: ErrorCode) {
         val errors = try {
             schemaRegistry.getSchema(schema).validate(value)
         } catch (exception: RuntimeException) {

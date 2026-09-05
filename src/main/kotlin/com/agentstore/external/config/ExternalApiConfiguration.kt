@@ -5,6 +5,7 @@ import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.service.ExecutionService
 import com.agentstore.external.client.FacilitatorIncomingPaymentClient
+import com.agentstore.external.client.FacilitatorIncomingPaymentGateway
 import com.agentstore.external.repository.ExternalApiSaleRepository
 import com.agentstore.external.repository.ExternalInvocationIntentRepository
 import com.agentstore.external.service.ExternalIntentRateLimiter
@@ -27,7 +28,7 @@ class ExternalApiConfiguration {
     @Bean
     fun externalX402PaymentService(
         properties: ExternalApiProperties,
-        facilitatorClient: FacilitatorIncomingPaymentClient,
+        facilitatorClient: FacilitatorIncomingPaymentGateway,
         objectMapper: ObjectMapper,
     ): ExternalX402PaymentService {
         validate(properties = properties)

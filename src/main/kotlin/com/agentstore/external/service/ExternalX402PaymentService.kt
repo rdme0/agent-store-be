@@ -1,6 +1,6 @@
 package com.agentstore.external.service
 
-import com.agentstore.external.client.FacilitatorIncomingPaymentClient
+import com.agentstore.external.client.FacilitatorIncomingPaymentGateway
 import com.agentstore.external.config.ExternalApiProperties
 import com.agentstore.external.dto.internal.ExternalPaymentRequirementDto
 import com.agentstore.external.dto.internal.IncomingPaymentSettlementDto
@@ -19,7 +19,7 @@ import java.util.HexFormat
 
 class ExternalX402PaymentService(
     private val properties: ExternalApiProperties,
-    private val facilitatorClient: FacilitatorIncomingPaymentClient,
+    private val facilitatorClient: FacilitatorIncomingPaymentGateway,
     private val objectMapper: ObjectMapper,
 ) {
     companion object {

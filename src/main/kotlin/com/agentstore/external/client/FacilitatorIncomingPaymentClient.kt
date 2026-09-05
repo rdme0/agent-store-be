@@ -13,12 +13,24 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
+interface FacilitatorIncomingPaymentGateway {
+    fun verify(
+        paymentPayload: ObjectNode,
+        paymentRequirement: ObjectNode,
+    ): IncomingPaymentVerificationDto
+
+    fun settle(
+        paymentPayload: ObjectNode,
+        paymentRequirement: ObjectNode,
+    ): IncomingPaymentSettlementDto
+}
+
 class FacilitatorIncomingPaymentClient(
     private val facilitatorBaseUri: URI,
     private val requestTimeout: Duration,
     private val httpClient: HttpClient,
     private val objectMapper: ObjectMapper,
-) {
+) : FacilitatorIncomingPaymentGateway {
     companion object {
         private const val MAX_RESPONSE_BYTES = 1_048_576
         private const val BASE_SEPOLIA = "eip155:84532"
@@ -26,7 +38,7 @@ class FacilitatorIncomingPaymentClient(
         private val EVM_ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
     }
 
-    fun verify(
+    override fun verify(
         paymentPayload: ObjectNode,
         paymentRequirement: ObjectNode,
     ): IncomingPaymentVerificationDto {
@@ -45,7 +57,7 @@ class FacilitatorIncomingPaymentClient(
         return IncomingPaymentVerificationDto(payer = payer)
     }
 
-    fun settle(
+    override fun settle(
         paymentPayload: ObjectNode,
         paymentRequirement: ObjectNode,
     ): IncomingPaymentSettlementDto {

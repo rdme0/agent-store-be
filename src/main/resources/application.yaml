@@ -65,6 +65,9 @@ agent-store:
   bithumb-request-timeout: PT2S
   bithumb-cache-ttl: PT60S
   bithumb-stale-ttl: PT15M
+  provider-readiness:
+    preflight-interval: PT15M
+    max-certification-price-atomic: 1000000
   external-api:
     public-base-url: https://api.example.com
     pay-to: "0x0000000000000000000000000000000000000001"

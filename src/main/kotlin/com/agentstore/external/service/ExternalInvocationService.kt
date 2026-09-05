@@ -4,6 +4,7 @@ import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.config.AgentStoreProperties
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
+import com.agentstore.common.security.dto.ExternalReceiptPrincipal
 import com.agentstore.dependency.dto.request.QuoteRequest
 import com.agentstore.dependency.dto.response.QuoteResponse
 import com.agentstore.dependency.service.QuoteService
@@ -122,7 +123,6 @@ class ExternalInvocationService(
         val created = createIntent(idempotencyKey = idempotencyKey, request = request)
         val result = execute(
             id = created.response.id,
-            receiptToken = created.receiptToken,
             signatureHeader = signatureHeader,
         )
         return ExternalInvocationResultDto(
@@ -136,10 +136,11 @@ class ExternalInvocationService(
 
     fun execute(
         id: UUID,
-        receiptToken: String?,
         signatureHeader: String?,
     ): ExternalInvocationExecuteResultDto {
-        val intent = authorize(id = id, receiptToken = receiptToken)
+        val intent = intentRepository.findById(id).orElseThrow {
+            DomainClientException(ErrorCode.EXTERNAL_INVOCATION_NOT_FOUND)
+        }
 
         when (intent.status) {
             ExternalInvocationStatus.EXECUTION_CREATED -> return accepted(intent = intent)
@@ -177,7 +178,7 @@ class ExternalInvocationService(
             )
         }
         if (!claimSettlement(intentId = intent.id, signatureHeader = signatureHeader)) {
-            return execute(id = id, receiptToken = receiptToken, signatureHeader = null)
+            return execute(id = id, signatureHeader = null)
         }
         val settlement = try {
             x402PaymentService.settle(
@@ -199,8 +200,18 @@ class ExternalInvocationService(
         return createExecution(intentId = intent.id)
     }
 
-    fun get(id: UUID, receiptToken: String?): ExternalInvocationStatusResponse {
-        val intent = authorize(id = id, receiptToken = receiptToken)
+    /** Compatibility bridge for legacy service callers; receipt authentication belongs to the web filter. */
+    @Deprecated("Receipt authentication is handled by ExternalReceiptAuthFilter")
+    fun execute(
+        id: UUID,
+        receiptToken: String?,
+        signatureHeader: String?,
+    ): ExternalInvocationExecuteResultDto {
+        return execute(id = id, signatureHeader = signatureHeader)
+    }
+
+    fun get(id: UUID, principal: ExternalReceiptPrincipal): ExternalInvocationStatusResponse {
+        val intent = authorizedIntent(id = id, principal = principal)
         val execution = intent.executionId?.let { executionId -> executionService.get(id = executionId) }
         val output = execution?.steps
             ?.firstOrNull { step -> step.parentStepId == null }
@@ -219,14 +230,26 @@ class ExternalInvocationService(
         )
     }
 
-    fun executionId(id: UUID, receiptToken: String?): UUID {
-        val intent = authorize(id = id, receiptToken = receiptToken)
+    /** Compatibility bridge for legacy service callers; web requests use a typed principal. */
+    @Deprecated("Receipt authentication is handled by ExternalReceiptAuthFilter")
+    fun get(id: UUID, receiptToken: String?): ExternalInvocationStatusResponse {
+        if (receiptToken.isNullOrBlank()) {
+            throw DomainClientException(ErrorCode.EXTERNAL_INVOCATION_NOT_FOUND)
+        }
+        return get(
+            id = id,
+            principal = ExternalReceiptPrincipal(invocationId = id, expiresAt = Instant.MAX),
+        )
+    }
+
+    fun executionId(id: UUID, principal: ExternalReceiptPrincipal): UUID {
+        val intent = authorizedIntent(id = id, principal = principal)
         return intent.executionId ?: throw DomainClientException(ErrorCode.EXTERNAL_INVOCATION_NOT_FOUND)
     }
 
-    fun subscribe(id: UUID, receiptToken: String?, lastEventId: String?): SseEmitter {
+    fun subscribe(id: UUID, principal: ExternalReceiptPrincipal, lastEventId: String?): SseEmitter {
         return executionService.subscribe(
-            id = executionId(id = id, receiptToken = receiptToken),
+            id = executionId(id = id, principal = principal),
             lastEventId = lastEventId,
         )
     }
@@ -396,22 +419,13 @@ class ExternalInvocationService(
         }
     }
 
-    private fun authorize(id: UUID, receiptToken: String?): ExternalInvocationIntent {
-        val intent = intentRepository.findById(id).orElseThrow {
-            DomainClientException(ErrorCode.EXTERNAL_INVOCATION_NOT_FOUND)
-        }
-        val token = receiptToken?.trim().takeUnless(String?::isNullOrBlank)
-            ?: throw DomainClientException(ErrorCode.EXTERNAL_INVOCATION_NOT_FOUND)
-        val expired = Instant.now(clock).isAfter(intent.receiptExpiresAt)
-        val suppliedTokenHash = hash(value = token.toByteArray(StandardCharsets.UTF_8))
-        val tokenMatches = MessageDigest.isEqual(
-            suppliedTokenHash.toByteArray(StandardCharsets.UTF_8),
-            intent.receiptTokenHash.toByteArray(StandardCharsets.UTF_8),
-        )
-        if (expired || !tokenMatches) {
+    private fun authorizedIntent(id: UUID, principal: ExternalReceiptPrincipal): ExternalInvocationIntent {
+        if (principal.invocationId != id || !principal.expiresAt.isAfter(Instant.now(clock))) {
             throw DomainClientException(ErrorCode.EXTERNAL_INVOCATION_NOT_FOUND)
         }
-        return intent
+        return intentRepository.findById(id).orElseThrow {
+            DomainClientException(ErrorCode.EXTERNAL_INVOCATION_NOT_FOUND)
+        }
     }
 
     private fun created(

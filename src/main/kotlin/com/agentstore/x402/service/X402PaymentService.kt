@@ -10,12 +10,17 @@ import com.agentstore.payment.model.entity.PaymentAttempt
 import com.agentstore.x402.client.X402AgentClient
 import com.agentstore.x402.codec.X402HeaderCodec
 import com.agentstore.x402.dto.internal.X402PaymentRequiredDto
+import com.agentstore.x402.dto.internal.X402AgentResponseDto
+import com.agentstore.x402.dto.internal.X402ProviderCertificationResultDto
+import com.agentstore.x402.dto.internal.X402ProviderVerificationRequestDto
+import com.agentstore.x402.exception.ProviderCertificationRejectedException
 import com.agentstore.x402.registry.X402PaymentCorrelationRegistry
 import com.agentstore.x402.signer.X402Eip3009Signer
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.NullNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.databind.node.TextNode
+import org.slf4j.LoggerFactory
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.math.BigInteger
 import java.nio.charset.StandardCharsets
@@ -23,6 +28,7 @@ import java.security.MessageDigest
 import java.time.Duration
 import java.util.HexFormat
 import java.util.Locale
+import java.util.UUID
 
 class X402PaymentService(
     private val agentClient: X402AgentClient,
@@ -38,6 +44,7 @@ class X402PaymentService(
         private const val PAYMENT_RESPONSE = "PAYMENT-RESPONSE"
         private const val RECONCILIATION_REQUIRED = "PAYMENT_RECONCILIATION_REQUIRED"
         private const val MAX_AUTHORIZATION_SECONDS = 86_400L
+        private val logger = LoggerFactory.getLogger(X402PaymentService::class.java)
         private val POSITIVE_ATOMIC = Regex("^[1-9][0-9]*$")
         private val EVM_ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
         private val EVM_TRANSACTION_HASH = Regex("^0x[0-9a-fA-F]{64}$")
@@ -61,6 +68,73 @@ class X402PaymentService(
     override fun reconcile(attempt: PaymentAttempt): PaymentReconciliationResultDto {
         val key = attempt.id.toString()
         return correlations.reconcile(paymentAttemptId = key, idempotencyKey = key)
+    }
+
+    fun certify(request: X402ProviderVerificationRequestDto): X402ProviderCertificationResultDto {
+        val invocation = verificationInvocation(request = request)
+        val body = objectMapper.writeValueAsBytes(invocation.body)
+        preflight(request = invocation, body = body)
+        val deadline = System.nanoTime() + invocationDeadline.toNanos()
+        val connection = agentClient.prepare(endpoint = invocation.endpoint)
+        val unpaid = agentClient.post(
+            connection = connection,
+            request = invocation,
+            body = body,
+            paymentSignature = null,
+            deadline = deadline,
+        )
+        require(unpaid.status == 402) { "x402_payment_required_response_missing" }
+        val requiredHeader = unpaid.headers.getFirst(PAYMENT_REQUIRED)
+            ?: throw IllegalStateException("x402_payment_required_header_missing")
+        val required = selectRequirement(
+            root = headerCodec.decodeObject(value = requiredHeader),
+            request = invocation,
+        )
+        val signatureHeader = headerCodec.encode(signer.createPaymentPayload(required))
+        val paid = try {
+            agentClient.post(
+                connection = connection,
+                request = invocation,
+                body = body,
+                paymentSignature = signatureHeader,
+                deadline = deadline,
+            )
+        } catch (_: Exception) {
+            throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
+        }
+        val transactionHash = settledTransactionHash(paid = paid)
+        if (paid.status != 200) {
+            throw ProviderCertificationRejectedException(
+                failureCode = "provider_certification_http_status_invalid",
+                paymentSettled = true,
+            )
+        }
+        return X402ProviderCertificationResultDto(
+            output = parseAgentOutput(body = paid.body),
+            transactionHash = transactionHash,
+        )
+    }
+
+    fun preflightProvider(request: X402ProviderVerificationRequestDto) {
+        val invocation = verificationInvocation(request = request)
+        val body = objectMapper.writeValueAsBytes(invocation.body)
+        preflight(request = invocation, body = body)
+        val deadline = System.nanoTime() + invocationDeadline.toNanos()
+        val connection = agentClient.prepare(endpoint = invocation.endpoint)
+        val unpaid = agentClient.post(
+            connection = connection,
+            request = invocation,
+            body = body,
+            paymentSignature = null,
+            deadline = deadline,
+        )
+        require(unpaid.status == 402) { "x402_payment_required_response_missing" }
+        val requiredHeader = unpaid.headers.getFirst(PAYMENT_REQUIRED)
+            ?: throw IllegalStateException("x402_payment_required_header_missing")
+        selectRequirement(
+            root = headerCodec.decodeObject(value = requiredHeader),
+            request = invocation,
+        )
     }
 
     private fun invokeOnce(
@@ -96,23 +170,55 @@ class X402PaymentService(
         } catch (_: Exception) {
             throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
         }
-        val receipt = try {
-            val value = paid.headers.getFirst(PAYMENT_RESPONSE) ?: throw IllegalArgumentException()
-            headerCodec.decodeReceipt(value)
-        } catch (_: Exception) {
-            throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
-        }
-        val transactionHash = receipt.transaction
-        if (!receipt.success || receipt.network != BASE_SEPOLIA || transactionHash == null ||
-            !EVM_TRANSACTION_HASH.matches(transactionHash)
-        ) {
-            throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
-        }
+        val transactionHash = settledTransactionHash(paid = paid)
         return PaymentInvocationResultDto(
             output = parseAgentOutput(paid.body),
             transactionHash = transactionHash,
             paymentIdentifier = transactionHash,
             agentStatus = paid.status,
+        )
+    }
+
+    private fun settledTransactionHash(paid: X402AgentResponseDto): String {
+        val receiptHeader = paid.headers.getFirst(PAYMENT_RESPONSE)
+        if (receiptHeader == null) {
+            logger.warn("x402 paid response missing settlement receipt: status={}", paid.status)
+            throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
+        }
+        val receipt = try {
+            headerCodec.decodeReceipt(receiptHeader)
+        } catch (_: Exception) {
+            logger.warn("x402 paid response contained an unreadable settlement receipt: status={}", paid.status)
+            throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
+        }
+        val transactionHash = receipt.transaction
+        val transactionHashValid = transactionHash != null && EVM_TRANSACTION_HASH.matches(transactionHash)
+        if (!receipt.success || receipt.network != BASE_SEPOLIA || !transactionHashValid) {
+            logger.warn(
+                "x402 paid response settlement receipt is unacceptable: status={}, success={}, networkMatches={}, transactionHashPresent={}, transactionHashValid={}",
+                paid.status,
+                receipt.success,
+                receipt.network == BASE_SEPOLIA,
+                transactionHash != null,
+                transactionHashValid,
+            )
+            throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
+        }
+        return transactionHash
+    }
+
+    private fun verificationInvocation(request: X402ProviderVerificationRequestDto): PaymentInvocationRequestDto {
+        return PaymentInvocationRequestDto(
+            paymentAttemptId = UUID.randomUUID().toString(),
+            idempotencyKey = UUID.randomUUID().toString(),
+            invocationToken = "",
+            endpoint = request.endpoint,
+            amountAtomic = request.amountAtomic,
+            maxPriceAtomic = request.amountAtomic,
+            network = request.network,
+            asset = request.asset,
+            payTo = request.payTo,
+            body = objectMapper.createObjectNode().set<JsonNode>("input", request.input),
         )
     }
 

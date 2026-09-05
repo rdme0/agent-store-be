@@ -4,6 +4,7 @@ import com.agentstore.agent.model.vo.AgentResponseFormat
 import com.agentstore.agent.service.FunctionContractService
 import com.agentstore.common.exception.client.DomainClientException
 import com.agentstore.common.exception.constants.ErrorCode
+import com.agentstore.common.security.dto.InvocationPrincipal
 import com.agentstore.dependency.service.QuoteService
 import com.agentstore.execution.dto.request.RuntimeDependencyInvocationRequest
 import com.agentstore.execution.dto.response.RuntimeDependencyInvocationResponse
@@ -18,7 +19,6 @@ import com.agentstore.execution.orchestrator.ExecutionPaymentOrchestrator
 import com.agentstore.execution.codec.RuntimeOutputEnvelope
 import com.agentstore.execution.repository.ExecutionRepository
 import com.agentstore.execution.repository.ExecutionStepRepository
-import com.agentstore.execution.token.InvocationTokenService
 import com.agentstore.execution.validation.AgentOutputFormatException
 import com.agentstore.execution.validation.AgentOutputFormatValidator
 import com.agentstore.payment.exception.PaymentExecutionException
@@ -31,7 +31,6 @@ import org.springframework.stereotype.Service
 
 @Service
 class RuntimeCallbackService(
-    private val tokenService: InvocationTokenService,
     private val executionRepository: ExecutionRepository,
     private val stepRepository: ExecutionStepRepository,
     private val quoteService: QuoteService,
@@ -48,15 +47,11 @@ class RuntimeCallbackService(
     fun invoke(
         executionId: UUID,
         request: RuntimeDependencyInvocationRequest,
-        authorization: String?,
+        principal: InvocationPrincipal,
         idempotencyKey: String?
     ): RuntimeDependencyInvocationResponse {
         mutationReadiness.requireReady()
-        val token = authorization?.removePrefix("Bearer ")
-            ?.takeIf { it != authorization && it.isNotBlank() }
-            ?: throw DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
-        val claims = tokenService.verify(token)
-        if (claims.executionId != executionId) {
+        if (principal.executionId != executionId) {
             throw DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
         }
         val key = idempotencyKey?.takeIf { it.isNotBlank() } ?: throw DomainClientException(
@@ -64,11 +59,11 @@ class RuntimeCallbackService(
         )
         val execution = executionRepository.findById(executionId)
             .orElseThrow { ExecutionNotFoundException() }
-        val parent = stepRepository.findById(claims.stepId)
+        val parent = stepRepository.findById(principal.stepId)
             .orElseThrow { DomainClientException(ErrorCode.RUNTIME_STEP_NOT_FOUND) }
         val tokenDoesNotMatchParent = parent.executionId != executionId ||
-            claims.agentVersionId != parent.agentVersionId ||
-            claims.callPath != parent.callPath.map { node -> node.asText() }
+            principal.agentVersionId != parent.agentVersionId ||
+            principal.callPath != parent.callPath.map { node -> node.asText() }
         if (tokenDoesNotMatchParent) {
             throw DomainClientException(ErrorCode.INVALID_INVOCATION_TOKEN)
         }

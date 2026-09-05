@@ -19,6 +19,7 @@ import com.agentstore.dependency.model.vo.ProviderScope
 import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
 import com.agentstore.dependency.service.DependencyService
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.Validator
 import jakarta.transaction.Transactional
 import java.nio.charset.StandardCharsets
@@ -51,8 +52,11 @@ class AgentManifestService(
     }
 
     @Transactional
-    fun import(request: AgentManifestRequest): AgentManifestImportResponse {
+    fun import(request: AgentManifestRequest, developerId: UUID): AgentManifestImportResponse {
         val manifest = parse(content = request.content)
+        if (manifest.developerId != developerId) {
+            throw DomainClientException(ErrorCode.DEMO_ACCESS_DENIED)
+        }
         if (agentService.findByCode(manifest.agentCode) != null) {
             throw DomainClientException(ErrorCode.AGENT_ALREADY_EXISTS)
         }
@@ -62,7 +66,7 @@ class AgentManifestService(
         )
         val created = agentService.create(
             request = CreateAgentRequest(
-                developerId = manifest.developerId,
+                developerId = developerId,
                 code = manifest.agentCode,
                 name = manifest.agentName,
                 description = manifest.agentDescription,
@@ -74,6 +78,7 @@ class AgentManifestService(
                 payTo = manifest.payTo,
                 responseFormat = contract.responseFormat,
                 functionContractId = contract.id,
+                verificationInput = manifest.verificationInput,
                 usageType = manifest.usageType,
             ),
         )
@@ -96,13 +101,22 @@ class AgentManifestService(
     }
 
     @Transactional
-    fun replace(versionId: UUID, request: AgentManifestRequest): AgentManifestResponse {
+    fun import(request: AgentManifestRequest): AgentManifestImportResponse {
+        val manifest = parse(content = request.content)
+        return import(request = request, developerId = manifest.developerId)
+    }
+
+    @Transactional
+    fun replace(versionId: UUID, request: AgentManifestRequest, developerId: UUID): AgentManifestResponse {
         val manifest = parse(content = request.content)
         val version = agentService.requireVersion(versionId)
         if (version.status != AgentVersionStatus.DRAFT) {
             throw DomainClientException(ErrorCode.ACTIVE_VERSION_IMMUTABLE)
         }
         val agent = agentService.requireAgent(version.agentId)
+        if (agent.developerId != developerId) {
+            throw DomainClientException(ErrorCode.DEMO_ACCESS_DENIED)
+        }
         val contract = functionContractService.requireByCode(
             code = manifest.functionCode,
             contractVersion = manifest.functionVersion,
@@ -133,6 +147,12 @@ class AgentManifestService(
             content = manifest.canonicalContent,
             sha256 = manifest.sha256,
         )
+    }
+
+    @Transactional
+    fun replace(versionId: UUID, request: AgentManifestRequest): AgentManifestResponse {
+        val manifest = parse(content = request.content)
+        return replace(versionId = versionId, request = request, developerId = manifest.developerId)
     }
 
     private fun createDependencies(
@@ -228,6 +248,7 @@ class AgentManifestService(
             network = agent.payment.network,
             asset = agent.payment.asset,
             payTo = agent.payment.payTo,
+            verificationInput = agent.verificationInput,
             dependencies = manifest.dependencies.map { dependency ->
                 ParsedDependencyDto(
                     functionCode = dependency.function.code,
@@ -285,6 +306,7 @@ private data class ParsedManifestDto(
     val network: String,
     val asset: String,
     val payTo: String,
+    val verificationInput: JsonNode?,
     val dependencies: List<ParsedDependencyDto>,
 )
 

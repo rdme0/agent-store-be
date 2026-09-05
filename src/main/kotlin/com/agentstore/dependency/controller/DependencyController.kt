@@ -1,7 +1,9 @@
 package com.agentstore.dependency.controller
 
 import com.agentstore.common.dto.response.CommonResponse
+import com.agentstore.common.security.dto.DemoDeveloperPrincipal
 import com.agentstore.common.web.AgentStoreErrorResponses
+import com.agentstore.developer.service.DemoDeveloperAccessService
 import com.agentstore.dependency.dto.request.CreateDependencyRequest
 import com.agentstore.dependency.dto.request.UpdateDependencyRequest
 import com.agentstore.dependency.dto.response.DependencyResponse
@@ -11,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import jakarta.validation.Valid
 import java.util.UUID
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -24,11 +27,18 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api")
 @AgentStoreErrorResponses
-class DependencyController(private val service: DependencyService) {
+class DependencyController(
+    private val service: DependencyService,
+    private val demoDeveloperAccessService: DemoDeveloperAccessService,
+) {
     @GetMapping("/agent-versions/{id}/dependencies")
     @Operation(operationId = "getApiAgentVersionsByIdDependencies", summary = "List dependencies")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun list(@PathVariable id: UUID): CommonResponse<List<DependencyResponse>> {
+    fun list(
+        @AuthenticationPrincipal principal: DemoDeveloperPrincipal,
+        @PathVariable id: UUID,
+    ): CommonResponse<List<DependencyResponse>> {
+        demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
         return CommonResponse.success(result = service.list(sourceVersionId = id))
     }
 
@@ -37,9 +47,11 @@ class DependencyController(private val service: DependencyService) {
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
     fun create(
+        @AuthenticationPrincipal principal: DemoDeveloperPrincipal,
         @PathVariable id: UUID,
         @Valid @RequestBody request: CreateDependencyRequest
     ): CommonResponse<DependencyResponse> {
+        demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
         return CommonResponse.success(
             result = service.create(sourceVersionId = id, request = request),
         )
@@ -52,10 +64,12 @@ class DependencyController(private val service: DependencyService) {
     )
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun update(
+        @AuthenticationPrincipal principal: DemoDeveloperPrincipal,
         @PathVariable id: UUID,
         @PathVariable dependencyId: UUID,
         @Valid @RequestBody request: UpdateDependencyRequest
     ): CommonResponse<DependencyResponse> {
+        demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
         return CommonResponse.success(
             result = service.update(
                 sourceVersionId = id,
@@ -71,7 +85,12 @@ class DependencyController(private val service: DependencyService) {
         summary = "Delete dependency"
     )
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
-    fun remove(@PathVariable id: UUID, @PathVariable dependencyId: UUID): CommonResponse<Void> {
+    fun remove(
+        @AuthenticationPrincipal principal: DemoDeveloperPrincipal,
+        @PathVariable id: UUID,
+        @PathVariable dependencyId: UUID,
+    ): CommonResponse<Void> {
+        demoDeveloperAccessService.requireVersionOwner(versionId = id, principal = principal)
         service.remove(sourceVersionId = id, dependencyId = dependencyId)
         return CommonResponse.emptySuccess()
     }

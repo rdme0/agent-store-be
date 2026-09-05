@@ -3,6 +3,7 @@ package com.agentstore.agent.dto.internal
 import com.agentstore.agent.model.vo.AgentUsageType
 import com.agentstore.dependency.model.vo.ProviderScope
 import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
+import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -27,6 +28,7 @@ data class ManifestAgentDto(
     @field:Valid val function: ManifestFunctionDto,
     @field:NotBlank val endpoint: String,
     @field:Valid val payment: ManifestPaymentDto,
+    val verificationInput: JsonNode? = null,
 )
 
 data class ManifestFunctionDto(

@@ -61,6 +61,9 @@ class PinnedAgentRestClientFactory {
                     .setResponseTimeout(Timeout.ofMilliseconds(timeout.toMillis().coerceAtLeast(1)))
                     .build()
             )
+            // A paid x402 POST must never be replayed by the transport after a
+            // non-success response; the caller owns reconciliation explicitly.
+            .disableAutomaticRetries()
             .disableRedirectHandling()
             .build()
         val deadlineTask = DEADLINE_EXECUTOR.schedule(

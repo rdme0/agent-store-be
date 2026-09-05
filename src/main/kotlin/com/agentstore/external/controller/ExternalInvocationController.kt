@@ -2,6 +2,7 @@ package com.agentstore.external.controller
 
 import com.agentstore.common.dto.response.CommonResponse
 import com.agentstore.common.exception.constants.ErrorCode
+import com.agentstore.common.security.dto.ExternalReceiptPrincipal
 import com.agentstore.common.web.AgentStoreErrorResponses
 import com.agentstore.external.dto.request.CreateExternalInvocationIntentRequest
 import com.agentstore.external.dto.response.ExternalInvocationExecutionResponse
@@ -9,15 +10,18 @@ import com.agentstore.external.dto.response.ExternalInvocationStatusResponse
 import com.agentstore.external.service.ExternalIntentRateLimiter
 import com.agentstore.external.service.ExternalInvocationService
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.enums.ParameterIn
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import java.util.UUID
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -93,9 +97,17 @@ class ExternalInvocationController(
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun get(
         @PathVariable id: UUID,
-        @RequestHeader(RECEIPT_HEADER, required = false) receiptToken: String?,
+        @Parameter(
+            name = RECEIPT_HEADER,
+            description = "Invocation receipt token",
+            required = true,
+            `in` = ParameterIn.HEADER,
+        )
+        @RequestHeader(RECEIPT_HEADER) receiptToken: String,
+        @AuthenticationPrincipal principal: ExternalReceiptPrincipal,
     ): CommonResponse<ExternalInvocationStatusResponse> {
-        return CommonResponse.success(result = service.get(id = id, receiptToken = receiptToken))
+        check(receiptToken.isNotBlank())
+        return CommonResponse.success(result = service.get(id = id, principal = principal))
     }
 
     @GetMapping("/invocations/{id}/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
@@ -107,9 +119,17 @@ class ExternalInvocationController(
     )
     fun events(
         @PathVariable id: UUID,
-        @RequestHeader(RECEIPT_HEADER, required = false) receiptToken: String?,
+        @Parameter(
+            name = RECEIPT_HEADER,
+            description = "Invocation receipt token",
+            required = true,
+            `in` = ParameterIn.HEADER,
+        )
+        @RequestHeader(RECEIPT_HEADER) receiptToken: String,
+        @AuthenticationPrincipal principal: ExternalReceiptPrincipal,
         @RequestHeader(LAST_EVENT_ID_HEADER, required = false) lastEventId: String?,
     ): SseEmitter {
-        return service.subscribe(id = id, receiptToken = receiptToken, lastEventId = lastEventId)
+        check(receiptToken.isNotBlank())
+        return service.subscribe(id = id, principal = principal, lastEventId = lastEventId)
     }
 }

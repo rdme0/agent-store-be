@@ -12,6 +12,8 @@ enum class ErrorCode(
     INVALID_INPUT_VALUE(Domain.COMMON, HttpStatus.BAD_REQUEST, 1, "유효하지 않은 입력 값입니다."),
     DATA_INTEGRITY_CONFLICT(Domain.COMMON, HttpStatus.CONFLICT, 1, "요청이 현재 데이터 상태와 충돌합니다."),
     INTERNAL_SERVER_ERROR(Domain.COMMON, HttpStatus.INTERNAL_SERVER_ERROR, 1, "서버 내부 오류가 발생했습니다."),
+    DEMO_AUTH_REQUIRED(Domain.COMMON, HttpStatus.UNAUTHORIZED, 2, "데모 access token이 필요합니다."),
+    DEMO_ACCESS_DENIED(Domain.COMMON, HttpStatus.FORBIDDEN, 3, "이 개발자 리소스에 접근할 수 없습니다."),
 
     AGENT_INVALID_PRICE(Domain.AGENT, HttpStatus.BAD_REQUEST, 1, "Agent price가 올바르지 않습니다."),
     INVALID_ENDPOINT(Domain.AGENT, HttpStatus.BAD_REQUEST, 2, "Agent endpoint가 올바르지 않습니다: %s"),
@@ -39,6 +41,9 @@ enum class ErrorCode(
         6,
         "Function Contract와 응답 형식이 일치하지 않습니다.",
     ),
+    PROVIDER_VERIFICATION_REQUIRED(Domain.AGENT, HttpStatus.CONFLICT, 7, "공급자 x402 검증이 필요합니다."),
+    PROVIDER_VERIFICATION_IN_PROGRESS(Domain.AGENT, HttpStatus.CONFLICT, 8, "공급자 x402 검증이 진행 중입니다."),
+    PROVIDER_NOT_READY(Domain.AGENT, HttpStatus.SERVICE_UNAVAILABLE, 9, "공급자 Agent가 현재 검증되지 않았습니다."),
 
     DEPENDENCY_INVALID_PRICE(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 1, "Dependency maxPriceAtomic이 올바르지 않습니다."),
     INVALID_MAX_CALLS(Domain.DEPENDENCY, HttpStatus.BAD_REQUEST, 2, "maxCalls는 1 이상 5 이하이어야 합니다."),
