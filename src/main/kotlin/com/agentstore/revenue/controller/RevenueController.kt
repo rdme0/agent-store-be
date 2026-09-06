@@ -9,6 +9,7 @@ import com.agentstore.revenue.dto.response.DeveloperRevenueResponse
 import com.agentstore.revenue.service.RevenueService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
 import org.springdoc.core.annotations.ParameterObject
 import java.util.UUID
@@ -27,6 +28,7 @@ class RevenueController(
     private val demoDeveloperAccessService: DemoDeveloperAccessService,
 ) {
     @GetMapping("/{id}/revenue")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "getApiDevelopersByIdRevenue", summary = "Get developer revenue")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun get(

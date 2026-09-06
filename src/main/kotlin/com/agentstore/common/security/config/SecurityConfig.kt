@@ -1,6 +1,7 @@
 package com.agentstore.common.security.config
 
 import com.agentstore.common.config.AgentStoreProperties
+import com.agentstore.common.security.constant.DemoSecurityPath
 import com.agentstore.common.security.constant.SecurityPath
 import com.agentstore.common.security.filter.ExternalReceiptAuthFilter
 import com.agentstore.common.security.filter.InvocationTokenAuthFilter
@@ -15,6 +16,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.security.web.util.matcher.RequestMatcher
 import org.springframework.security.web.util.matcher.RegexRequestMatcher
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
@@ -40,13 +42,16 @@ class SecurityConfig(
             RegexRequestMatcher("^/v1/invocations/$INVOCATION_PATH$", HttpMethod.HEAD.name()),
             RegexRequestMatcher("^/v1/invocations/$INVOCATION_PATH/events$", HttpMethod.HEAD.name()),
         )
+        private val DEMO_ACCESS_MATCHER = RequestMatcher { request ->
+            DemoSecurityPath.requiresDemoAccess(request)
+        }
     }
 
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
         val configuration = CorsConfiguration()
         configuration.setAllowedOriginPatterns(properties.corsOrigins)
-        configuration.setAllowedMethods(listOf("GET", "POST", "PATCH", "DELETE", "OPTIONS"))
+        configuration.setAllowedMethods(listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"))
         configuration.setAllowedHeaders(
             listOf(
                 "Accept",
@@ -54,8 +59,6 @@ class SecurityConfig(
                 "Content-Type",
                 "Idempotency-Key",
                 "Last-Event-ID",
-                "PAYMENT-SIGNATURE",
-                "PAYMENT-RESPONSE",
                 "X-AgentStore-Invocation-Receipt",
             ),
         )
@@ -63,9 +66,9 @@ class SecurityConfig(
             listOf(
                 "X-Trace-Id",
                 "Last-Event-ID",
-                "PAYMENT-REQUIRED",
-                "PAYMENT-RESPONSE",
                 "X-AgentStore-Invocation-Receipt",
+                "X-AgentStore-Invocation-Id",
+                "Location",
             ),
         )
         configuration.allowCredentials = false
@@ -92,35 +95,7 @@ class SecurityConfig(
                     .authenticated()
                     .requestMatchers(*EXTERNAL_HEAD_MATCHERS)
                     .authenticated()
-                    .requestMatchers("/api/developer/**", "/api/developers/*/revenue")
-                        .authenticated()
-                    .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/agent-versions/*/dependencies",
-                        "/api/agent-versions/*/manifest",
-                        "/api/agent-manifests/agent-versions/*",
-                    )
-                    .authenticated()
-                    .requestMatchers(HttpMethod.POST, "/api/agents", "/api/agents/*/versions")
-                    .authenticated()
-                    .requestMatchers(HttpMethod.PATCH, "/api/agents/*")
-                    .authenticated()
-                    .requestMatchers(HttpMethod.DELETE, "/api/agents/*")
-                    .authenticated()
-                    .requestMatchers(
-                        HttpMethod.POST,
-                        "/api/agent-versions/*/publish",
-                        "/api/agent-versions/*/disable",
-                        "/api/agent-versions/*/dependencies/**",
-                        "/api/function-contracts",
-                        "/api/agent-manifests",
-                    )
-                    .authenticated()
-                    .requestMatchers(HttpMethod.PATCH, "/api/agent-versions/*/dependencies/**")
-                    .authenticated()
-                    .requestMatchers(HttpMethod.DELETE, "/api/agent-versions/*/dependencies/**")
-                    .authenticated()
-                    .requestMatchers(HttpMethod.PUT, "/api/agent-versions/*/manifest")
+                    .requestMatchers(DEMO_ACCESS_MATCHER)
                     .authenticated()
                     .anyRequest()
                     .permitAll()

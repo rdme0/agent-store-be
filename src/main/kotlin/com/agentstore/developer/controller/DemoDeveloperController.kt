@@ -10,6 +10,7 @@ import com.agentstore.developer.service.DemoDeveloperAccessService
 import com.agentstore.agent.dto.response.AgentResponse
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -31,6 +32,7 @@ class DemoDeveloperController(
     }
 
     @GetMapping("/developer/me")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "getApiDeveloperMe", summary = "Get shared demo developer")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun me(@AuthenticationPrincipal principal: DemoDeveloperPrincipal): CommonResponse<DemoDeveloperResponse> {
@@ -38,6 +40,7 @@ class DemoDeveloperController(
     }
 
     @GetMapping("/developer/agents")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "getApiDeveloperAgents", summary = "List shared demo developer agents")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun agents(@AuthenticationPrincipal principal: DemoDeveloperPrincipal): CommonResponse<List<AgentResponse>> {

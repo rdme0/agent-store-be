@@ -10,6 +10,7 @@ import com.agentstore.dependency.dto.response.DependencyResponse
 import com.agentstore.dependency.service.DependencyService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
 import java.util.UUID
 import org.springframework.http.HttpStatus
@@ -32,6 +33,7 @@ class DependencyController(
     private val demoDeveloperAccessService: DemoDeveloperAccessService,
 ) {
     @GetMapping("/agent-versions/{id}/dependencies")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "getApiAgentVersionsByIdDependencies", summary = "List dependencies")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun list(
@@ -43,6 +45,7 @@ class DependencyController(
     }
 
     @PostMapping("/agent-versions/{id}/dependencies")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "postApiAgentVersionsByIdDependencies", summary = "Create dependency")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
@@ -58,6 +61,7 @@ class DependencyController(
     }
 
     @PatchMapping("/agent-versions/{id}/dependencies/{dependencyId}")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(
         operationId = "patchApiAgentVersionsByIdDependenciesByDependencyId",
         summary = "Update dependency"
@@ -80,6 +84,7 @@ class DependencyController(
     }
 
     @DeleteMapping("/agent-versions/{id}/dependencies/{dependencyId}")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(
         operationId = "deleteApiAgentVersionsByIdDependenciesByDependencyId",
         summary = "Delete dependency"

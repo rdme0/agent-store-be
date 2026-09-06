@@ -3,7 +3,7 @@ package com.agentstore.common.security.helper
 import com.agentstore.common.exception.constants.ErrorCode
 import com.agentstore.common.security.dto.ExternalReceiptPrincipal
 import com.agentstore.common.security.exception.AgentStoreAuthenticationException
-import com.agentstore.external.repository.ExternalInvocationIntentRepository
+import com.agentstore.external.repository.ExternalInvocationRepository
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Clock
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component
 
 @Component
 class ExternalReceiptAuthHelper(
-    private val intentRepository: ExternalInvocationIntentRepository,
+    private val invocationRepository: ExternalInvocationRepository,
     private val clock: Clock,
 ) {
     fun authenticate(invocationId: UUID, receiptToken: String?): ExternalReceiptPrincipal {
@@ -22,24 +22,24 @@ class ExternalReceiptAuthHelper(
             ?.trim()
             ?.takeIf(String::isNotBlank)
             ?: throw notFound()
-        val intent = intentRepository.findById(invocationId).orElse(null) ?: throw notFound()
+        val invocation = invocationRepository.findById(invocationId).orElse(null) ?: throw notFound()
 
-        if (!intent.receiptExpiresAt.isAfter(Instant.now(clock))) {
+        if (!invocation.receiptExpiresAt.isAfter(Instant.now(clock))) {
             throw notFound()
         }
 
         val suppliedTokenHash = hash(value = token.toByteArray(StandardCharsets.UTF_8))
         val tokenMatches = MessageDigest.isEqual(
             suppliedTokenHash.toByteArray(StandardCharsets.UTF_8),
-            intent.receiptTokenHash.toByteArray(StandardCharsets.UTF_8),
+            invocation.receiptTokenHash.toByteArray(StandardCharsets.UTF_8),
         )
         if (!tokenMatches) {
             throw notFound()
         }
 
         return ExternalReceiptPrincipal(
-            invocationId = intent.id,
-            expiresAt = intent.receiptExpiresAt,
+            invocationId = invocation.id,
+            expiresAt = invocation.receiptExpiresAt,
         )
     }
 

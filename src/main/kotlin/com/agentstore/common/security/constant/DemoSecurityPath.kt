@@ -16,7 +16,8 @@ object DemoSecurityPath {
             Regex("/api/agent-versions/[^/]+/(?:publish|disable|manifest)").matches(path) ||
             Regex("/api/agent-versions/[^/]+/dependencies(?:/[^/]+)?").matches(path) ||
             path == "/api/function-contracts" ||
-            path == "/api/agent-manifests"
+            path == "/api/agent-manifests" ||
+            (request.method == "POST" && path == "/v1/invocations")
     }
 
     fun isDeveloperRead(path: String): Boolean {

@@ -14,6 +14,7 @@ import com.agentstore.common.web.AgentStoreErrorResponses
 import com.agentstore.developer.service.DemoDeveloperAccessService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Pattern
 import java.util.UUID
@@ -66,6 +67,7 @@ class AgentController(
     }
 
     @PostMapping("/agents")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "postApiAgents", summary = "Create agent")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
@@ -77,6 +79,7 @@ class AgentController(
     }
 
     @PatchMapping("/agents/{id}")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "patchApiAgentsById", summary = "Update agent")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun update(
@@ -89,6 +92,7 @@ class AgentController(
     }
 
     @DeleteMapping("/agents/{id}")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "deleteApiAgentsById", summary = "Delete agent")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun delete(@AuthenticationPrincipal principal: DemoDeveloperPrincipal, @PathVariable id: UUID): CommonResponse<Void> {
@@ -98,6 +102,7 @@ class AgentController(
     }
 
     @PostMapping("/agents/{id}/versions")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "postApiAgentsByIdVersions", summary = "Create agent version")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
@@ -111,6 +116,7 @@ class AgentController(
     }
 
     @PostMapping("/agent-versions/{id}/publish")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "postApiAgentVersionsByIdPublish", summary = "Publish agent version")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun publish(@AuthenticationPrincipal principal: DemoDeveloperPrincipal, @PathVariable id: UUID): CommonResponse<AgentVersionResponse> {
@@ -119,6 +125,7 @@ class AgentController(
     }
 
     @PostMapping("/agent-versions/{id}/disable")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "postApiAgentVersionsByIdDisable", summary = "Disable agent version")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun disable(@AuthenticationPrincipal principal: DemoDeveloperPrincipal, @PathVariable id: UUID): CommonResponse<AgentVersionResponse> {

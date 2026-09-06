@@ -8,6 +8,7 @@ import com.agentstore.common.dto.response.CommonResponse
 import com.agentstore.common.web.AgentStoreErrorResponses
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
 import java.util.UUID
 import org.springframework.http.HttpStatus
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController
 @AgentStoreErrorResponses
 class FunctionContractController(private val service: FunctionContractService) {
     @PostMapping
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "postApiFunctionContracts", summary = "Create function contract")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)

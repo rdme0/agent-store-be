@@ -11,6 +11,7 @@ import com.agentstore.common.web.AgentStoreErrorResponses
 import com.agentstore.developer.service.DemoDeveloperAccessService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
 import java.util.UUID
 import org.springframework.http.HttpStatus
@@ -39,6 +40,7 @@ class AgentManifestController(
     }
 
     @PostMapping("/agent-manifests")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "postApiAgentManifests", summary = "Import agent manifest")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiResponse(responseCode = "201", useReturnTypeSchema = true)
@@ -50,6 +52,7 @@ class AgentManifestController(
     }
 
     @GetMapping("/agent-manifests/agent-versions/{id}", "/agent-versions/{id}/manifest")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "getApiAgentManifestsAgentVersionsById", summary = "Export agent manifest")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun export(
@@ -61,6 +64,7 @@ class AgentManifestController(
     }
 
     @PutMapping("/agent-versions/{id}/manifest")
+    @SecurityRequirement(name = "demoBearer")
     @Operation(operationId = "putApiAgentVersionsByIdManifest", summary = "Replace draft agent manifest")
     @ApiResponse(responseCode = "200", useReturnTypeSchema = true)
     fun replace(
