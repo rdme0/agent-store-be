@@ -77,10 +77,12 @@
   보존하고 host port를 공개하지 않으며, API는 `127.0.0.1:8080`만 reverse proxy용으로 바인딩한다.
   기존 infra의 named volume은 새 bind mount에 자동 연결되지 않으므로 기존 DB를 옮길 때는
   별도 dump/restore 또는 검증된 파일 이전 절차가 필요하다.
-- API는 `SPRING_PROFILES_ACTIVE=deploy`로 실행하고, datasource는 내부 `postgres:5432`를
-  사용한다. `AGENT_STORE_BACKEND_URL`과 `AGENT_STORE_CORS_ORIGINS_0`은 배포 환경에서
-  주입하는 public configuration이고, secret은 `RUNTIME_TOKEN_SECRET`, `X402_PRIVATE_KEY`,
-  `POSTGRES_PASSWORD`로 제한한다.
+- 루트 `compose.yaml`은 prod 배포를 기준으로 API에
+  `--spring.profiles.active=prod` 명령행 인자를 전달한다. datasource는 `.env`의
+  `PROD_POSTGRES_*` 값을 `application-prod.yaml`에서 직접 읽어 내부 `postgres:5432`에
+  연결한다. PostgreSQL 이미지에 필요한 표준 `POSTGRES_*` 세 값만 Compose에서 매핑한다.
+  CORS는 `application-prod.yaml`에서 관리하며 secret은
+  `RUNTIME_TOKEN_SECRET`, `X402_PRIVATE_KEY`, `PROD_POSTGRES_PASSWORD`로 제한한다.
 - Go Agent와 FE는 backend Compose에 포함하지 않는다. Go Agent는 외부 HTTPS 공급자이며,
   catalog bootstrap은 API·공급자 health 이후 별도 작업으로 실행한다.
 - Synology Container Manager에서는 프로젝트 경로에 이 저장소의 `Dockerfile`, `compose.yaml`,

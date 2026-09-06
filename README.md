@@ -304,18 +304,18 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/invocations -Header
 `agent-store-fe`에서 별도로 빌드하고, Go Agent는 Spring이 호출하는 독립적인 제3자 공급자
 서비스로 운영합니다. backend Compose는 두 저장소의 소스 경로나 컨테이너를 참조하지 않습니다.
 
-로컬 또는 NAS에서 먼저 `.env`를 준비하고, 배포별 public URL과 CORS origin을 Container
-Manager 프로젝트 변수 또는 셸 환경변수로 주입합니다. `.env`의
-`POSTGRES_PASSWORD`, `RUNTIME_TOKEN_SECRET`, `X402_PRIVATE_KEY`는 실행 전에 실제 값으로
-채워야 합니다.
+로컬 또는 NAS에서 먼저 `.env`를 준비합니다. 같은 `.env`를 PostgreSQL과 Spring API
+컨테이너가 함께 읽으며, 공통 값은 한 곳에서만 관리합니다. `.env`의 비밀번호·secret과
+public URL·CORS origin은 실행 전에 실제 값으로 채워야 합니다.
 
 ```powershell
 Copy-Item .env.example .env
-$env:AGENT_STORE_BACKEND_URL = 'http://localhost:8080'
-$env:AGENT_STORE_CORS_ORIGINS_0 = 'http://localhost:5173'
 docker compose up --build -d postgres api
 Invoke-RestMethod http://localhost:8080/health
 ```
+
+현재 루트 Compose는 prod 배포를 기준으로 하며, API 컨테이너에
+`--spring.profiles.active=prod` 명령행 인자를 전달합니다.
 
 Compose는 `postgres:17`과 Spring API를 같은 내부 네트워크에 배치합니다. API의 datasource
 주소는 `postgres:5432`이고 PostgreSQL host port는 공개하지 않습니다. DB 파일은 프로젝트의
@@ -327,20 +327,22 @@ Flyway migration을 적용하고 Hibernate가 schema를 validate합니다. 이�
 
 | `.env` 값 | 용도 |
 |---|---|
-| `POSTGRES_PASSWORD` | Compose PostgreSQL과 API datasource 비밀번호 |
+| `PROD_POSTGRES_HOST` / `PROD_POSTGRES_PORT` | 운영 API가 접근할 PostgreSQL 주소 (`postgres:5432`) |
+| `PROD_POSTGRES_DB` / `PROD_POSTGRES_USER` | 운영 PostgreSQL 데이터베이스·사용자 |
+| `PROD_POSTGRES_PASSWORD` | 운영 PostgreSQL 및 API datasource 비밀번호 |
+| `PROD_BACKEND_HOST` / `PROD_BACKEND_PORT` | 운영 API의 public host·port |
+| `DEV_POSTGRES_*` | 직접 실행하는 개발 환경의 PostgreSQL 값 |
+| `DEV_BACKEND_HOST` / `DEV_BACKEND_PORT` | 직접 실행하는 개발 환경의 API 주소 |
 | `RUNTIME_TOKEN_SECRET` | callback token과 cursor 서명 secret |
 | `X402_PRIVATE_KEY` | 필수 저잔액 payer key, `0x` + 64자리 hex |
-| `AGENT_STORE_BACKEND_URL` | 외부에서 접근할 API base URL 및 runtime callback base URL |
-| `AGENT_STORE_CORS_ORIGINS_0` | 브라우저 FE의 정확한 origin |
 
-Bearer 인증은 credential-less CORS로 동작하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
-운영에서는 Container Manager 변수 `AGENT_STORE_CORS_ORIGINS_0`에 Vercel의 실제 HTTPS origin을
-정확히 입력합니다. `AGENT_STORE_BACKEND_URL`은 공급자 URL이 아니라 Spring API의 public URL입니다.
+Bearer 인증은 credential-less CORS로 동작하므로 CORS 전체 origin `*`는 사용할 수 없습니다.
+현재 허용 origin은 `application-dev.yaml`과 `application-prod.yaml`에서 profile별로 관리합니다.
 
 Go Agent는 독립적인 제3자 HTTP 공급자입니다. backend Compose가 Go Agent를 시작하거나
 `demo-agent-base-url`을 주입하지 않습니다. 배포 환경에서는 catalog에 공개 HTTPS 공급자
-endpoint를 등록하고, Go 서비스가 접근 가능한 Spring `AGENT_STORE_BACKEND_URL`로 runtime
-callback이 전달되도록 합니다. catalog bootstrap은 API와 외부 공급자 health 확인 뒤 별도
+endpoint를 등록하고, Go 서비스가 접근 가능한 Spring public backend URL로 runtime callback이
+전달되도록 합니다. catalog bootstrap은 API와 외부 공급자 health 확인 뒤 별도
 release 작업으로 실행하며, 이미 ACTIVE 데이터가 있으면 drift 오류로 중단합니다.
 
 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
@@ -420,7 +422,7 @@ endpoint를 등록합니다. 시연용 실제 x402 지갑을 사용할 때는 Go
 ## 11. 문제 해결
 
 - **CORS 403:** 요청 `Origin`이 개발 환경에서는 `application-dev.yaml`, 배포 환경에서는
-  `AGENT_STORE_CORS_ORIGINS_0`에 정확히 등록됐는지 확인하고 API를 재시작합니다. query string은
+  `application-prod.yaml`의 허용 목록에 정확히 등록됐는지 확인하고 API를 재시작합니다. query string은
   origin에 포함되지 않습니다.
 - **Flyway checksum 오류:** 적용된 migration을 임의 수정한 상태입니다. 원본을 복구하거나 새 migration을 추가합니다. 공유 DB에서 성급히
   `repair`하면 drift를 숨길 수 있습니다.

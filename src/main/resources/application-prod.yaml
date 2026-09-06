@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${PROD_POSTGRES_HOST}:${PROD_POSTGRES_PORT}/${PROD_POSTGRES_DB}?currentSchema=public
+    username: ${PROD_POSTGRES_USER}
+    password: ${PROD_POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+
+agent-store:
+  backend-url: https://${PROD_BACKEND_HOST}:${PROD_BACKEND_PORT}
+  cors-origins:
+    - http://localhost:*
+    - http://127.0.0.1:*
+    - https://agent-store-fe.vercel.app

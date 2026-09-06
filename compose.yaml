@@ -4,10 +4,12 @@ services:
   postgres:
     image: postgres:17
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: agent_store
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${PROD_POSTGRES_DB:?PROD_POSTGRES_DB is required}
+      POSTGRES_USER: ${PROD_POSTGRES_USER:?PROD_POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${PROD_POSTGRES_PASSWORD:?PROD_POSTGRES_PASSWORD is required}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
@@ -24,15 +26,10 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      SPRING_PROFILES_ACTIVE: deploy
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/agent_store?currentSchema=public
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      AGENT_STORE_BACKEND_URL: ${AGENT_STORE_BACKEND_URL:?AGENT_STORE_BACKEND_URL is required}
-      AGENT_STORE_CORS_ORIGINS_0: ${AGENT_STORE_CORS_ORIGINS_0:?AGENT_STORE_CORS_ORIGINS_0 is required}
-      RUNTIME_TOKEN_SECRET: ${RUNTIME_TOKEN_SECRET:?RUNTIME_TOKEN_SECRET is required}
-      X402_PRIVATE_KEY: ${X402_PRIVATE_KEY:?X402_PRIVATE_KEY is required}
+    env_file:
+      - .env
+    command:
+      - --spring.profiles.active=prod
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
