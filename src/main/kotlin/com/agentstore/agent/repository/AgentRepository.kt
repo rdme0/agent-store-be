@@ -89,7 +89,9 @@ interface AgentRepository : JpaRepository<Agent, UUID> {
 
     @Query(
         """
-        select version.agentId as agentId, count(distinct dependency.targetAgentId) as dependencyCount
+        select version.agentId as agentId,
+            count(distinct case when dependency.functionContractId is null then dependency.targetAgentId else null end) +
+            count(distinct dependency.functionContractId) as dependencyCount
         from AgentVersion version
         left join AgentDependency dependency on dependency.sourceVersionId = version.id
         where version.agentId in :agentIds

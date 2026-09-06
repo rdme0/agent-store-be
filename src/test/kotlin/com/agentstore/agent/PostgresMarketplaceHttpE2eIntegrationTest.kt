@@ -900,6 +900,70 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
+    fun `Marketplace dependency count includes distinct direct and function contract targets`() {
+        val contractId = insertFunctionContract()
+        val source = createHttpAgent(contractId = contractId, codePrefix = "http-count-source")
+        val target = createHttpAgent(contractId = contractId, codePrefix = "http-count-provider")
+
+        val directDependency = sendJson(
+            method = "POST",
+            path = "/api/agent-versions/${source.versionId}/dependencies",
+            body = """
+                {"targetAgentId":"${target.agentId}","versionConstraint":"*","maxPriceAtomic":"1","maxCalls":1}
+            """.trimIndent(),
+        )
+        assertThat(directDependency.statusCode()).describedAs(directDependency.body()).isEqualTo(201)
+
+        val functionDependency = sendJson(
+            method = "POST",
+            path = "/api/agent-versions/${source.versionId}/dependencies",
+            body = """
+                {"functionContractId":"$contractId","providerScope":"marketplace","selectionStrategy":"lowest_price","versionConstraint":"*","maxPriceAtomic":"1","maxCalls":1}
+            """.trimIndent(),
+        )
+        assertThat(functionDependency.statusCode()).describedAs(functionDependency.body()).isEqualTo(201)
+
+        val secondVersion = sendJson(
+            method = "POST",
+            path = "/api/agents/${source.agentId}/versions",
+            body = agentVersionPayload(contractId = contractId, semver = "1.1.0"),
+        )
+        assertThat(secondVersion.statusCode()).describedAs(secondVersion.body()).isEqualTo(201)
+        val secondVersionId = UUID.fromString(objectMapper.readTree(secondVersion.body()).path("result").path("id").textValue())
+        fixtureCleaner.trackAgentVersion(secondVersionId)
+        val duplicateDirectDependency = sendJson(
+            method = "POST",
+            path = "/api/agent-versions/$secondVersionId/dependencies",
+            body = """
+                {"targetAgentId":"${target.agentId}","versionConstraint":"*","maxPriceAtomic":"1","maxCalls":1}
+            """.trimIndent(),
+        )
+        assertThat(duplicateDirectDependency.statusCode()).describedAs(duplicateDirectDependency.body()).isEqualTo(201)
+
+        val published = sendJson(
+            method = "POST",
+            path = "/api/agent-versions/${source.versionId}/publish",
+            body = "",
+        )
+        assertThat(published.statusCode()).describedAs(published.body()).isEqualTo(200)
+
+        val marketplace = get(path = "/api/agents/${source.code}")
+        assertThat(marketplace.statusCode()).describedAs(marketplace.body()).isEqualTo(200)
+        val item = objectMapper.readTree(marketplace.body()).path("result")
+        assertThat(item.path("code").textValue()).isEqualTo(source.code)
+        assertThat(item.path("dependencyCount").intValue()).isEqualTo(2)
+
+        val empty = insertMarketplaceAgent(
+            code = "http-count-empty-${UUID.randomUUID().toString().take(8)}",
+            name = "HTTP empty dependency fixture",
+        )
+        val emptyMarketplace = get(path = "/api/agents/${empty.code}")
+        assertThat(emptyMarketplace.statusCode()).isEqualTo(200)
+        assertThat(objectMapper.readTree(emptyMarketplace.body()).path("result").path("dependencyCount").intValue())
+            .isZero()
+    }
+
+    @Test
     fun `removed readiness routes are not published and existing active versions remain candidates`() {
         val active = insertMarketplaceAgent(
             code = "http-existing-active-${UUID.randomUUID().toString().take(8)}",
@@ -1009,7 +1073,9 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         return agentId
     }
 
-    private fun insertFunctionContract(): UUID {
+    private fun insertFunctionContract(
+        inputSchema: String = "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}}}",
+    ): UUID {
         val contractId = UUID.randomUUID()
         jdbcTemplate.update(
             "insert into function_contracts (id, code, contract_version, name, description, response_format, input_schema, output_schema, created_at, updated_at) values (?, ?, '1.0.0', ?, ?, 'JSON'::\"AgentResponseFormat\", ?::jsonb, ?::jsonb, current_timestamp, current_timestamp)",
