@@ -31,7 +31,7 @@ services:
     command:
       - --spring.profiles.active=prod
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${PROD_BACKEND_PORT}:8080"
     depends_on:
       postgres:
         condition: service_healthy
