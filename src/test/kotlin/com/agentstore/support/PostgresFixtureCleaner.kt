@@ -19,8 +19,7 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
     private val paymentAttemptIds = linkedSetOf<UUID>()
     private val paymentJournalIds = linkedSetOf<UUID>()
     private val revenueEntryIds = linkedSetOf<UUID>()
-    private val externalIntentIds = linkedSetOf<UUID>()
-    private val externalSaleIds = linkedSetOf<UUID>()
+    private val externalInvocationIds = linkedSetOf<UUID>()
 
     fun createStandaloneUser(): UUID {
         val id = UUID.randomUUID()
@@ -81,12 +80,8 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
         return revenueEntryIds.add(id)
     }
 
-    fun trackExternalInvocationIntent(id: UUID): Boolean {
-        return externalIntentIds.add(id)
-    }
-
-    fun trackExternalSale(id: UUID): Boolean {
-        return externalSaleIds.add(id)
+    fun trackExternalInvocation(id: UUID): Boolean {
+        return externalInvocationIds.add(id)
     }
 
     fun cleanup() {
@@ -115,11 +110,7 @@ class PostgresFixtureCleaner(private val jdbcTemplate: JdbcTemplate) {
                 )
         }
         deleteTracked("revenue_entries", revenueEntryIds)
-        externalIntentIds.forEach { intentId ->
-            jdbcTemplate.update("delete from external_api_sales where external_intent_id = ?", intentId)
-        }
-        deleteTracked("external_api_sales", externalSaleIds)
-        deleteTracked("external_invocation_intents", externalIntentIds)
+        deleteTracked("external_invocations", externalInvocationIds)
         deleteTracked("payment_settlement_journals", paymentJournalIds)
         deleteTracked("payment_attempts", paymentAttemptIds)
         deleteTracked("execution_events", eventIds)

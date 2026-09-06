@@ -14,8 +14,7 @@ class InvocationTokenServiceTest {
         AgentStoreProperties(
             serviceName = "agent-store-api",
             apiVersion = "0.1.0",
-            runtimeCallbackBaseUrl = "http://127.0.0.1:8080",
-            demoAgentBaseUrl = "http://127.0.0.1:8090",
+            backendUrl = "http://127.0.0.1:8080",
             corsOrigins = listOf("*"),
             runtimeTokenSecret = "test-secret",
             bithumbApiUrl = "https://api.bithumb.com",

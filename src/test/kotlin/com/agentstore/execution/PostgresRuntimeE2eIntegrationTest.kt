@@ -219,6 +219,10 @@ class PostgresRuntimeE2eIntegrationTest : PostgresIntegrationTestSupport() {
             .isEqualTo("삼성전자 투자 분석해줘")
         assertThat(rootBody.path("input").path("input").path("ticker").asText())
             .isEqualTo("005930")
+        assertThat(rootBody.path("runtime").path("callbackUrl").asText())
+            .isEqualTo(
+                "http://localhost:8080/api/runtime/executions/${fixture.root.executionId}/dependencies/invoke",
+            )
         val dependencies = rootBody.path("runtime").path("dependencies")
         assertThat(dependencies).hasSize(3)
         dependencies.forEach { dependency ->

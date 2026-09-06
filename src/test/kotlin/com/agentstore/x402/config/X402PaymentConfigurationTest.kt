@@ -9,6 +9,7 @@ import com.agentstore.x402.registry.X402PaymentCorrelationRegistry
 import com.agentstore.x402.service.X402PaymentService
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Duration
+import java.time.Clock
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -31,6 +32,7 @@ class X402PaymentConfigurationTest {
                 environment = MockEnvironment(),
                 correlations = X402PaymentCorrelationRegistry(),
                 properties = x402ClientProperties(),
+                clock = Clock.systemUTC(),
             )
         }.isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("X402_PRIVATE_KEY")
@@ -49,6 +51,7 @@ class X402PaymentConfigurationTest {
             environment = environment,
             correlations = X402PaymentCorrelationRegistry(),
             properties = x402ClientProperties(),
+            clock = Clock.systemUTC(),
         )
 
         assertThat(client).isInstanceOf(X402PaymentService::class.java)

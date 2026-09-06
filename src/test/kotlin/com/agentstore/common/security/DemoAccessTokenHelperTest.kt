@@ -42,8 +42,7 @@ class DemoAccessTokenHelperTest {
         return AgentStoreProperties(
             serviceName = "agent-store-api",
             apiVersion = "0.1.0",
-            runtimeCallbackBaseUrl = "http://127.0.0.1:8080",
-            demoAgentBaseUrl = "http://127.0.0.1:8090",
+            backendUrl = "http://127.0.0.1:8080",
             corsOrigins = listOf("http://localhost:5173"),
             runtimeTokenSecret = "demo-access-test-secret",
             bithumbApiUrl = "https://api.bithumb.com",

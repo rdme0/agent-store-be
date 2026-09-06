@@ -2,15 +2,10 @@ package com.agentstore.agent
 
 import com.agentstore.AgentStoreApplication
 import com.agentstore.agent.config.DevIdentityInitializer
-import com.agentstore.external.client.FacilitatorIncomingPaymentGateway
-import com.agentstore.external.dto.internal.IncomingPaymentSettlementDto
-import com.agentstore.external.dto.internal.IncomingPaymentVerificationDto
 import com.agentstore.execution.token.InvocationTokenService
 import com.agentstore.support.PostgresIntegrationTestSupport
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.node.ObjectNode
-import com.agentstore.x402.codec.X402HeaderCodec
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
 import java.net.URI
@@ -32,10 +27,6 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Primary
 import org.springframework.test.context.ActiveProfiles
 @EnabledIfEnvironmentVariable(named = "RUN_POSTGRES_INTEGRATION_TESTS", matches = "true")
 @EnabledIfEnvironmentVariable(named = "SPRING_EXCLUSIVE_MAINTENANCE", matches = "true")
@@ -48,13 +39,13 @@ import org.springframework.test.context.ActiveProfiles
         "spring.datasource.password=\${INTEGRATION_DATASOURCE_PASSWORD}",
         "agent-store.service-name=agent-store-api",
         "agent-store.api-version=0.1.0",
-        "agent-store.runtime-callback-base-url=http://127.0.0.1:8080",
+        "agent-store.backend-url=http://localhost:8080",
         "agent-store.cors-origins=http://localhost:*",
         "agent-store.runtime-token-secret=integration-runtime-secret",
+        "agent-store.external-api.rate-limit-per-minute=100",
         "X402_PRIVATE_KEY=0x1111111111111111111111111111111111111111111111111111111111111111",
     ],
 )
-@Import(ExternalPaymentFixtureConfiguration::class)
 @ActiveProfiles("postgres-integration", "test")
 class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport() {
     @Autowired
@@ -62,9 +53,6 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
 
     @Autowired
     private lateinit var invocationTokenService: InvocationTokenService
-
-    @Autowired
-    private lateinit var facilitatorFixture: DeterministicFacilitatorFixture
 
     @LocalServerPort
     private var port: Int = 0
@@ -139,7 +127,7 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
-    fun `openapi documents demo bearer security and x402 CORS preflight allows payment signature`() {
+    fun `openapi documents demo bearer security and free external invocation CORS`() {
         val openApi = httpClient.send(
             HttpRequest.newBuilder(URI("http://127.0.0.1:$port/openapi.json"))
                 .GET()
@@ -148,7 +136,7 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         )
         assertThat(openApi.statusCode()).isEqualTo(200)
         val document = objectMapper.readTree(openApi.body())
-        assertThat(document.path("servers").first().path("url").textValue()).isEqualTo("https://api.example.com")
+        assertThat(document.path("servers").first().path("url").textValue()).isEqualTo("http://localhost:8080")
         assertThat(document.path("components").path("securitySchemes").path("demoBearer").path("scheme").textValue())
             .isEqualTo("bearer")
         assertThat(document.path("paths").path("/api/developer/me").path("get").path("security").toString())
@@ -157,14 +145,45 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val preflight = HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
             .header("Origin", "http://localhost:5173")
             .header("Access-Control-Request-Method", "POST")
-            .header("Access-Control-Request-Headers", "authorization,payment-signature,idempotency-key")
+            .header("Access-Control-Request-Headers", "authorization,idempotency-key")
             .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
             .build()
         val preflightResponse = httpClient.send(preflight, HttpResponse.BodyHandlers.ofString())
         assertThat(preflightResponse.statusCode()).isEqualTo(200)
         assertThat(preflightResponse.headers().firstValue("Access-Control-Allow-Origin")).contains("http://localhost:5173")
         assertThat(preflightResponse.headers().firstValue("Access-Control-Allow-Headers").orElse(""))
-            .containsIgnoringCase("payment-signature")
+            .containsIgnoringCase("authorization")
+            .containsIgnoringCase("idempotency-key")
+            .doesNotContainIgnoringCase("payment-signature")
+        assertThat(preflightResponse.headers().firstValue("Access-Control-Expose-Headers").orElse(""))
+            .containsIgnoringCase("x-agentstore-invocation-id")
+            .containsIgnoringCase("location")
+
+        val manifestPreflight = HttpRequest.newBuilder(URI("http://127.0.0.1:$port/api/agent-versions/${UUID.randomUUID()}/manifest"))
+            .header("Origin", "http://localhost:4173")
+            .header("Access-Control-Request-Method", "PUT")
+            .header("Access-Control-Request-Headers", "authorization,content-type")
+            .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+            .build()
+        val manifestPreflightResponse = httpClient.send(manifestPreflight, HttpResponse.BodyHandlers.ofString())
+        assertThat(manifestPreflightResponse.statusCode()).isEqualTo(200)
+        assertThat(manifestPreflightResponse.headers().firstValue("Access-Control-Allow-Origin"))
+            .contains("http://localhost:4173")
+        assertThat(manifestPreflightResponse.headers().firstValue("Access-Control-Allow-Methods").orElse(""))
+            .containsIgnoringCase("PUT")
+
+        val headPreflight = HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/${UUID.randomUUID()}"))
+            .header("Origin", "http://localhost:5173")
+            .header("Access-Control-Request-Method", "HEAD")
+            .header("Access-Control-Request-Headers", "authorization,x-agentstore-invocation-receipt")
+            .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+            .build()
+        val headPreflightResponse = httpClient.send(headPreflight, HttpResponse.BodyHandlers.ofString())
+        assertThat(headPreflightResponse.statusCode()).isEqualTo(200)
+        assertThat(headPreflightResponse.headers().firstValue("Access-Control-Allow-Methods").orElse(""))
+            .containsIgnoringCase("HEAD")
+        assertThat(headPreflightResponse.headers().firstValue("Access-Control-Allow-Headers").orElse(""))
+            .containsIgnoringCase("x-agentstore-invocation-receipt")
     }
 
     @Test
@@ -301,6 +320,118 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         val expiresAt = Instant.parse(objectMapper.readTree(response.body()).path("result").path("expiresAt").textValue())
         assertThat(expiresAt).isAfter(Instant.now().plusSeconds(6L * 60 * 60 - 30))
         assertThat(expiresAt).isBefore(Instant.now().plusSeconds(6L * 60 * 60 + 30))
+    }
+
+    @Test
+    fun `external invocation uses bearer idempotency and server cost cap without incoming payment`() {
+        val provider = insertMarketplaceAgent(
+            code = "http-free-${UUID.randomUUID().toString().take(8)}",
+            name = "HTTP free invocation fixture",
+        )
+        val body = """
+            {"agentCode":"${provider.code}","versionConstraint":"*","maxCostAtomic":"2","question":"same request"}
+        """.trimIndent()
+        val key = "http-free-${UUID.randomUUID()}"
+
+        val missingBearer = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", key)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(missingBearer, expectedStatus = 401)
+
+        val first = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", key)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertThat(first.statusCode()).describedAs(first.body()).isEqualTo(202)
+        assertThat(first.headers().firstValue("PAYMENT-REQUIRED")).isEmpty
+        assertThat(first.headers().firstValue("PAYMENT-RESPONSE")).isEmpty
+        assertThat(first.headers().firstValue("X-AgentStore-Invocation-Receipt")).isPresent()
+        assertThat(first.headers().firstValue("X-AgentStore-Invocation-Id")).isPresent()
+        assertThat(first.headers().firstValue("Location").orElse(""))
+            .isEqualTo("/v1/invocations/${objectMapper.readTree(first.body()).path("result").path("id").textValue()}")
+        val firstResult = objectMapper.readTree(first.body()).path("result")
+        val invocationId = UUID.fromString(firstResult.path("id").textValue())
+        val executionId = UUID.fromString(firstResult.path("executionId").textValue())
+        fixtureCleaner.trackExternalInvocation(invocationId)
+        fixtureCleaner.trackExecution(executionId)
+        fixtureCleaner.trackQuote(requireNotNull(jdbcTemplate.queryForObject(
+            "select quote_id from executions where id = ?",
+            UUID::class.java,
+            executionId,
+        )))
+
+        val replay = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", key)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertThat(replay.statusCode()).isEqualTo(202)
+        assertThat(objectMapper.readTree(replay.body()).path("result").path("id").textValue())
+            .isEqualTo(invocationId.toString())
+        assertThat(objectMapper.readTree(replay.body()).path("result").path("executionId").textValue())
+            .isEqualTo(executionId.toString())
+
+        val conflict = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", key)
+                .POST(HttpRequest.BodyPublishers.ofString(body.replace("same request", "different request")))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(conflict, expectedStatus = 409)
+
+        val overCap = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", "http-cap-${UUID.randomUUID()}")
+                .POST(HttpRequest.BodyPublishers.ofString(body.replace("\"2\"", "\"5001\"")))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(overCap, expectedStatus = 422)
+    }
+
+    @Test
+    fun `external invocation validates function contract input before creating execution`() {
+        val contractId = insertFunctionContract(
+            inputSchema = "{\"type\":\"object\",\"required\":[\"question\"],\"properties\":{\"question\":{\"type\":\"string\"}}}",
+        )
+        val provider = createHttpAgent(contractId = contractId, codePrefix = "http-input-contract")
+        val published = sendJson(method = "POST", path = "/api/agent-versions/${provider.versionId}/publish", body = "")
+        assertThat(published.statusCode()).isEqualTo(200)
+        val before = jdbcTemplate.queryForObject("select count(*) from external_invocations", Int::class.java)
+
+        val response = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", "http-input-${UUID.randomUUID()}")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                    "{\"agentCode\":\"${provider.code}\",\"versionConstraint\":\"*\",\"maxCostAtomic\":\"2\",\"input\":{}}",
+                ))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(response, expectedStatus = 422)
+        assertThat(jdbcTemplate.queryForObject("select count(*) from external_invocations", Int::class.java))
+            .isEqualTo(before)
     }
 
     @Test
@@ -664,7 +795,7 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
     }
 
     @Test
-    fun `developer revenue and external intent receipt are readable over HTTP`() {
+    fun `developer revenue and external invocation receipt are readable over HTTP`() {
         val runtime = runtimeFixture.create()
         jdbcTemplate.update(
             "update agents set developer_id = ? where id = (select agent_id from agent_versions where id = ?)",
@@ -705,29 +836,32 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
             code = "http-external-${UUID.randomUUID().toString().take(8)}",
             name = "HTTP external fixture",
         )
+        val idempotencyKey = "http-external-${UUID.randomUUID()}"
+        val body = "{\"agentCode\":\"${provider.code}\",\"versionConstraint\":\"*\",\"maxCostAtomic\":\"2\"}"
         val external = httpClient.send(
             HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
                 .header("Content-Type", "application/json")
-                .header("Idempotency-Key", "http-external-${UUID.randomUUID()}")
-                .POST(
-                    HttpRequest.BodyPublishers.ofString(
-                        "{\"agentCode\":\"${provider.code}\",\"versionConstraint\":\"*\",\"maxTotalAtomic\":\"2\"}",
-                    ),
-                )
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", idempotencyKey)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build(),
-            HttpResponse.BodyHandlers.ofInputStream(),
+            HttpResponse.BodyHandlers.ofString(),
         )
-        assertThat(external.statusCode()).isEqualTo(402)
+        assertThat(external.statusCode()).isEqualTo(202)
+        assertThat(external.headers().firstValue("PAYMENT-REQUIRED")).isEmpty
+        assertThat(external.headers().firstValue("PAYMENT-RESPONSE")).isEmpty
         val receipt = external.headers().firstValue("X-AgentStore-Invocation-Receipt").orElseThrow()
         val invocationId = external.headers().firstValue("X-AgentStore-Invocation-Id").orElseThrow()
-        assertThat(external.headers().firstValue("Location").orElse("")).contains("/v1/invocations/")
-        val externalQuoteId = jdbcTemplate.queryForObject(
-            "select quote_id from external_invocation_intents where id = ?",
-            UUID::class.java,
-            UUID.fromString(invocationId),
+        val executionId = objectMapper.readTree(external.body()).path("result").path("executionId").textValue()
+        fixtureCleaner.trackExternalInvocation(UUID.fromString(invocationId))
+        fixtureCleaner.trackExecution(UUID.fromString(executionId))
+        fixtureCleaner.trackQuote(
+            requireNotNull(jdbcTemplate.queryForObject(
+                "select quote_id from executions where id = ?",
+                UUID::class.java,
+                UUID.fromString(executionId),
+            )),
         )
-        fixtureCleaner.trackQuote(requireNotNull(externalQuoteId))
-        fixtureCleaner.trackExternalInvocationIntent(UUID.fromString(invocationId))
 
         val receiptRead = httpClient.send(
             HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
@@ -737,12 +871,147 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
             HttpResponse.BodyHandlers.ofString(),
         )
         assertThat(receiptRead.statusCode()).isEqualTo(200)
-        assertThat(objectMapper.readTree(receiptRead.body()).path("result").path("status").textValue())
-            .isEqualTo("payment_pending")
+        assertThat(objectMapper.readTree(receiptRead.body()).path("result").path("id").textValue())
+            .isEqualTo(invocationId)
+
+        val headRead = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
+                .header("X-AgentStore-Invocation-Receipt", receipt)
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertThat(headRead.statusCode()).isEqualTo(200)
+
+        val forgedReceipt = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
+                .header("X-AgentStore-Invocation-Receipt", "${receipt}-forged")
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(forgedReceipt, expectedStatus = 404)
+
+        val forgedHead = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
+                .header("X-AgentStore-Invocation-Receipt", "${receipt}-forged")
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonErrorWithoutBody(forgedHead, expectedStatus = 404)
+
+        val forgedEvents = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId/events"))
+                .header("Accept", "text/event-stream")
+                .header("X-AgentStore-Invocation-Receipt", "${receipt}-forged")
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(forgedEvents, expectedStatus = 404)
+
+        val secondInvocation = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", "http-external-second-${UUID.randomUUID()}")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertThat(secondInvocation.statusCode()).isEqualTo(202)
+        val secondId = objectMapper.readTree(secondInvocation.body()).path("result").path("id").textValue()
+        fixtureCleaner.trackExternalInvocation(UUID.fromString(secondId))
+        fixtureCleaner.trackExecution(
+            UUID.fromString(objectMapper.readTree(secondInvocation.body()).path("result").path("executionId").textValue()),
+        )
+        fixtureCleaner.trackQuote(
+            requireNotNull(jdbcTemplate.queryForObject(
+                "select quote_id from executions where id = ?",
+                UUID::class.java,
+                UUID.fromString(objectMapper.readTree(secondInvocation.body()).path("result").path("executionId").textValue()),
+            )),
+        )
+        val secondReceipt = secondInvocation.headers().firstValue("X-AgentStore-Invocation-Receipt").orElseThrow()
+        awaitExecutionTerminal(invocationId = secondId, receipt = secondReceipt)
+        val crossInvocation = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
+                .header("X-AgentStore-Invocation-Receipt", secondReceipt)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(crossInvocation, expectedStatus = 404)
+
+        val crossEvents = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId/events"))
+                .header("Accept", "text/event-stream")
+                .header("X-AgentStore-Invocation-Receipt", secondReceipt)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(crossEvents, expectedStatus = 404)
+
+        val malformed = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/not-a-uuid"))
+                .header("X-AgentStore-Invocation-Receipt", receipt)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(malformed, expectedStatus = 400)
+
+        val malformedHead = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/not-a-uuid"))
+                .header("X-AgentStore-Invocation-Receipt", receipt)
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonErrorWithoutBody(malformedHead, expectedStatus = 400)
+
+        assertThat(jdbcTemplate.update(
+            "update external_invocations set receipt_expires_at = timestamp '2000-01-01' where id = ?",
+            UUID.fromString(invocationId),
+        )).isEqualTo(1)
+        assertThat(jdbcTemplate.queryForObject(
+            "select receipt_expires_at < current_timestamp from external_invocations where id = ?",
+            Boolean::class.java,
+            UUID.fromString(invocationId),
+        )).isTrue()
+        val expired = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
+                .header("X-AgentStore-Invocation-Receipt", receipt)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(expired, expectedStatus = 404)
+
+        val expiredHead = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
+                .header("X-AgentStore-Invocation-Receipt", receipt)
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonErrorWithoutBody(expiredHead, expectedStatus = 404)
+
+        val expiredEvents = httpClient.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId/events"))
+                .header("Accept", "text/event-stream")
+                .header("X-AgentStore-Invocation-Receipt", receipt)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertCommonError(expiredEvents, expectedStatus = 404)
     }
 
     @Test
-    fun `external invocation signed retry settles once and exposes receipt SSE over HTTP`() {
+    fun `external invocation uses bearer once and still pays the provider through x402`() {
         val x402Fixture = LocalX402CertificationFixture(objectMapper)
         try {
             val provider = insertMarketplaceAgent(
@@ -755,63 +1024,37 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
                 provider.versionId,
             )
             val idempotencyKey = "http-external-paid-${UUID.randomUUID()}"
-            val body = "{\"agentCode\":\"${provider.code}\",\"versionConstraint\":\"*\",\"maxTotalAtomic\":\"2\"}"
-        val pending = httpClient.send(
-            HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
-                .header("Content-Type", "application/json")
-                .header("Idempotency-Key", idempotencyKey)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build(),
-            HttpResponse.BodyHandlers.ofString(),
-        )
-        assertThat(pending.statusCode()).describedAs(pending.body()).isEqualTo(402)
-        val paymentRequired = pending.headers().firstValue("PAYMENT-REQUIRED").orElseThrow()
-        val receipt = pending.headers().firstValue("X-AgentStore-Invocation-Receipt").orElseThrow()
-        val invocationId = pending.headers().firstValue("X-AgentStore-Invocation-Id").orElseThrow()
-        val externalIntentId = UUID.fromString(invocationId)
-        val externalQuoteId = jdbcTemplate.queryForObject(
-            "select quote_id from external_invocation_intents where id = ?",
-            UUID::class.java,
-            externalIntentId,
-        )
-        fixtureCleaner.trackExternalInvocationIntent(externalIntentId)
-        fixtureCleaner.trackQuote(requireNotNull(externalQuoteId))
-
-        val codec = X402HeaderCodec(objectMapper)
-        val requiredRoot = codec.decodeObject(value = paymentRequired)
-        val accepted = requiredRoot.path("accepts").path(0)
-        val signedRoot = objectMapper.createObjectNode().apply {
-            put("x402Version", 2)
-            set<JsonNode>("resource", requiredRoot.path("resource"))
-            set<JsonNode>("accepted", accepted)
-            set<ObjectNode>("payload", objectMapper.createObjectNode().apply {
-                put("signature", "fixture-signature")
-                set<ObjectNode>("authorization", objectMapper.createObjectNode().apply {
-                    put("from", "0x0000000000000000000000000000000000000003")
-                    put("to", "0x0000000000000000000000000000000000000001")
-                    put("value", "2")
-                    put("validBefore", Instant.now().plusSeconds(60).epochSecond)
-                })
-            })
-        }
+            val body = "{\"agentCode\":\"${provider.code}\",\"versionConstraint\":\"*\",\"maxCostAtomic\":\"2\"}"
         val paid = httpClient.send(
             HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations"))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $accessToken")
                 .header("Idempotency-Key", idempotencyKey)
-                .header("PAYMENT-SIGNATURE", codec.encode(value = signedRoot))
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
         )
         assertThat(paid.statusCode()).describedAs(paid.body()).isEqualTo(202)
-        assertThat(paid.headers().firstValue("PAYMENT-RESPONSE")).isPresent()
-        assertThat(facilitatorFixture.verifyCalls).isEqualTo(1)
-        assertThat(facilitatorFixture.settleCalls).isEqualTo(1)
-        assertThat(objectMapper.readTree(paid.body()).path("result").path("status").textValue())
-            .isEqualTo("execution_created")
+        assertThat(paid.headers().firstValue("PAYMENT-RESPONSE")).isEmpty
+        val invocationId = paid.headers().firstValue("X-AgentStore-Invocation-Id").orElseThrow()
+        val receipt = paid.headers().firstValue("X-AgentStore-Invocation-Receipt").orElseThrow()
         fixtureCleaner.trackExecution(
             UUID.fromString(objectMapper.readTree(paid.body()).path("result").path("executionId").textValue()),
         )
+        fixtureCleaner.trackExternalInvocation(UUID.fromString(invocationId))
+        fixtureCleaner.trackQuote(
+            requireNotNull(jdbcTemplate.queryForObject(
+                "select quote_id from executions where id = ?",
+                UUID::class.java,
+                UUID.fromString(objectMapper.readTree(paid.body()).path("result").path("executionId").textValue()),
+            )),
+        )
+        repeat(20) {
+            if (x402Fixture.requests.size >= 2) return@repeat
+            Thread.sleep(50)
+        }
+        assertThat(x402Fixture.requests.filter { it.paymentSignature != null }).hasSize(1)
+        assertThat(x402Fixture.requests).hasSize(2)
 
         val receiptRead = httpClient.send(
             HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
@@ -821,8 +1064,8 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
             HttpResponse.BodyHandlers.ofString(),
         )
         assertThat(receiptRead.statusCode()).isEqualTo(200)
-        assertThat(objectMapper.readTree(receiptRead.body()).path("result").path("status").textValue())
-            .isEqualTo("execution_created")
+        assertThat(objectMapper.readTree(receiptRead.body()).path("result").path("id").textValue())
+            .isEqualTo(invocationId)
         var executionStatus = objectMapper.readTree(receiptRead.body()).path("result").path("executionStatus").textValue()
         for (attempt in 0 until 50) {
             if (executionStatus in setOf("COMPLETED", "FAILED")) {
@@ -1059,6 +1302,26 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         assertThat(body.path("errorCode").textValue()).isNotBlank()
     }
 
+    private fun assertCommonErrorWithoutBody(response: HttpResponse<String>, expectedStatus: Int) {
+        assertThat(response.statusCode()).isEqualTo(expectedStatus)
+        assertThat(response.headers().firstValue("X-Trace-Id")).isPresent()
+    }
+
+    private fun awaitExecutionTerminal(invocationId: String, receipt: String) {
+        repeat(50) {
+            val response = httpClient.send(
+                HttpRequest.newBuilder(URI("http://127.0.0.1:$port/v1/invocations/$invocationId"))
+                    .header("X-AgentStore-Invocation-Receipt", receipt)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+            val status = objectMapper.readTree(response.body()).path("result").path("executionStatus").textValue()
+            if (status in setOf("COMPLETED", "FAILED")) return
+            Thread.sleep(100)
+        }
+    }
+
     private fun insertBareAgent(): UUID {
         val agentId = UUID.randomUUID()
         jdbcTemplate.update(
@@ -1083,7 +1346,7 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
             "http-contract-${contractId.toString().take(8)}",
             "HTTP fixture contract",
             "Contract used by the actual HTTP CRUD test",
-            "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}}}",
+            inputSchema,
             "{\"type\":\"object\"}",
         )
         fixtureCleaner.trackFunctionContract(contractId)
@@ -1272,39 +1535,4 @@ class PostgresMarketplaceHttpE2eIntegrationTest : PostgresIntegrationTestSupport
         )
     }
 
-}
-
-@TestConfiguration(proxyBeanMethods = false)
-class ExternalPaymentFixtureConfiguration {
-    @Bean
-    @Primary
-    fun facilitatorFixture(): DeterministicFacilitatorFixture {
-        return DeterministicFacilitatorFixture()
-    }
-}
-
-class DeterministicFacilitatorFixture : FacilitatorIncomingPaymentGateway {
-    var verifyCalls: Int = 0
-        private set
-    var settleCalls: Int = 0
-        private set
-
-    override fun verify(
-        paymentPayload: ObjectNode,
-        paymentRequirement: ObjectNode,
-    ): IncomingPaymentVerificationDto {
-        verifyCalls += 1
-        return IncomingPaymentVerificationDto(payer = "0x0000000000000000000000000000000000000004")
-    }
-
-    override fun settle(
-        paymentPayload: ObjectNode,
-        paymentRequirement: ObjectNode,
-    ): IncomingPaymentSettlementDto {
-        settleCalls += 1
-        return IncomingPaymentSettlementDto(
-            payer = "0x0000000000000000000000000000000000000004",
-            transactionHash = "0x${UUID.randomUUID().toString().replace("-", "")}${"0".repeat(32)}",
-        )
-    }
 }
