@@ -116,13 +116,6 @@ enum class ErrorCode(
     EXTERNAL_INVOCATION_NOT_FOUND(Domain.EXTERNAL, HttpStatus.NOT_FOUND, 1, "외부 호출을 찾을 수 없습니다."),
     EXTERNAL_IDEMPOTENCY_CONFLICT(Domain.EXTERNAL, HttpStatus.CONFLICT, 1, "동일한 Idempotency-Key의 요청 내용이 다릅니다."),
     EXTERNAL_MAX_TOTAL_EXCEEDED(Domain.EXTERNAL, HttpStatus.UNPROCESSABLE_CONTENT, 1, "호출 최대 비용을 초과했습니다."),
-    EXTERNAL_PAYMENT_REQUIRED(Domain.EXTERNAL, HttpStatus.PAYMENT_REQUIRED, 1, "x402 결제가 필요합니다."),
-    EXTERNAL_PAYMENT_RECONCILIATION_REQUIRED(
-        Domain.EXTERNAL,
-        HttpStatus.SERVICE_UNAVAILABLE,
-        1,
-        "외부 결제 결과 확인이 필요합니다.",
-    ),
     EXTERNAL_RATE_LIMITED(Domain.EXTERNAL, HttpStatus.TOO_MANY_REQUESTS, 1, "요청 횟수가 너무 많습니다."),
 
     INVALID_CURSOR(Domain.REVENUE, HttpStatus.BAD_REQUEST, 1, "cursor가 올바르지 않습니다."),
