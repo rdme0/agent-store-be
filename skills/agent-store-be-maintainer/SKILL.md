@@ -29,6 +29,18 @@ Use only packages with a real responsibility: `controller`, `service`, `reposito
 `resolver`, `runner`, `executor`, `orchestrator`, `event`, and `token`. Do not leave production
 classes in a domain root package.
 
+### External Go Agent boundary
+
+Treat the Go `demo-agent` as a third-party provider service from Spring's perspective, even when it
+is launched locally for a demo. It is a separate HTTP process with its own lifecycle, network
+reachability, timeout, failure, and input/output contract; do not assume a shared process, database,
+transaction, localhost reachability, or coordinated startup. Keep provider URLs and Spring callback
+URLs distinct: the provider endpoint is where Spring calls the Go Agent, while the callback endpoint
+is where the Go Agent calls back into Spring. `localhost` is valid only for the explicitly documented
+same-host development topology; Compose and deployed environments must use addresses reachable from
+the Go service and must preserve callback authentication and timeout boundaries. Test this boundary
+through a real/local HTTP fixture rather than an in-process mock or direct database shortcut.
+
 Use Kotlin for controllers, services, repository interfaces, DTOs, configuration, clients, codecs,
 resolvers, runners, executors, orchestrators, event components, common responses, exceptions, and
 application immutable/calculation values. Use Java for JPA entities and entity-persisted enums/value
@@ -112,6 +124,41 @@ Never present a different local path or manually repaired state as verification 
   constructor/function defaults. Tests pass them explicitly.
 
 ## JPA, configuration, and Flyway
+
+### Configuration and Bean hygiene
+
+Keep configuration and Bean wiring minimal, feature-local, and readable. When two designs preserve
+the same behavior and safety guarantees, choose the one with fewer indirections, fewer global
+effects, and a clearer ownership boundary; cleanup must reduce accidental complexity rather than
+only rearrange it.
+
+Keep optional integrations optional. An external API, facilitator, scheduler, or other feature that
+is not required by the core request path must have an explicit enable boundary and must not force
+placeholder URLs, wallet addresses, or credentials into the base profile. Register its properties,
+clients, services, and controllers conditionally when the feature is disabled; production values
+belong in the deployment profile or required environment variables, never as fake defaults.
+
+Give configuration ownership to the feature that consumes it. Prefer a typed properties object and a
+client-local `RestClient` for a single remote service. Do not create a generic `RestClient` Bean or a
+central wiring class unless multiple real consumers share the same lifecycle and policy. Every
+production `@Bean` must have a known consumer or an intentional application lifecycle role; remove
+dead Beans and leftover global enables such as `@EnableScheduling` when no scheduled component
+exists.
+
+Do not use `@Qualifier` on generic types to hide unrelated implementations. For a specialized
+serializer, mapper, or codec, expose a domain type such as `ManifestYamlCodec` that owns its mapper
+and inject that type directly. Do not replace the qualifier with `@Primary`, which changes global
+resolution semantics.
+
+Keep OpenAPI and security policy on one authoritative route/operation boundary. Do not maintain a
+second hand-written path-regex inventory in documentation when controller annotations or a shared
+policy matcher can express the same rule. Any intentional duplication must have a contract test
+that detects drift.
+
+Preserve safety-critical boundaries even during cleanup: payment signers, payment-recovery startup
+work, pinned HTTP clients, callback authentication, and timeout/redirect protections are not dead
+configuration merely because they have few consumers. Simplify wiring around them without weakening
+their fail-closed behavior.
 
 Prefer scalar UUID foreign keys and service boundaries over JPA navigation. Avoid `@ManyToOne`;
 when unavoidable, require concrete cardinality/use-case justification, LAZY loading, explicit join
@@ -199,5 +246,8 @@ bodies, late companions, positional multi-argument Kotlin calls, wildcard/FQ imp
 fallbacks, redundant metadata, DTO suffix violations, dense formatting, and unused parameters.
 
 Submit risk, invariants, matrix, owned/pre-existing paths, contract changes, exact commands/results,
-assumptions, and unrun checks. Do not declare completion before a fresh verifier reports no blocking
-findings.
+assumptions, and unrun checks. A fresh verifier is an asynchronous handoff: wait patiently for its
+final report with bounded 30–60 second waits and progress-aware polling. Do not interrupt, replace,
+or restart a verifier merely because it is quiet, and do not substitute maintainer self-review for
+its result. Do not declare completion before a fresh verifier reports no blocking findings; if the
+handoff has not returned, leave the work explicitly pending and report it as unrun.

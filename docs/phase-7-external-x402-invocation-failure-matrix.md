@@ -1,9 +1,15 @@
-# External x402 Invocation Failure Matrix
+# External x402 Invocation Failure Matrix (superseded)
+
+> 이 문서는 과거 incoming x402 API 계약의 보존 기록입니다. 현재 `/v1/invocations`는
+> demo Bearer로 무료 요청을 시작하고, AgentStore가 공급자에게 지급하는 outbound x402만
+> 실행 중 사용합니다. 현재 실패 매핑은 `phase-9-snowball-removal-failure-matrix.md`를 기준으로 합니다.
+> V28 적용 시 더 이상 사용하지 않는 incoming intent/sale 테이블과 해당 외부 입금·매출 이력은
+> 명시된 무료 계약 전환 범위에 따라 제거되었으며, 아래 항목은 당시 계약의 보존 기록입니다.
 
 ## Scope and invariants
 
 - An external caller has no account or permanent API key. An invocation receipt is a one-invocation bearer secret and only its hash is persisted.
-- An intent freezes the quote, input hash, provider cost, platform fee, total price, resource URL, and expiry before it emits a payment challenge.
+- An intent (historical contract) froze the quote, input hash, provider cost, platform fee, total price, resource URL, and expiry before it emitted a payment challenge.
 - An incoming EIP-3009 authorization must expire no later than its frozen intent. A paid intent may create its already-frozen internal execution after Quote expiry, but an unsigned or unpaid expired intent is never challenged or settled.
 - The external caller pays AgentStore once with x402 v2 `exact` EIP-3009 Base Sepolia USDC. AgentStore creates an internal execution only after the incoming settlement receipt is durable.
 - Incoming raw payment headers, EIP-712 payload, signature, authorization, and private keys never enter logs, exceptions, API responses, or the database.

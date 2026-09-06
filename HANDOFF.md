@@ -6,7 +6,11 @@
 
 - 기존 `agent_store` DB와 PostgreSQL volume은 보존했다. 이번 복구에서 삭제한 것은 사용자가
   명시적으로 승인한, 이번 bootstrap 실패로 남은 정확한 DRAFT catalog Agent 행뿐이다.
-  shared demo identity, Function Contract, 기존 실행·결제 데이터는 삭제하지 않았다.
+  shared demo identity, Function Contract, 기존 일반 실행·공급자 결제·수익 데이터는 삭제하지
+  않았다. 다만 무료 external invocation 계약으로 전환하면서 V28이 더 이상 사용하지 않는
+  `external_invocation_intents`와 `external_api_sales`의 외부 입금/매출 이력은 사용자의 명시적
+  승인에 따라 삭제하며 복구하지 않는다. 이 의도적인 데이터 경계는 일반 execution/payment
+  데이터 보존과 구분한다.
 - Spring `:8080`과 Go fixture `:8090` health를 실제 HTTP로 확인한 뒤, `POST /api/demo/access`로
   발급한 Bearer token을 프로세스 환경변수에만 보관해 `cmd/catalog-bootstrap`을 실행했다.
 - `price-comparison` fixture의 잘못된 YAML key(`priceText: ₩100` + `000:`)를
@@ -49,10 +53,10 @@
   담당하고, execution/step/path/status/idempotency와 receipt resource 권한은 도메인 service가 담당한다.
 - `TraceIdFilter`는 SecurityFilterChain의 인증 필터보다 먼저 실행되어 인증 실패 로그와 응답이 같은 MDC trace ID를
   사용한다. 외부 상태/SSE 경로는 canonical UUID만 인증하고, 비정규 UUID는 기존 입력 오류(400)로 거절한다.
-- Security는 stateless이며 session/basic/form login/cookie/CSRF를 사용하지 않는다. CORS는
-  credential-less Bearer와 외부 x402 header를 명시하고 사용자 로그인·JWT/OAuth2·역할 권한은 아직 제공하지 않는다.
-- 외부 공개 x402 API는 `/v1/invocations` resource다. 동일 `Idempotency-Key`의 unsigned POST는
-  402 intent, signed POST는 202 execution을 반환한다. receipt bearer token으로 GET/SSE를 읽는다.
+ - Security는 stateless이며 session/basic/form login/cookie/CSRF를 사용하지 않는다. CORS는
+   credential-less Bearer와 `Idempotency-Key`/receipt header를 명시하고 사용자 로그인·JWT/OAuth2·역할 권한은 아직 제공하지 않는다.
+ - 외부 `/v1/invocations` POST는 6시간 demo Bearer와 `Idempotency-Key`를 받고 결제 협상 없이 202 execution을 반환한다.
+   상태/SSE는 응답으로 받은 invocation receipt로만 읽는다. AgentStore가 공급자에게 지급하는 outbound x402와 recovery는 유지한다.
 - Agent 목록은 `usageType=user_facing|internal_component` 필터만 받는다. `view=easy|developer`는
   UI 표시 정책이며 API 계약이 아니다.
 
@@ -68,12 +72,12 @@
 ## 현재 검증 상태
 
 - 2026-09-06 paid readiness 제거 변경에 대해 `detektMain` 0 findings, 전체 `test`, 전용
-  `agent_store_integration`의 `integrationTest`가 통과했다. integration report는 65 tests,
+  `agent_store_integration`의 `integrationTest`가 통과했다. integration report는 67 tests,
   0 failures/errors, 1 intended skip이다.
 - random-port Spring + Vite + 전용 PostgreSQL + local HTTP provider를 연결한 browser gate도 통과했다.
   이 gate는 DRAFT publish 후 ACTIVE Marketplace 노출을 실제 HTTP 경로로 확인한다.
-- fresh read-only verifier가 현재 diff와 테스트 매핑을 재검토하여 blocking finding 0으로 PASS를 기록했다.
-  테스트를 위해 띄운 Spring/Vite/provider 프로세스는 모두 종료했다.
+- maintainer 자체 read-only 점검에서 현재 diff와 테스트 매핑의 blocking finding은 없었다.
+  별도 verifier 재실행 결과는 아래 검증 이력과 같이 아직 없다. 테스트를 위해 띄운 Spring/Vite/provider 프로세스는 모두 종료했다.
 - 별도 `agent_store_integration` 데이터베이스와 random-port Spring HTTP 서버를 사용하는
   `PostgresMarketplaceHttpE2eIntegrationTest`가 Bearer access, ownership, direct publish/Marketplace, local x402 실행 흐름을 검증한다.
   `integrationTest` 실행은 전용 PostgreSQL 환경변수만 요구하며 다른 DB로의 실행을 거부한다.
@@ -122,8 +126,9 @@
   `/api/developer/revenue?limit=20`을 보내며 `request[limit]` 또는 수동 URL serialization workaround를 사용하지 않는다.
 - `/`는 원클릭 demo CTA가 있는 랜딩이고 catalog는 `/marketplace`이다. `/agents`는 `/marketplace`로 redirect한다. 성공 token은
   browser localStorage에만 보관하며 만료·401·데모 종료 시 지우고 landing으로 돌아간다.
-- `PostgresMarketplaceHttpE2eIntegrationTest`는 real PostgreSQL + random-port Spring + local x402 fixture로
-  bodyless demo access, missing bearer `401`, foreign owner `403`, DRAFT publish와 ACTIVE Marketplace 노출을 검증한다.
+ - `PostgresMarketplaceHttpE2eIntegrationTest`는 real PostgreSQL + random-port Spring + local x402 fixture로
+   bodyless demo access, missing bearer `401`, foreign owner `403`, DRAFT publish와 ACTIVE Marketplace 노출,
+   Bearer 기반 무료 external POST와 receipt GET/SSE를 검증한다.
   dedicated `agent_store_integration` DB에서 `integrationTest`를 실행한다.
 
 ### 심사위원 중심 프론트 UX 계약 — 2026-09-05

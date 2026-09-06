@@ -40,12 +40,12 @@ flowchart TB
     Spring["AgentStore API\nSpring Boot :8080"]
     DB[("PostgreSQL\nRegistry, Quote, Execution, Payment, Revenue")]
     Demo["Demo Agent\nGo/Gin :8090"]
-    Facilitator["x402 Facilitator"]
+    Facilitator["Provider x402 Facilitator"]
     Chain["Base Sepolia"]
     Browser -->|JSON API와 SSE| Spring
     Spring -->|JPA transaction| DB
     Spring -->|EIP-3009 서명 호출| Demo
-    Demo -->|verify / settle| Facilitator
+    Demo -->|provider verify / settle| Facilitator
     Facilitator -->|USDC settlement| Chain
 ```
 
@@ -182,7 +182,7 @@ Agent output이 Version의 `responseFormat`과 맞지 않으면 결제 기록을
 
 - Spring은 전용 hot-wallet private key로 Base Sepolia USDC EIP-3009 payload를 직접 서명합니다.
 
-네트워크 timeout은 실패를 뜻하지 않습니다. 외부 결제는 성공하고 응답만 유실될 수 있어 서버는 side effect 전에 payment intent와 budget
+네트워크 timeout은 실패를 뜻하지 않습니다. 공급자 결제는 성공하고 응답만 유실될 수 있어 서버는 side effect 전에 payment attempt와 budget
 reservation을 먼저 영속화합니다.
 
 ```mermaid
@@ -275,77 +275,28 @@ Spring Security는 demo Bearer, callback invocation token과 external receipt to
 담당합니다. `TraceIdFilter`가 인증 필터보다 먼저 실행되어 실패 응답·로그·MDC가 같은 `X-Trace-Id`를 사용합니다.
 execution/step/path/status/idempotency와 결제 권한은 각 도메인 service가 검증하며, 사용자 로그인·JWT/OAuth2는 아직 제공하지 않습니다.
 
-## External x402 Invocation API
+## External invocation API
 
-외부 개발자는 AgentStore 계정이나 영구 API key 없이도 Agent를 호출할 수 있습니다. 호출자는 한 번의 실행 intent를 만들고,
-AgentStore가 제시한 Base Sepolia USDC x402 결제를 완료합니다. AgentStore는 받은 결제를 증명한 뒤에만 내부 Marketplace
-Quote와 Execution을 만들고, 그 뒤 공급자 Agent 결제와 정산을 기존 실행 원장 안에서 처리합니다.
-
-이 API는 AgentStore의 기본 공개 API이며, 서버가 기동되면 항상 노출됩니다. 아래 공개 설정은
-`src/main/resources/application.yaml`에 명시하며, 모든 URL은 HTTPS 기본 port만 허용합니다. `pay-to`는
-AgentStore가 받는 EVM 지갑입니다.
-
-| YAML 키 | 설명 |
-|---|---|
-| `agent-store.external-api.public-base-url` | 외부 클라이언트가 실제로 접근하는 AgentStore HTTPS base URL |
-| `agent-store.external-api.pay-to` | 외부 x402 USDC를 받는 AgentStore EVM 지갑 |
-| `agent-store.external-api.facilitator-url` | `/verify`, `/settle`을 제공하는 HTTPS facilitator base URL |
-| `agent-store.external-api.facilitator-request-timeout` | facilitator 요청 timeout (`PT5S` 형식) |
-
-| `agent-store.external-api.authorization-timeout` | EIP-3009 authorization 유효 시간 (`PT60S` 형식) |
-| `agent-store.external-api.fee-basis-points` | 공급자 Quote 비용에 더할 플랫폼 수수료 basis point |
-| `agent-store.external-api.intent-ttl` | 결제 전 intent 유효 시간 |
-| `agent-store.external-api.receipt-ttl` | 조회·SSE에 쓰는 1회 호출 receipt 유효 시간 |
-| `agent-store.external-api.rate-limit-per-minute` | source IP 기준 intent 생성 한도 |
-
-`POST /v1/invocations`에는 길이 16~128의 `Idempotency-Key`를 보냅니다. 같은 key와 같은 본문은 같은 invocation을
-이어가고, 본문이 다르면 `409`입니다. `agentCode` + `versionConstraint`로 특정 Agent를 고르거나, `functionCode` +
-`contractVersion` + `selectionStrategy`로 Function Contract 공급자를 고릅니다. 둘을 함께 보낼 수 없습니다.
-
-```json
-{
-  "agentCode": "weather-summary",
-  "versionConstraint": "*",
-  "maxTotalAtomic": "1250000",
-  "question": "서울 내일 날씨를 알려줘",
-  "input": { "city": "Seoul" }
-}
-```
-
-```json
-{
-  "functionCode": "weather.forecast-summary",
-  "contractVersion": "1.0.0",
-  "selectionStrategy": "lowest_price",
-  "maxTotalAtomic": "1250000",
-  "input": { "city": "Seoul" }
-}
-```
-
-첫 요청은 `402`와 `PAYMENT-REQUIRED` header를 반환합니다. 조회에 필요한
-`X-AgentStore-Invocation-Receipt` header도 함께 받습니다. 이 값은 bearer secret이므로 로그·브라우저 저장소·공개 URL에
-넣지 마세요. 서버는 원문이 아니라 hash만 저장합니다. 외부 x402 client는 requirement의 v2 `exact` 조건과 완전히 일치하는
-Base Sepolia USDC EIP-3009 `PAYMENT-SIGNATURE`를 만들어 **같은 본문과 Idempotency-Key로** `POST /v1/invocations`를
-다시 호출합니다. 서명 검증과 facilitator settlement가 성공하면 `202`, `PAYMENT-RESPONSE`, 그리고 내부 `executionId`를 반환합니다. timeout·연결 손실·누락 receipt는 성공으로
-추정하지 않고 `reconciliation_required`가 되며 새 결제나 다른 공급자 fallback을 시작하지 않습니다.
+외부 AI는 `POST /api/demo/access`로 받은 6시간 Bearer token을 제출해 무료로 호출을 시작합니다. AgentStore에 지갑을
+연결하거나 플랫폼 수수료를 지불할 필요는 없습니다. 호출 본문에는 `agentCode` 또는 Function Contract 선택 정보와
+`maxCostAtomic`(서버 상한 5000)을 넣고, 길이 16~128의 `Idempotency-Key`를 보냅니다. 같은 key와 같은 본문은 같은
+invocation을 반환하고, 본문이 다르면 `409`입니다.
 
 ```powershell
+$access = Invoke-RestMethod -Method Post http://localhost:8080/api/demo/access
 $headers = @{
+  Authorization = "Bearer $($access.result.accessToken)"
   'Idempotency-Key' = 'external-weather-request-0001'
   'Content-Type' = 'application/json'
 }
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri 'https://api.example.com/v1/invocations' `
-  -Headers $headers `
-  -Body '{"agentCode":"weather-summary","versionConstraint":"*","maxTotalAtomic":"1250000","input":{"city":"Seoul"}}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/invocations -Headers $headers `
+  -Body '{"agentCode":"weather-summary","versionConstraint":"*","maxCostAtomic":"1250","input":{"city":"Seoul"}}'
 ```
 
-상태는 `GET /v1/invocations/{invocationId}`, 실시간 진행은 `GET /v1/invocations/{invocationId}/events`에서 같은
-receipt header로 조회합니다. receipt 인증은 Spring Security filter/helper가 수행하며, 유효하지 않은 receipt는 invocation
-존재 여부를 노출하지 않는 응답으로 거절합니다. SSE는 기존 `Last-Event-ID` replay 규칙을 그대로 따릅니다. 최종 결과는 항상
-`CommonResponse.result.output`에 들어가므로 외부 서비스는 실행 그래프가 아닌 Agent output만 간단히 소비할 수 있습니다.
+첫 요청은 결제 협상 없이 즉시 `202`와 `X-AgentStore-Invocation-Receipt`, `X-AgentStore-Invocation-Id`, `Location`을
+반환합니다. AgentStore가 공급자 Agent를 호출할 때의 Base Sepolia USDC x402 결제는 기존 실행 원장과 recovery 규칙대로
+수행됩니다. 상태는 receipt header를 사용해 `GET /v1/invocations/{id}` 또는 `/events`에서 확인하며 receipt 원문은
+서버에 hash로만 저장합니다. 공유 Bearer token만으로 다른 invocation을 조회할 수는 없습니다.
 
 ## 8. 로컬 실행
 
@@ -452,7 +403,7 @@ endpoint를 등록합니다. 시연용 실제 x402 지갑을 사용할 때는 Go
 - **Flyway checksum 오류:** 적용된 migration을 임의 수정한 상태입니다. 원본을 복구하거나 새 migration을 추가합니다. 공유 DB에서 성급히
   `repair`하면 drift를 숨길 수 있습니다.
 - **relation/column JDBC 오류:** `application.yaml`의 연결 DB/schema, Flyway 적용 상태, Docker host port와 datasource password를 확인합니다.
-- **Quote 뒤 실행 거부:** Quote가 5분을 넘겼거나 예산이 정확히 같지 않거나 recovery readiness가 준비되지 않았을 수 있습니다. 새 Quote로 다시
+- **Quote 뒤 실행 거부:** Quote가 5분을 넘겼거나 예산이 정확히 같지 않을 수 있습니다. 새 Quote로 다시
   승인합니다.
 
 ## 12. 보안 경계
@@ -460,6 +411,6 @@ endpoint를 등록합니다. 시연용 실제 x402 지갑을 사용할 때는 Go
 - 금액은 atomic decimal string입니다.
 - endpoint와 dependency는 Quote 시 검증되고 snapshot으로 고정됩니다.
 - callback은 서명 token과 idempotency key를 검사합니다.
-- 외부 결제 전 durable intent/reservation을 만듭니다.
+- 공급자 결제 전 durable payment attempt/reservation을 만듭니다.
 - `X402_PRIVATE_KEY`는 Spring 배포 secret으로만 주입하고 브라우저, DB, 로그와 Git 바깥에 둡니다.
 - `X-Trace-Id`는 추적용이지 인증 수단이 아닙니다.

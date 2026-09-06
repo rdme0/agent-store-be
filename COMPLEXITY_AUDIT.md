@@ -100,7 +100,7 @@ Spring Framework는 annotated interface를 `RestClient` 등에 연결하는
 [`HTTP Service Client`](https://docs.spring.io/spring-framework/reference/integration/rest-clients.html#rest-http-interface)를 제공한다.
 요청 경로와 DTO binding이 대부분인 API에는 boilerplate를 줄일 수 있다.
 
-현재는 Bithumb 환율 조회 정도만 후보이고 우선순위는 낮다. `X402AgentClient`, `FacilitatorIncomingPaymentClient`와 pinned endpoint
+현재는 Bithumb 환율 조회 정도만 후보이고 우선순위는 낮다. `X402AgentClient`와 pinned endpoint
 client에는 DNS pinning, redirect 금지, body/deadline 제한, raw header 처리와 결제 결과 unknown 분류가 있다. 이 책임은 proxy interface로
 숨겨도 없어지지 않으며 잘못 숨기면 안전 경계만 읽기 어려워진다. 이 client들은 수동 transport를 유지한다.
 
@@ -139,7 +139,7 @@ Spring은 bootstrap이 등록 API로 전달한 값을 DB에서 읽는다. 개발
 - **Spring Statemachine, Temporal, Kafka**: 현재 execution/payment 상태를 제거하지 못하고 별도 상태 저장소와 복구 의미를 하나 더 만든다.
 - **범용 retry/Resilience4j를 결제 호출에 적용**: read-only 환율 조회에는 검토할 수 있지만 Agent invoke·verify·settle에는 unknown outcome
   정책이 우선이다.
-- **Bucket4j/Redis rate limiter**: 현재 단일 인스턴스 개발 환경의 `ExternalIntentRateLimiter`는 약 30줄이다. 분산 rate limit 요구 없이
+- **Bucket4j/Redis rate limiter**: 현재 단일 인스턴스 개발 환경의 `ExternalInvocationRateLimiter`는 약 30줄이다. 분산 rate limit 요구 없이
   dependency와 Redis lifecycle을 추가하면 더 복잡하다.
 - **MapStruct, QueryDSL, 범용 rules engine**: 현재 mapping/query/policy 규모에서는 annotation processing과 DSL 학습 비용이 대체할
   코드보다 크다.
