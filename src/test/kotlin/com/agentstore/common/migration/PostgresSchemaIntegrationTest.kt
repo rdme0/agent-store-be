@@ -36,7 +36,7 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             "select version from flyway_schema_history where success = true order by installed_rank desc limit 1",
             String::class.java,
         )
-        assertEquals("27", version)
+        assertEquals("28", version)
         assertEquals(
             1,
             jdbcTemplate.queryForObject(
@@ -157,19 +157,101 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
             ),
         )
         assertEquals(
-            1,
+            0,
             jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'external_invocation_intents'",
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('external_invocation_intents', 'external_api_sales')",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            3,
+            jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('executions', 'payment_attempts', 'revenue_entries')",
                 Int::class.java,
             ),
         )
         assertEquals(
             1,
             jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'external_invocations'",
+                Int::class.java,
+            ),
+        )
+        assertEquals(
+            0,
+            jdbcTemplate.queryForObject(
                 "select count(*) from pg_type where typname = 'ExternalInvocationStatus'",
                 Int::class.java,
             ),
         )
+    }
+
+    @Test
+    fun `V28 removes only obsolete external tables and preserves execution payment and revenue rows`() {
+        val schema = "v28_external_boundary_" + UUID.randomUUID().toString().replace("-", "")
+        val migration = requireNotNull(
+            javaClass.classLoader.getResource(
+                "db/migration/V28__20260906010000_free_external_invocations.sql",
+            ),
+        ).readText()
+        val executionId = UUID.randomUUID()
+        jdbcTemplate.execute("create schema $schema")
+        val dataSource = requireNotNull(jdbcTemplate.dataSource)
+        try {
+            dataSource.connection.use { connection ->
+                connection.createStatement().use { statement ->
+                    try {
+                        statement.execute("create table $schema.executions (id uuid primary key)")
+                        statement.execute("create table $schema.payment_attempts (id uuid primary key)")
+                        statement.execute("create table $schema.revenue_entries (id uuid primary key)")
+                        statement.execute("create table $schema.external_invocation_intents (id uuid primary key)")
+                        statement.execute("create table $schema.external_api_sales (id uuid primary key)")
+                        statement.execute("insert into $schema.executions (id) values ('$executionId')")
+                        statement.execute("insert into $schema.payment_attempts (id) values ('${UUID.randomUUID()}')")
+                        statement.execute("insert into $schema.revenue_entries (id) values ('${UUID.randomUUID()}')")
+                        statement.execute("insert into $schema.external_invocation_intents (id) values ('${UUID.randomUUID()}')")
+                        statement.execute("insert into $schema.external_api_sales (id) values ('${UUID.randomUUID()}')")
+                        statement.execute("set search_path to $schema")
+                        statement.execute(migration)
+
+                        statement.executeQuery(
+                            "select count(*) from executions where id = '$executionId'",
+                        ).use { result ->
+                            check(result.next())
+                            assertEquals(1, result.getInt(1))
+                        }
+                        statement.executeQuery(
+                            "select count(*) from payment_attempts",
+                        ).use { result ->
+                            check(result.next())
+                            assertEquals(1, result.getInt(1))
+                        }
+                        statement.executeQuery(
+                            "select count(*) from revenue_entries",
+                        ).use { result ->
+                            check(result.next())
+                            assertEquals(1, result.getInt(1))
+                        }
+                        statement.executeQuery(
+                            "select to_regclass('external_invocation_intents') is null and to_regclass('external_api_sales') is null",
+                        ).use { result ->
+                            check(result.next())
+                            assertEquals(true, result.getBoolean(1))
+                        }
+                        statement.executeQuery(
+                            "select count(*) from external_invocations",
+                        ).use { result ->
+                            check(result.next())
+                            assertEquals(0, result.getInt(1))
+                        }
+                    } finally {
+                        statement.execute("set search_path to public")
+                    }
+                }
+            }
+        } finally {
+            jdbcTemplate.execute("drop schema if exists $schema cascade")
+        }
     }
 
     @Test
@@ -254,6 +336,47 @@ class PostgresSchemaIntegrationTest : PostgresIntegrationTestSupport() {
                                 ),
                                 constraints,
                             )
+                        }
+                    } finally {
+                        statement.execute("set search_path to public")
+                    }
+                }
+            }
+        } finally {
+            jdbcTemplate.execute("drop schema if exists $schema cascade")
+        }
+    }
+
+    @Test
+    fun `V24 aborts before changing the schema when a BALANCED provider row remains`() {
+        val schema = "v24_balanced_guard_" + UUID.randomUUID().toString().replace("-", "")
+        val migration = requireNotNull(
+            javaClass.classLoader.getResource(
+                "db/migration/V24__20260827000000_remove_provider_exploration_and_weights.sql",
+            ),
+        ).readText()
+        jdbcTemplate.execute("create schema $schema")
+        val dataSource = requireNotNull(jdbcTemplate.dataSource)
+        try {
+            dataSource.connection.use { connection ->
+                connection.createStatement().use { statement ->
+                    try {
+                        statement.execute(
+                            "create table $schema.agent_dependencies (id integer primary key, selection_strategy text)",
+                        )
+                        statement.execute(
+                            "insert into $schema.agent_dependencies (id, selection_strategy) values (1, 'BALANCED')",
+                        )
+                        statement.execute("set search_path to $schema")
+
+                        assertThrows(SQLException::class.java) {
+                            statement.execute(migration)
+                        }
+                        statement.executeQuery(
+                            "select selection_strategy from agent_dependencies where id = 1",
+                        ).use { result ->
+                            check(result.next())
+                            assertEquals("BALANCED", result.getString("selection_strategy"))
                         }
                     } finally {
                         statement.execute("set search_path to public")
