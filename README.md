@@ -298,45 +298,66 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/invocations -Header
 수행됩니다. 상태는 receipt header를 사용해 `GET /v1/invocations/{id}` 또는 `/events`에서 확인하며 receipt 원문은
 서버에 hash로만 저장합니다. 공유 Bearer token만으로 다른 invocation을 조회할 수는 없습니다.
 
-## 8. 로컬 실행
+## 8. 독립 실행과 NAS 배포
 
-개발 환경의 PostgreSQL, Spring API와 선택적인 Go demo-agent는 상위 폴더의
-[`agent-store-infra`](../agent-store-infra)에서 함께 실행합니다. 프론트엔드는
-`agent-store-fe`에서 로컬 Vite 서버로 실행합니다.
+이 저장소 루트의 `compose.yaml`은 Spring API와 PostgreSQL만 실행합니다. 프론트엔드는
+`agent-store-fe`에서 별도로 빌드하고, Go Agent는 Spring이 호출하는 독립적인 제3자 공급자
+서비스로 운영합니다. backend Compose는 두 저장소의 소스 경로나 컨테이너를 참조하지 않습니다.
+
+로컬 또는 NAS에서 먼저 `.env`를 준비하고, 배포별 public URL과 CORS origin을 Container
+Manager 프로젝트 변수 또는 셸 환경변수로 주입합니다. `.env`의
+`POSTGRES_PASSWORD`, `RUNTIME_TOKEN_SECRET`, `X402_PRIVATE_KEY`는 실행 전에 실제 값으로
+채워야 합니다.
 
 ```powershell
-Set-Location ../agent-store-infra
-Copy-Item ../agent-store-be/.env.example ../agent-store-be/.env
-Copy-Item ../demo-agent/.env.example ../demo-agent/.env
-docker compose --env-file ../agent-store-be/.env up --build -d
+Copy-Item .env.example .env
+$env:AGENT_STORE_BACKEND_URL = 'http://localhost:8080'
+$env:AGENT_STORE_CORS_ORIGINS_0 = 'http://localhost:5173'
+docker compose up --build -d postgres api
+Invoke-RestMethod http://localhost:8080/health
 ```
 
-Compose는 `postgres:17` PostgreSQL을 시작하고, 최초 volume 생성 시 `agent_store` DB를 준비합니다. API는 Compose가 주입하는 표준 datasource 환경변수로 PostgreSQL에
-연결하며, 개발 profile을 활성화해 기존 loopback demo Agent endpoint를 유지합니다. API는
-`http://localhost:8080`, OpenAPI는 `http://localhost:8080/openapi.json`, demo-agent는
-`http://localhost:8090`에서 확인할 수 있습니다. Spring 시작 시 Flyway migration을 적용하고 Hibernate가 schema를
-validate합니다. 이미 적용한 migration을 수정하지 말고 새 migration을 추가합니다.
+Compose는 `postgres:17`과 Spring API를 같은 내부 네트워크에 배치합니다. API의 datasource
+주소는 `postgres:5432`이고 PostgreSQL host port는 공개하지 않습니다. DB 파일은 프로젝트의
+`data/postgres`에 보존되며 `docker compose down`으로 삭제되지 않습니다. Spring 시작 시
+Flyway migration을 적용하고 Hibernate가 schema를 validate합니다. 이미 적용한 migration을
+수정하지 말고 새 migration을 추가합니다.
+기존 `agent-store-infra`의 named volume은 이 bind mount에 자동 연결되지 않으므로, 기존 데이터를
+옮길 때는 별도 dump/restore 또는 검증된 파일 이전 절차를 먼저 수행합니다.
 
 | `.env` 값 | 용도 |
 |---|---|
-| `POSTGRES_PASSWORD` | Docker Compose PostgreSQL과 API의 개발용 PostgreSQL 비밀번호 |
+| `POSTGRES_PASSWORD` | Compose PostgreSQL과 API datasource 비밀번호 |
 | `RUNTIME_TOKEN_SECRET` | callback token과 cursor 서명 secret |
 | `X402_PRIVATE_KEY` | 필수 저잔액 payer key, `0x` + 64자리 hex |
-| `POSTGRES_PORT` | `agent-store-infra` Docker Compose가 직접 읽는 PostgreSQL host port |
+| `AGENT_STORE_BACKEND_URL` | 외부에서 접근할 API base URL 및 runtime callback base URL |
+| `AGENT_STORE_CORS_ORIGINS_0` | 브라우저 FE의 정확한 origin |
 
 Bearer 인증은 credential-less CORS로 동작하므로 CORS 전체 origin `*`는 사용할 수 없습니다. 로컬 기본 `http://localhost:*`는 Vite의 가변 port만 허용합니다.
-운영에서는 `application.yaml` 또는 운영용 YAML의 `agent-store.cors-origins`를 정확한 HTTPS origin으로 제한합니다.
+운영에서는 Container Manager 변수 `AGENT_STORE_CORS_ORIGINS_0`에 Vercel의 실제 HTTPS origin을
+정확히 입력합니다. `AGENT_STORE_BACKEND_URL`은 공급자 URL이 아니라 Spring API의 public URL입니다.
 
-Demo Agent는 독립 Go 서비스다. Compose에서는 일반 service network를 사용하므로 API는 `api:8080`, demo-agent는
-`demo-agent:8090`으로 통신한다. host에서는 demo-agent가 `127.0.0.1:8090`으로만 노출된다. Go의
-`catalog/agents.yaml`이 demo 계약의 단일 원본이며, API와 Go health가 준비된 뒤 `catalog-bootstrap` one-shot service가
-Function Contract 등록 → manifest import → Version publish 순서로 처리한다. 이미 ACTIVE 데이터가 있으면 catalog와
-다른 내용을 덮어쓰지 않고 drift 오류로 중단한다. Spring은 더 이상 demo catalog를 직접 seed하지 않으며, `dev` 프로필의
-`DevIdentityInitializer`는 개발자 registry가 비어 있을 때 bootstrap에 필요한 고정 demo identity만 만든다.
+Go Agent는 독립적인 제3자 HTTP 공급자입니다. backend Compose가 Go Agent를 시작하거나
+`demo-agent-base-url`을 주입하지 않습니다. 배포 환경에서는 catalog에 공개 HTTPS 공급자
+endpoint를 등록하고, Go 서비스가 접근 가능한 Spring `AGENT_STORE_BACKEND_URL`로 runtime
+callback이 전달되도록 합니다. catalog bootstrap은 API와 외부 공급자 health 확인 뒤 별도
+release 작업으로 실행하며, 이미 ACTIVE 데이터가 있으면 drift 오류로 중단합니다.
 
 Spring은 `X402_PRIVATE_KEY`가 없거나 형식이 잘못되면 시작에 실패합니다. Base Sepolia 기본 USDC의 x402
 v2 `exact`/EIP-3009만 지원하며 Permit2 challenge는 서명 전에 거절합니다. 실제 x402 smoke는 전용 지갑, facilitator, testnet
 자금이 준비돼야 하며 funded Base Sepolia 성공을 보장하지 않습니다.
+
+### Synology Container Manager
+
+NAS 공유 폴더 아래에 `Dockerfile`, `compose.yaml`, `.env`, `data/postgres/`를 함께 둡니다.
+Container Manager의 Project → Create에서 해당 폴더를 프로젝트 경로로 선택하고 Compose 파일을
+업로드한 뒤 Build → Start 순서로 실행합니다. `.env`의 secret과 public URL은 NAS에서만
+입력하고 Git에 커밋하지 않습니다.
+
+외부 도메인은 DSM Reverse Proxy로 `https://api.example.com:443`에서 API 컨테이너의
+`http://127.0.0.1:8080`으로 전달합니다. 라우터에는 80/443만 전달하고 PostgreSQL 5432는
+외부에 열지 않습니다. API가 healthy가 된 뒤 `GET /health`와 `GET /openapi.json`을 확인하고,
+`docker compose down -v`는 사용하지 않습니다.
 
 
 ## 9. OpenAPI와 FE 계약
@@ -353,10 +374,10 @@ Invoke-WebRequest http://localhost:8080/openapi.json -OutFile openapi\openapi.js
 ## 10. 검증
 
 ```powershell
-Set-Location ../agent-store-infra
-docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle classes
-docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle test
-docker compose --profile tools --env-file ../agent-store-be/.env run --rm gradle bootJar
+.\gradlew.bat detektMain
+.\gradlew.bat classes
+.\gradlew.bat test
+.\gradlew.bat bootJar
 git diff --check
 ```
 
@@ -398,8 +419,9 @@ endpoint를 등록합니다. 시연용 실제 x402 지갑을 사용할 때는 Go
 
 ## 11. 문제 해결
 
-- **CORS 403:** 요청 `Origin`이 `application.yaml`의 `agent-store.cors-origins`와 맞는지 확인하고 Spring을 재시작합니다. query string은 origin에 포함되지
-  않습니다.
+- **CORS 403:** 요청 `Origin`이 개발 환경에서는 `application-dev.yaml`, 배포 환경에서는
+  `AGENT_STORE_CORS_ORIGINS_0`에 정확히 등록됐는지 확인하고 API를 재시작합니다. query string은
+  origin에 포함되지 않습니다.
 - **Flyway checksum 오류:** 적용된 migration을 임의 수정한 상태입니다. 원본을 복구하거나 새 migration을 추가합니다. 공유 DB에서 성급히
   `repair`하면 drift를 숨길 수 있습니다.
 - **relation/column JDBC 오류:** `application.yaml`의 연결 DB/schema, Flyway 적용 상태, Docker host port와 datasource password를 확인합니다.

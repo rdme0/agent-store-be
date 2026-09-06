@@ -26,8 +26,9 @@
 - 경로: 이 저장소 루트
 - Kotlin/Spring 기반 AgentStore runtime이다. Spring만 PostgreSQL을 쓴다.
 - 프론트엔드는 `../agent-store-fe`, demo 공급자는
-  `../demo-agent`, Compose는
-  `../agent-store-infra`가 소유한다.
+  `../demo-agent`가 소유한다. 백엔드 루트 `compose.yaml`은 Spring API와 PostgreSQL만
+  소유하며, 기존 `../agent-store-infra` Compose는 제거 전까지 레거시 개발/reference 구성으로
+  남겨 둔다.
 - Spring은 Base Sepolia USDC의 x402 v2 `exact` / EIP-3009만 처리한다. private key, typed
   data, signature, raw payment header는 절대 영속화·로그 기록하지 않는다.
 
@@ -69,6 +70,25 @@
 - Function Contract 입력 schema 사전 검사와 output format/schema 사후 검사는 실제 실행에서 계속 강제한다.
 - private key, payment header, signature, typed payload, 원본 provider body는 DB·API·로그에 남기지 않는다.
 
+### 독립 Backend Docker 배포 — 2026-09-06
+
+- `Dockerfile`은 백엔드 저장소 루트에서 JDK 25 멀티스테이지 빌드와 non-root JRE 실행을 담당한다.
+- `compose.yaml`은 `postgres:17`과 `api`만 실행한다. PostgreSQL은 `./data/postgres`에
+  보존하고 host port를 공개하지 않으며, API는 `127.0.0.1:8080`만 reverse proxy용으로 바인딩한다.
+  기존 infra의 named volume은 새 bind mount에 자동 연결되지 않으므로 기존 DB를 옮길 때는
+  별도 dump/restore 또는 검증된 파일 이전 절차가 필요하다.
+- API는 `SPRING_PROFILES_ACTIVE=deploy`로 실행하고, datasource는 내부 `postgres:5432`를
+  사용한다. `AGENT_STORE_BACKEND_URL`과 `AGENT_STORE_CORS_ORIGINS_0`은 배포 환경에서
+  주입하는 public configuration이고, secret은 `RUNTIME_TOKEN_SECRET`, `X402_PRIVATE_KEY`,
+  `POSTGRES_PASSWORD`로 제한한다.
+- Go Agent와 FE는 backend Compose에 포함하지 않는다. Go Agent는 외부 HTTPS 공급자이며,
+  catalog bootstrap은 API·공급자 health 이후 별도 작업으로 실행한다.
+- Synology Container Manager에서는 프로젝트 경로에 이 저장소의 `Dockerfile`, `compose.yaml`,
+  `.env`, `data/postgres/`를 두고 Build → Start한다. DSM Reverse Proxy는 public HTTPS
+  API 도메인을 host loopback `8080`으로 전달한다.
+- 이 구성의 NAS 실기동·reverse proxy·외부 공급자 callback은 아직 실행하지 않았으며, 배포 전
+  `docker compose config`, `docker compose build`, `/health`, `/openapi.json` 확인이 필요하다.
+
 ## 현재 검증 상태
 
 - 2026-09-06 paid readiness 제거 변경에 대해 `detektMain` 0 findings, 전체 `test`, 전용
@@ -77,7 +97,9 @@
 - random-port Spring + Vite + 전용 PostgreSQL + local HTTP provider를 연결한 browser gate도 통과했다.
   이 gate는 DRAFT publish 후 ACTIVE Marketplace 노출을 실제 HTTP 경로로 확인한다.
 - maintainer 자체 read-only 점검에서 현재 diff와 테스트 매핑의 blocking finding은 없었다.
-  별도 verifier 재실행 결과는 아래 검증 이력과 같이 아직 없다. 테스트를 위해 띄운 Spring/Vite/provider 프로세스는 모두 종료했다.
+  이전 기능 변경에 대한 별도 verifier 재실행 결과는 아래 검증 이력과 같이 별도 기록이며, 이번
+  독립 Docker 배포 diff는 fresh read-only verifier PASS를 받았다. 테스트를 위해 띄운
+  Spring/Vite/provider 프로세스는 모두 종료했다.
 - 별도 `agent_store_integration` 데이터베이스와 random-port Spring HTTP 서버를 사용하는
   `PostgresMarketplaceHttpE2eIntegrationTest`가 Bearer access, ownership, direct publish/Marketplace, local x402 실행 흐름을 검증한다.
   `integrationTest` 실행은 전용 PostgreSQL 환경변수만 요구하며 다른 DB로의 실행을 거부한다.
@@ -114,7 +136,10 @@
 ### 검증 이력
 
 - 이전 verifier 라운드에서 지적된 OpenAPI·CORS·설정·integration gate·mock 격리·Kotlin 스타일·handoff
-  항목을 보정했다. 현재 변경에 대한 외부 verifier 재실행 결과는 아직 없다.
+  항목을 보정했다. 그 기능 변경 범위에 대한 외부 verifier 재실행은 별도 작업으로 남아 있다.
+- 2026-09-06 독립 Docker 배포 diff에 대해 fresh read-only verifier가 Dockerfile의 JDK 25
+  멀티스테이지/non-root 실행, `postgres:17` + API 단일 Compose 구성, 내부 DB 주소,
+  host PostgreSQL port 비공개, 필수 변수 fail-closed, 외부 Go/FE 경계를 확인해 PASS했다.
 
 ### 무로그인 데모 랜딩·6시간 Bearer 인증 — 2026-09-05
 

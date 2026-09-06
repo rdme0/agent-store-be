@@ -1,0 +1,53 @@
+name: agent-store
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agent_store
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - agent-store
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: deploy
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/agent_store?currentSchema=public
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      AGENT_STORE_BACKEND_URL: ${AGENT_STORE_BACKEND_URL:?AGENT_STORE_BACKEND_URL is required}
+      AGENT_STORE_CORS_ORIGINS_0: ${AGENT_STORE_CORS_ORIGINS_0:?AGENT_STORE_CORS_ORIGINS_0 is required}
+      RUNTIME_TOKEN_SECRET: ${RUNTIME_TOKEN_SECRET:?RUNTIME_TOKEN_SECRET is required}
+      X402_PRIVATE_KEY: ${X402_PRIVATE_KEY:?X402_PRIVATE_KEY is required}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 30s
+    networks:
+      - agent-store
+
+networks:
+  agent-store:
+    driver: bridge
