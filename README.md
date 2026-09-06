@@ -290,7 +290,7 @@ $headers = @{
   'Content-Type' = 'application/json'
 }
 Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/invocations -Headers $headers `
-  -Body '{"agentCode":"weather-summary","versionConstraint":"*","maxCostAtomic":"1250","input":{"city":"Seoul"}}'
+  -Body '{"agentCode":"weather-forecast","versionConstraint":"*","maxCostAtomic":"600","question":"서울의 내일 날씨를 간단히 알려줘","input":{}}'
 ```
 
 첫 요청은 결제 협상 없이 즉시 `202`와 `X-AgentStore-Invocation-Receipt`, `X-AgentStore-Invocation-Id`, `Location`을

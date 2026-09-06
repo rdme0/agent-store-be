@@ -7,7 +7,7 @@ spring:
       maximum-pool-size: 10
 
 agent-store:
-  backend-url: https://${PROD_BACKEND_HOST}:${PROD_BACKEND_PORT}
+  backend-url: https://${PROD_BACKEND_HOST}
   cors-origins:
     - http://localhost:*
     - http://127.0.0.1:*
