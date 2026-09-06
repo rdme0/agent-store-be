@@ -90,7 +90,7 @@ class ExecutionRunner(
             val runtime = mapOf(
                 "executionId" to executionId,
                 "parentStepId" to step.id,
-                "callbackUrl" to properties.runtimeCallbackBaseUrl.trimEnd('/') +
+                "callbackUrl" to properties.backendUrl.trimEnd('/') +
                     "/api/runtime/executions/$executionId/dependencies/invoke",
                 "dependencies" to runtimeDependencies,
             )

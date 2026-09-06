@@ -1,6 +1,6 @@
 package com.agentstore.agent.service
 
-import com.agentstore.agent.config.AgentManifestConfiguration
+import com.agentstore.agent.codec.AgentManifestCodec
 import com.agentstore.agent.dto.internal.AgentManifestDto
 import com.agentstore.agent.dto.request.AgentManifestRequest
 import com.agentstore.agent.dto.request.CreateAgentRequest
@@ -18,22 +18,19 @@ import com.agentstore.dependency.dto.request.CreateDependencyRequest
 import com.agentstore.dependency.model.vo.ProviderScope
 import com.agentstore.dependency.model.vo.ProviderSelectionStrategy
 import com.agentstore.dependency.service.DependencyService
-import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.validation.Validator
 import jakarta.transaction.Transactional
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.UUID
 import org.springframework.stereotype.Service
-import org.springframework.beans.factory.annotation.Qualifier
 
 @Service
 class AgentManifestService(
     private val agentService: AgentService,
     private val functionContractService: FunctionContractService,
     private val dependencyService: DependencyService,
-    @param:Qualifier(AgentManifestConfiguration.MANIFEST_YAML_MAPPER)
-    private val yamlMapper: ObjectMapper,
+    private val manifestCodec: AgentManifestCodec,
     private val validator: Validator,
 ) {
     companion object {
@@ -267,17 +264,14 @@ class AgentManifestService(
 
     private fun readManifest(content: String): AgentManifestDto {
         return try {
-            yamlMapper.readValue(content, AgentManifestDto::class.java)
+            manifestCodec.read(content = content)
         } catch (exception: Exception) {
             throw DomainClientException(ErrorCode.INVALID_INPUT_VALUE)
         }
     }
 
     private fun writeManifest(manifest: AgentManifestDto): String {
-        return yamlMapper.writeValueAsString(manifest).replace(
-            oldValue = "\r\n",
-            newValue = "\n",
-        )
+        return manifestCodec.write(manifest = manifest)
     }
 
     private fun sha256(content: String): String {

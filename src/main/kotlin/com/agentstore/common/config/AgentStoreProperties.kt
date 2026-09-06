@@ -7,8 +7,7 @@ import java.time.Duration
 data class AgentStoreProperties(
     val serviceName: String,
     val apiVersion: String,
-    val runtimeCallbackBaseUrl: String,
-    val demoAgentBaseUrl: String,
+    val backendUrl: String,
     val corsOrigins: List<String>,
     val runtimeTokenSecret: String,
     val bithumbApiUrl: String,

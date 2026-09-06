@@ -28,6 +28,7 @@ class PaymentClientConfiguration {
         environment: Environment,
         correlations: X402PaymentCorrelationRegistry,
         properties: X402ClientProperties,
+        clock: Clock,
     ): X402PaymentService {
         return X402PaymentService(
             agentClient = X402AgentClient(
@@ -38,7 +39,7 @@ class PaymentClientConfiguration {
             signer = X402Eip3009Signer(
                 privateKey = environment.getRequiredProperty("X402_PRIVATE_KEY"),
                 objectMapper = objectMapper,
-                clock = Clock.systemUTC(),
+                clock = clock,
                 secureRandom = SecureRandom(),
             ),
             correlations = correlations,

@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:15432/agent_store?currentSchema=public
+    username: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+
+agent-store:
+  backend-url: http://localhost:8080
+  cors-origins:
+    - http://localhost:*
+    - http://127.0.0.1:*
