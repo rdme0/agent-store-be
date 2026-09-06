@@ -1,13 +1,13 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DEV_POSTGRES_HOST}:${DEV_POSTGRES_PORT}/${DEV_POSTGRES_DB}?currentSchema=public
+    url: jdbc:postgresql://localhost:${DEV_POSTGRES_PORT}/${DEV_POSTGRES_DB}?currentSchema=public
     username: ${DEV_POSTGRES_USER}
     password: ${DEV_POSTGRES_PASSWORD}
     hikari:
       maximum-pool-size: 10
 
 agent-store:
-  backend-url: http://${DEV_BACKEND_HOST}:${DEV_BACKEND_PORT}
+  backend-url: http://localhost:${DEV_BACKEND_PORT}
   cors-origins:
     - http://localhost:*
     - http://127.0.0.1:*

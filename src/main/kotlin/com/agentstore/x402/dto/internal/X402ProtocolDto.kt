@@ -24,4 +24,5 @@ data class X402SettlementReceiptDto(
     val success: Boolean,
     val transaction: String?,
     val network: String?,
+    val errorReason: String?,
 )

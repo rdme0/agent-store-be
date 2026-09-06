@@ -21,8 +21,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.boot.test.system.CapturedOutput
+import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.mock.env.MockEnvironment
 
+@ExtendWith(OutputCaptureExtension::class)
 class X402PaymentServiceTest {
     private companion object {
         const val PRIVATE_KEY = "0x1111111111111111111111111111111111111111111111111111111111111111"
@@ -145,17 +149,37 @@ class X402PaymentServiceTest {
     }
 
     @Test
-    fun `non successful receipt remains unknown after signing`() {
+    fun `non successful receipt logs a valid settlement reason without its payment detail`(output: CapturedOutput) {
         val receipt = objectMapper.createObjectNode().apply {
             put("success", false)
             put("transaction", "")
             put("network", X402PaymentService.BASE_SEPOLIA)
+            put("errorReason", "invalid_exact_evm_signature")
+            put("errorMessage", "do-not-log-this-payment-detail")
         }
         withAgent(receipt = receipt) { endpoint, calls ->
             assertThatThrownBy { client(deadline = DEFAULT_DEADLINE).invoke(request(endpoint)) }
                 .isInstanceOf(PaymentOutcomeUnknownException::class.java)
             assertThat(calls).hasValue(2)
         }
+        assertThat(output.out).contains("settlementReason=invalid_exact_evm_signature")
+        assertThat(output.out).doesNotContain("do-not-log-this-payment-detail")
+    }
+
+    @Test
+    fun `unsafe settlement reason is not logged`(output: CapturedOutput) {
+        val receipt = objectMapper.createObjectNode().apply {
+            put("success", false)
+            put("transaction", "")
+            put("network", X402PaymentService.BASE_SEPOLIA)
+            put("errorReason", "untrusted provider detail")
+        }
+        withAgent(receipt = receipt) { endpoint, _ ->
+            assertThatThrownBy { client(deadline = DEFAULT_DEADLINE).invoke(request(endpoint)) }
+                .isInstanceOf(PaymentOutcomeUnknownException::class.java)
+        }
+        assertThat(output.out).contains("settlementReason=unknown")
+        assertThat(output.out).doesNotContain("untrusted provider detail")
     }
 
     @Test

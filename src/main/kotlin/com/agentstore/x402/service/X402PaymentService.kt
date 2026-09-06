@@ -45,6 +45,7 @@ class X402PaymentService(
         private val POSITIVE_ATOMIC = Regex("^[1-9][0-9]*$")
         private val EVM_ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
         private val EVM_TRANSACTION_HASH = Regex("^0x[0-9a-fA-F]{64}$")
+        private val SETTLEMENT_REASON = Regex("^[a-z0-9_]{1,128}$")
     }
 
     private val headerCodec = X402HeaderCodec(objectMapper)
@@ -130,16 +131,21 @@ class X402PaymentService(
         val transactionHashValid = transactionHash != null && EVM_TRANSACTION_HASH.matches(transactionHash)
         if (!receipt.success || receipt.network != BASE_SEPOLIA || !transactionHashValid) {
             logger.warn(
-                "x402 paid response settlement receipt is unacceptable: status={}, success={}, networkMatches={}, transactionHashPresent={}, transactionHashValid={}",
+                "x402 paid response settlement receipt is unacceptable: status={}, success={}, networkMatches={}, transactionHashPresent={}, transactionHashValid={}, settlementReason={}",
                 paid.status,
                 receipt.success,
                 receipt.network == BASE_SEPOLIA,
                 transactionHash != null,
                 transactionHashValid,
+                safeSettlementReason(receipt.errorReason),
             )
             throw PaymentOutcomeUnknownException(failureCode = RECONCILIATION_REQUIRED)
         }
         return transactionHash
+    }
+
+    private fun safeSettlementReason(errorReason: String?): String {
+        return errorReason?.takeIf(SETTLEMENT_REASON::matches) ?: "unknown"
     }
 
     private fun selectRequirement(

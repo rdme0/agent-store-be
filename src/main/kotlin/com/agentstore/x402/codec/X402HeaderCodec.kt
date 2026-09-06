@@ -38,6 +38,7 @@ class X402HeaderCodec(private val objectMapper: ObjectMapper) {
             success = node.path("success").takeIf(JsonNode::isBoolean)?.booleanValue() ?: false,
             transaction = node.path("transaction").takeIf(JsonNode::isTextual)?.textValue(),
             network = node.path("network").takeIf(JsonNode::isTextual)?.textValue(),
+            errorReason = node.path("errorReason").takeIf(JsonNode::isTextual)?.textValue(),
         )
     }
 
